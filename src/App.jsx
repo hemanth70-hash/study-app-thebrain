@@ -7,7 +7,8 @@ import { supabase } from './supabaseClient';
 import Profile from './components/Profile';
 import SubjectNotes from './components/SubjectNotes';
 import QuickQuiz from './components/QuickQuiz';
-import GoalTracker from './components/GoalTracker'; // Fixed: Added missing import
+import GoalTracker from './components/GoalTracker';
+import StudyChat from './components/StudyChat'; // New Real-time Chat
 
 export default function App() {
   const [user, setUser] = useState(null);
@@ -84,11 +85,20 @@ export default function App() {
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                   <div className="bg-white dark:bg-gray-800 p-8 rounded-3xl shadow-lg border-b-4 border-blue-500">
                     <h3 className="text-xl font-bold mb-2">Welcome back, {user.username}!</h3>
-                    <p className="text-gray-500 dark:text-gray-400">Your studies are synced and ready. Select a module from the sidebar to continue.</p>
+                    <p className="text-gray-500 dark:text-gray-400">Your portal is fully synced. Invite friends to compete on the leaderboard!</p>
                   </div>
                   <GoalTracker user={user} />
                 </div>
-                <QuickQuiz />
+                
+                {/* 3-Column Layout for Quiz and Chat */}
+                <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                  <div className="lg:col-span-2">
+                    <QuickQuiz />
+                  </div>
+                  <div className="lg:col-span-1">
+                    <StudyChat user={user} />
+                  </div>
+                </div>
               </div>
             )}
 
