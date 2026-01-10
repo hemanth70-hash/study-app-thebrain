@@ -8,7 +8,8 @@ import Profile from './components/Profile';
 import SubjectNotes from './components/SubjectNotes';
 import QuickQuiz from './components/QuickQuiz';
 import GoalTracker from './components/GoalTracker';
-import StudyChat from './components/StudyChat'; // New Real-time Chat
+import StudyChat from './components/StudyChat';
+import InviteButton from './components/InviteButton'; // Added for sharing
 
 export default function App() {
   const [user, setUser] = useState(null);
@@ -28,6 +29,7 @@ export default function App() {
 
       if (error) {
         console.error("Supabase Error:", error.message);
+        // Fallback for offline/test mode
         setUser({ username: username, id: '12345' });
       } else {
         setUser(data);
@@ -83,14 +85,21 @@ export default function App() {
             {activeTab === 'dashboard' && (
               <div className="space-y-6">
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  {/* Welcome Card with Invite Button */}
                   <div className="bg-white dark:bg-gray-800 p-8 rounded-3xl shadow-lg border-b-4 border-blue-500">
-                    <h3 className="text-xl font-bold mb-2">Welcome back, {user.username}!</h3>
-                    <p className="text-gray-500 dark:text-gray-400">Your portal is fully synced. Invite friends to compete on the leaderboard!</p>
+                    <div className="flex justify-between items-start mb-2">
+                       <h3 className="text-xl font-bold">Welcome back, {user.username}!</h3>
+                       <InviteButton />
+                    </div>
+                    <p className="text-gray-500 dark:text-gray-400">
+                      Your portal is live. Share the link with friends to build the leaderboard together!
+                    </p>
                   </div>
+                  
                   <GoalTracker user={user} />
                 </div>
                 
-                {/* 3-Column Layout for Quiz and Chat */}
+                {/* Learning & Social Section */}
                 <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
                   <div className="lg:col-span-2">
                     <QuickQuiz />
