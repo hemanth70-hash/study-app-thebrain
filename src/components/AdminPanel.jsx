@@ -9,6 +9,7 @@ export default function AdminPanel() {
   // --- MOCK UPLOAD STATE ---
   const [bulkData, setBulkData] = useState('');
   const [mockTitle, setMockTitle] = useState('');
+  const [timeLimit, setTimeLimit] = useState(60); // NEW: Custom Timer State
   const [isDailyQuickMock, setIsDailyQuickMock] = useState(false);
   const [status, setStatus] = useState('');
 
@@ -45,19 +46,22 @@ export default function AdminPanel() {
     }
     try {
       const rawData = JSON.parse(bulkData);
+      
+      // Injecting Mock Title, Daily Status, and Custom Time Limit
       const formattedData = rawData.map(q => ({
         ...q,
         mock_title: mockTitle,
-        is_daily: isDailyQuickMock 
+        is_daily: isDailyQuickMock,
+        time_limit: parseInt(timeLimit) // Mapping the timer to the database column
       }));
 
       const { error } = await supabase.from('questions').insert(formattedData);
       if (error) throw error;
 
-      setStatus(`Success! "${mockTitle}" uploaded.`);
-      setBulkData(''); setMockTitle(''); setIsDailyQuickMock(false);
+      setStatus(`Success! "${mockTitle}" uploaded with a ${timeLimit}m timer.`);
+      setBulkData(''); setMockTitle(''); setIsDailyQuickMock(false); setTimeLimit(60);
     } catch (err) {
-      setStatus('Error: Check JSON format.');
+      setStatus('Error: Check JSON format or Database Columns.');
     }
   };
 
@@ -74,11 +78,7 @@ export default function AdminPanel() {
   const postAnnouncement = async () => {
     if (!announcement) return;
     setBroadcastStatus('Broadcasting...');
-    
-    // Deactivate previous active announcements
     await supabase.from('announcements').update({ active: false }).eq('active', true);
-    
-    // Insert new announcement
     const { error } = await supabase.from('announcements').insert([{ message: announcement, active: true }]);
     
     if (!error) {
@@ -102,7 +102,7 @@ export default function AdminPanel() {
         <div className="flex flex-col md:flex-row gap-4">
           <input 
             className="flex-1 p-4 rounded-2xl text-gray-900 font-bold focus:ring-4 focus:ring-blue-400 outline-none" 
-            placeholder="Type an announcement for all users (e.g., New Mock Added!)..." 
+            placeholder="Type an announcement for all users..." 
             value={announcement}
             onChange={(e) => setAnnouncement(e.target.value)}
           />
@@ -129,10 +129,28 @@ export default function AdminPanel() {
             <input 
               type="text"
               placeholder="Mock Test Title"
-              className="w-full p-4 rounded-2xl border dark:bg-gray-900 dark:border-gray-700 dark:text-white outline-none"
+              className="w-full p-4 rounded-2xl border dark:bg-gray-900 dark:border-gray-700 dark:text-white outline-none font-bold"
               value={mockTitle}
               onChange={(e) => setMockTitle(e.target.value)}
             />
+
+            {/* NEW: TIMER INPUT SECTION */}
+            <div className="flex items-center gap-4 bg-gray-50 dark:bg-gray-900 p-4 rounded-2xl border dark:border-gray-700">
+              <div className="p-2 bg-blue-100 dark:bg-blue-900/30 text-blue-600 rounded-lg">
+                <Clock size={20} />
+              </div>
+              <div className="flex-1">
+                <p className="text-[10px] font-black uppercase text-gray-400 mb-1">Exam Duration (Minutes)</p>
+                <input 
+                  type="number"
+                  placeholder="60"
+                  className="w-full bg-transparent outline-none font-black text-blue-600 dark:text-blue-400"
+                  value={timeLimit}
+                  onChange={(e) => setTimeLimit(e.target.value)}
+                />
+              </div>
+            </div>
+
             <button 
               onClick={() => setIsDailyQuickMock(!isDailyQuickMock)}
               className={`w-full p-4 rounded-2xl font-black uppercase text-xs flex items-center justify-center gap-2 transition-all ${
@@ -141,6 +159,7 @@ export default function AdminPanel() {
             >
               <Calendar size={18} /> {isDailyQuickMock ? "Set as Daily Streak Mock" : "Regular Mock Test"}
             </button>
+
             <textarea 
               className="w-full h-40 p-4 font-mono text-sm border dark:border-gray-700 rounded-2xl dark:bg-gray-900 dark:text-white outline-none"
               placeholder='Paste JSON array here...'
@@ -196,7 +215,7 @@ export default function AdminPanel() {
       <div className="bg-blue-50 dark:bg-blue-900/20 p-6 rounded-3xl border border-blue-100 dark:border-blue-800 flex gap-4">
         <Info className="text-blue-600 shrink-0" />
         <p className="text-sm text-blue-800 dark:text-blue-200">
-          <strong>The Brain's Dashboard Tip:</strong> Announcements appear at the top of every user's screen. Use them for server maintenance, new test alerts, or high-score celebrations.
+          <strong>The Brain's Dashboard Tip:</strong> You can now set a specific time for each mock. If a user doesn't finish within the set minutes, the exam will auto-submit!
         </p>
       </div>
     </div>
