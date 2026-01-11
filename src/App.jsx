@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import Sidebar from './components/Sidebar';
 import MockEngine from './components/MockEngine';
 import Leaderboard from './components/Leaderboard';
@@ -9,7 +9,7 @@ import SubjectNotes from './components/SubjectNotes';
 import QuickQuiz from './components/QuickQuiz';
 import GoalTracker from './components/GoalTracker';
 import StudyChat from './components/StudyChat';
-import InviteButton from './components/InviteButton'; // Added for sharing
+import InviteButton from './components/InviteButton';
 
 export default function App() {
   const [user, setUser] = useState(null);
@@ -17,6 +17,38 @@ export default function App() {
   const [activeTab, setActiveTab] = useState('dashboard');
   const [isDarkMode, setIsDarkMode] = useState(false);
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
+
+  // --- STREAK & ATTENDANCE LOGIC ---
+  const handleStreakCheck = async (profile) => {
+    const today = new Date();
+    const todayStr = today.toISOString().split('T')[0];
+    
+    // If they already completed a mock today, do nothing
+    if (profile.last_mock_date === todayStr) return;
+
+    const yesterday = new Date();
+    yesterday.setDate(yesterday.getDate() - 1);
+    const yesterdayStr = yesterday.toISOString().split('T')[0];
+
+    // Check if they missed yesterday
+    if (profile.last_mock_date !== yesterdayStr && profile.last_mock_date !== null) {
+      if (profile.freeze_points > 0) {
+        // Use Freeze Point
+        await supabase.from('profiles')
+          .update({ 
+            freeze_points: profile.freeze_points - 1,
+            last_mock_date: yesterdayStr // Pretend they did it to save the streak
+          })
+          .eq('id', profile.id);
+        alert("🔥 Streak Protected! A Freeze Point was used to cover yesterday.");
+      } else {
+        // Reset Streak
+        await supabase.from('profiles')
+          .update({ streak_count: 0 })
+          .eq('id', profile.id);
+      }
+    }
+  };
 
   const handleLogin = async () => {
     if (!username) return;
@@ -29,10 +61,10 @@ export default function App() {
 
       if (error) {
         console.error("Supabase Error:", error.message);
-        // Fallback for offline/test mode
-        setUser({ username: username, id: '12345' });
+        setUser({ username: username, id: '12345', streak_count: 0, freeze_points: 0 });
       } else {
         setUser(data);
+        handleStreakCheck(data); // Check attendance streak on entry
       }
     } catch (err) {
       console.error("Critical Crash:", err);
@@ -74,32 +106,34 @@ export default function App() {
         />
         
         <main className={`flex-1 p-10 transition-all duration-300 ${isSidebarOpen ? 'ml-64' : 'ml-20'}`}>
-          <header className="mb-10">
+          <header className="mb-10 flex justify-between items-center">
             <h2 className="text-4xl font-black capitalize text-blue-600 dark:text-blue-400">
               {activeTab === 'ranking' ? 'Leaderboard' : activeTab}
             </h2>
+            {/* Streak Counter in Header */}
+            <div className="flex items-center gap-3 bg-white dark:bg-gray-800 px-4 py-2 rounded-2xl shadow-sm border border-orange-100">
+              <span className="text-2xl">🔥</span>
+              <span className="font-black text-xl text-orange-500">{user.streak_count || 0}</span>
+              <span className="text-xs font-bold uppercase text-gray-400">Days</span>
+            </div>
           </header>
 
           <div className="max-w-6xl mx-auto space-y-8">
-            {/* DASHBOARD TAB */}
             {activeTab === 'dashboard' && (
               <div className="space-y-6">
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                  {/* Welcome Card with Invite Button */}
                   <div className="bg-white dark:bg-gray-800 p-8 rounded-3xl shadow-lg border-b-4 border-blue-500">
                     <div className="flex justify-between items-start mb-2">
                        <h3 className="text-xl font-bold">Welcome back, {user.username}!</h3>
                        <InviteButton />
                     </div>
                     <p className="text-gray-500 dark:text-gray-400">
-                      Your portal is live. Share the link with friends to build the leaderboard together!
+                      Complete today's **Quick Mock** to keep your {user.streak_count} day streak alive!
                     </p>
                   </div>
-                  
                   <GoalTracker user={user} />
                 </div>
                 
-                {/* Learning & Social Section */}
                 <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
                   <div className="lg:col-span-2">
                     <QuickQuiz />
@@ -111,8 +145,8 @@ export default function App() {
               </div>
             )}
 
-            {/* CONTENT TABS */}
             {activeTab === 'subjects' && <SubjectNotes user={user} />}
+            {/* Updated MockEngine to handle specific mock selections */}
             {activeTab === 'mocks' && <MockEngine user={user} onFinish={() => setActiveTab('dashboard')} />}
             {activeTab === 'ranking' && <Leaderboard />}
             {activeTab === 'admin' && <AdminPanel />}
