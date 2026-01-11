@@ -10,6 +10,7 @@ import QuickQuiz from './components/QuickQuiz';
 import GoalTracker from './components/GoalTracker';
 import StudyChat from './components/StudyChat';
 import InviteButton from './components/InviteButton';
+import DailyVerse from './components/DailyVerse'; // New Autonomous Component
 
 export default function App() {
   const [user, setUser] = useState(null);
@@ -17,32 +18,44 @@ export default function App() {
   const [activeTab, setActiveTab] = useState('dashboard');
   const [isDarkMode, setIsDarkMode] = useState(false);
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
+  const [globalMsg, setGlobalMsg] = useState(null);
 
-  // --- STREAK & ATTENDANCE LOGIC ---
+  // --- 1. GLOBAL ANNOUNCEMENT FETCH ---
+  useEffect(() => {
+    const fetchAnnouncement = async () => {
+      const { data } = await supabase
+        .from('announcements')
+        .select('message')
+        .eq('active', true)
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .single();
+      if (data) setGlobalMsg(data.message);
+    };
+    fetchAnnouncement();
+  }, [user]);
+
+  // --- 2. STREAK & ATTENDANCE LOGIC ---
   const handleStreakCheck = async (profile) => {
     const today = new Date();
     const todayStr = today.toISOString().split('T')[0];
     
-    // If they already completed a mock today, do nothing
     if (profile.last_mock_date === todayStr) return;
 
     const yesterday = new Date();
     yesterday.setDate(yesterday.getDate() - 1);
     const yesterdayStr = yesterday.toISOString().split('T')[0];
 
-    // Check if they missed yesterday
     if (profile.last_mock_date !== yesterdayStr && profile.last_mock_date !== null) {
       if (profile.freeze_points > 0) {
-        // Use Freeze Point
         await supabase.from('profiles')
           .update({ 
             freeze_points: profile.freeze_points - 1,
-            last_mock_date: yesterdayStr // Pretend they did it to save the streak
+            last_mock_date: yesterdayStr 
           })
           .eq('id', profile.id);
         alert("🔥 Streak Protected! A Freeze Point was used to cover yesterday.");
       } else {
-        // Reset Streak
         await supabase.from('profiles')
           .update({ streak_count: 0 })
           .eq('id', profile.id);
@@ -60,14 +73,12 @@ export default function App() {
         .single();
 
       if (error) {
-        console.error("Supabase Error:", error.message);
         setUser({ username: username, id: '12345', streak_count: 0, freeze_points: 0 });
       } else {
         setUser(data);
-        handleStreakCheck(data); // Check attendance streak on entry
+        handleStreakCheck(data);
       }
     } catch (err) {
-      console.error("Critical Crash:", err);
       setUser({ username: username, id: '12345' });
     }
   };
@@ -76,15 +87,15 @@ export default function App() {
     return (
       <div className={`flex items-center justify-center min-h-screen ${isDarkMode ? 'bg-gray-900' : 'bg-blue-50'}`}>
         <div className="bg-white dark:bg-gray-800 p-8 rounded-2xl shadow-xl border-2 border-blue-200 w-96 text-center">
-          <h1 className="text-2xl font-bold mb-4 text-blue-600">The Brain Portal</h1>
+          <h1 className="text-2xl font-bold mb-4 text-blue-600 italic tracking-tighter">The Brain Portal</h1>
           <input 
-            className="w-full p-3 rounded-lg border mb-4 text-black dark:bg-gray-700 dark:text-white" 
-            placeholder="Username" 
+            className="w-full p-3 rounded-lg border mb-4 text-black dark:bg-gray-700 dark:text-white outline-none" 
+            placeholder="Enter Username" 
             value={username} 
             onChange={(e) => setUsername(e.target.value)} 
           />
-          <button onClick={handleLogin} className="w-full bg-blue-600 text-white p-3 rounded-lg font-bold hover:bg-blue-700">
-            Enter
+          <button onClick={handleLogin} className="w-full bg-blue-600 text-white p-3 rounded-lg font-bold hover:bg-blue-700 transition-all">
+            Enter Portal
           </button>
         </div>
       </div>
@@ -106,35 +117,59 @@ export default function App() {
         />
         
         <main className={`flex-1 p-10 transition-all duration-300 ${isSidebarOpen ? 'ml-64' : 'ml-20'}`}>
+          
+          {/* GLOBAL ANNOUNCEMENT BANNER */}
+          {globalMsg && (
+            <div className="bg-gradient-to-r from-blue-600 to-indigo-700 text-white p-4 rounded-3xl mb-8 shadow-lg flex items-center justify-between animate-pulse">
+              <div className="flex items-center gap-4">
+                <span className="bg-white text-blue-600 px-3 py-1 rounded-full font-black text-xs uppercase">News</span>
+                <p className="font-bold">{globalMsg}</p>
+              </div>
+              <button onClick={() => setGlobalMsg(null)} className="hover:bg-white/20 p-2 rounded-full transition-colors">✕</button>
+            </div>
+          )}
+
           <header className="mb-10 flex justify-between items-center">
             <h2 className="text-4xl font-black capitalize text-blue-600 dark:text-blue-400">
               {activeTab === 'ranking' ? 'Leaderboard' : activeTab}
             </h2>
-            {/* Streak Counter in Header */}
-            <div className="flex items-center gap-3 bg-white dark:bg-gray-800 px-4 py-2 rounded-2xl shadow-sm border border-orange-100">
+            
+            <div className="flex items-center gap-3 bg-white dark:bg-gray-800 px-6 py-2 rounded-2xl shadow-sm border-2 border-orange-50">
               <span className="text-2xl">🔥</span>
               <span className="font-black text-xl text-orange-500">{user.streak_count || 0}</span>
-              <span className="text-xs font-bold uppercase text-gray-400">Days</span>
+              <span className="text-xs font-black uppercase text-gray-400 tracking-widest">Streak</span>
             </div>
           </header>
 
           <div className="max-w-6xl mx-auto space-y-8">
             {activeTab === 'dashboard' && (
-              <div className="space-y-6">
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                  <div className="bg-white dark:bg-gray-800 p-8 rounded-3xl shadow-lg border-b-4 border-blue-500">
-                    <div className="flex justify-between items-start mb-2">
-                       <h3 className="text-xl font-bold">Welcome back, {user.username}!</h3>
-                       <InviteButton />
+              <div className="space-y-8">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-8 items-start">
+                  
+                  {/* Left Column: Greeting & Motivation */}
+                  <div className="space-y-6">
+                    <div className="bg-white dark:bg-gray-800 p-8 rounded-[2.5rem] shadow-xl border-b-8 border-blue-500">
+                      <div className="flex justify-between items-start mb-4">
+                         <h3 className="text-2xl font-black">Hi, {user.username}!</h3>
+                         <InviteButton />
+                      </div>
+                      <p className="text-gray-500 dark:text-gray-400 leading-relaxed font-medium">
+                        Your study portal is live. Complete today's **Quick Mock** to earn points and protect your flame.
+                      </p>
                     </div>
-                    <p className="text-gray-500 dark:text-gray-400">
-                      Complete today's **Quick Mock** to keep your {user.streak_count} day streak alive!
-                    </p>
+
+                    {/* AUTONOMOUS BIBLE VERSE COMPONENT */}
+                    <DailyVerse isAdmin={user.username === 'TheBrain'} />
                   </div>
-                  <GoalTracker user={user} />
+                  
+                  {/* Right Column: Goal Tracking */}
+                  <div className="h-full">
+                    <GoalTracker user={user} />
+                  </div>
                 </div>
                 
-                <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                {/* Lower Section: Learning & Social */}
+                <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
                   <div className="lg:col-span-2">
                     <QuickQuiz />
                   </div>
@@ -145,8 +180,8 @@ export default function App() {
               </div>
             )}
 
+            {/* OTHER TABS */}
             {activeTab === 'subjects' && <SubjectNotes user={user} />}
-            {/* Updated MockEngine to handle specific mock selections */}
             {activeTab === 'mocks' && <MockEngine user={user} onFinish={() => setActiveTab('dashboard')} />}
             {activeTab === 'ranking' && <Leaderboard />}
             {activeTab === 'admin' && <AdminPanel />}
