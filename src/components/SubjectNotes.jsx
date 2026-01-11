@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { supabase } from '../supabaseClient';
 import { 
   Lightbulb, Save, Edit3, Loader2, BookOpen, 
-  Clock, Download, FileText, ChevronRight 
+  Clock, Download, FileText, Trash2 
 } from 'lucide-react';
 import { jsPDF } from "jspdf";
 
@@ -12,7 +12,7 @@ export default function SubjectNotes({ user }) {
   const [personalNote, setPersonalNote] = useState('');
   const [isSaving, setIsSaving] = useState(false);
   const [lastSaved, setLastSaved] = useState(null);
-  const [allNotes, setAllNotes] = useState([]); // State to retrieve all notes
+  const [allNotes, setAllNotes] = useState([]);
 
   useEffect(() => {
     fetchData();
@@ -68,31 +68,43 @@ export default function SubjectNotes({ user }) {
     
     if (!error) {
         setLastSaved(new Date().toLocaleTimeString());
-        fetchAllNotes(); // Refresh the list
+        fetchAllNotes();
     }
     setTimeout(() => setIsSaving(false), 500);
+  };
+
+  // --- DELETE NOTE LOGIC ---
+  const handleDeleteNote = async (id) => {
+    const confirmDelete = window.confirm("The Brain, are you sure you want to delete this note permanently?");
+    if (!confirmDelete) return;
+
+    const { error } = await supabase
+      .from('subject_notes')
+      .delete()
+      .eq('id', id);
+
+    if (!error) {
+      fetchAllNotes(); // Refresh the list after deletion
+      if (allNotes.find(n => n.id === id)?.subject === selectedSubject) {
+        setPersonalNote(''); // Clear the editor if the active note was deleted
+      }
+    }
   };
 
   // --- PDF GENERATION LOGIC ---
   const downloadAsPDF = (note) => {
     const doc = new jsPDF();
     doc.setFontSize(22);
-    doc.setTextColor(37, 99, 235); // Blue-600
+    doc.setTextColor(37, 99, 235);
     doc.text(`${note.subject} Study Notes`, 20, 20);
-    
     doc.setFontSize(10);
-    doc.setTextColor(156, 163, 175); // Gray-400
+    doc.setTextColor(156, 163, 175);
     doc.text(`The Brain Portal - Retrieved on ${new Date(note.updated_at).toLocaleString()}`, 20, 30);
-    
-    doc.setLineWidth(0.5);
-    doc.setDrawColor(229, 231, 235);
     doc.line(20, 35, 190, 35);
-    
     doc.setFontSize(12);
-    doc.setTextColor(31, 41, 55); // Gray-800
+    doc.setTextColor(31, 41, 55);
     const splitText = doc.splitTextToSize(note.content, 170);
     doc.text(splitText, 20, 45);
-    
     doc.save(`${note.subject}_Notes.pdf`);
   };
 
@@ -140,7 +152,7 @@ export default function SubjectNotes({ user }) {
               <button 
                 onClick={handleSaveNote}
                 disabled={isSaving}
-                className="flex items-center gap-2 bg-blue-600 text-white px-8 py-3 rounded-2xl font-black uppercase text-xs tracking-widest hover:bg-blue-700 shadow-lg active:scale-95 transition-all disabled:opacity-50"
+                className="flex items-center gap-2 bg-blue-600 text-white px-8 py-3 rounded-2xl font-black uppercase text-xs tracking-widest hover:bg-blue-700 shadow-lg transition-all"
               >
                 {isSaving ? <Loader2 className="animate-spin" size={18} /> : <Save size={18} />}
                 {isSaving ? 'Syncing...' : 'Save to Cloud'}
@@ -148,14 +160,14 @@ export default function SubjectNotes({ user }) {
             </div>
             <textarea 
               className="w-full h-64 p-8 rounded-[2rem] border-none focus:ring-4 focus:ring-blue-100 dark:focus:ring-blue-900/20 bg-gray-50 dark:bg-gray-900 dark:text-white shadow-inner resize-none font-medium leading-relaxed"
-              placeholder={`Write down your key takeaways for ${selectedSubject} here...`}
+              placeholder={`Write down your complex formulas or concepts for ${selectedSubject} here...`}
               value={personalNote}
               onChange={(e) => setPersonalNote(e.target.value)}
             />
         </div>
       </div>
 
-      {/* 3. MASTER RETRIEVAL SECTION */}
+      {/* 3. MASTER RETRIEVAL SECTION WITH DELETE */}
       <div className="space-y-6">
         <div className="flex items-center gap-3">
           <FileText className="text-blue-600" size={24} />
@@ -170,8 +182,17 @@ export default function SubjectNotes({ user }) {
                   <span className="bg-blue-50 dark:bg-blue-900/30 text-blue-600 px-4 py-1 rounded-xl text-[10px] font-black uppercase">
                     {note.subject}
                   </span>
-                  <div className="flex items-center gap-1 text-[9px] text-gray-400 font-bold uppercase">
-                    <Clock size={10} /> {new Date(note.updated_at).toLocaleDateString()}
+                  <div className="flex gap-3">
+                    <button 
+                        onClick={() => handleDeleteNote(note.id)}
+                        className="text-gray-300 hover:text-red-500 transition-colors"
+                        title="Delete Note"
+                    >
+                        <Trash2 size={16} />
+                    </button>
+                    <div className="flex items-center gap-1 text-[9px] text-gray-400 font-bold uppercase">
+                        <Clock size={10} /> {new Date(note.updated_at).toLocaleDateString()}
+                    </div>
                   </div>
                 </div>
                 <p className="text-gray-600 dark:text-gray-400 text-sm line-clamp-3 mb-6 font-medium leading-relaxed">
