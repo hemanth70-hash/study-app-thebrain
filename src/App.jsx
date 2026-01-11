@@ -164,7 +164,6 @@ export default function App() {
                       </p>
                     </div>
 
-                    {/* Verse now stays in the left column exactly as requested */}
                     <DailyVerse isAdmin={user.username === 'TheBrain'} />
                   </div>
                   
