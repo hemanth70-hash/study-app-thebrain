@@ -10,7 +10,6 @@ import QuickQuiz from './components/QuickQuiz';
 import GoalTracker from './components/GoalTracker';
 import StudyChat from './components/StudyChat';
 import InviteButton from './components/InviteButton';
-import DailyVerse from './components/DailyVerse';
 
 export default function App() {
   const [user, setUser] = useState(null);
@@ -46,10 +45,8 @@ export default function App() {
     yesterday.setDate(yesterday.getDate() - 1);
     const yesterdayStr = yesterday.toISOString().split('T')[0];
 
-    // Check if yesterday was missed
     if (profile.last_mock_date !== yesterdayStr && profile.last_mock_date !== null) {
       if (profile.freeze_points > 0) {
-        // Automatically consume a Freeze Point to save the streak
         await supabase.from('profiles')
           .update({ 
             freeze_points: profile.freeze_points - 1,
@@ -58,7 +55,6 @@ export default function App() {
           .eq('id', profile.id);
         alert("🔥 Streak Protected! A Freeze Point was used to cover yesterday.");
       } else {
-        // Reset streak to zero if no freeze points available
         await supabase.from('profiles')
           .update({ streak_count: 0 })
           .eq('id', profile.id);
@@ -121,13 +117,11 @@ export default function App() {
         
         <main className={`flex-1 p-10 transition-all duration-300 ${isSidebarOpen ? 'ml-64' : 'ml-20'}`}>
           
-          {/* HEADER WITH INTEGRATED ANNOUNCEMENT */}
           <header className="mb-10 flex flex-wrap items-center gap-6">
             <h2 className="text-4xl font-black capitalize text-blue-600 dark:text-blue-400">
               {activeTab === 'ranking' ? 'Leaderboard' : activeTab}
             </h2>
 
-            {/* Announcement Banner filling the middle space */}
             <div className="flex-1 min-w-[300px]">
               {globalMsg && (
                 <div className="bg-gradient-to-r from-blue-600 to-indigo-700 text-white px-6 py-2 rounded-2xl shadow-lg flex items-center justify-between animate-pulse border border-white/20">
@@ -152,7 +146,7 @@ export default function App() {
               <div className="space-y-8">
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-8 items-start">
                   
-                  {/* LEFT COLUMN: Stacked Greeting & Daily Verse */}
+                  {/* LEFT COLUMN: Greeting Only */}
                   <div className="flex flex-col gap-6">
                     <div className="bg-white dark:bg-gray-800 p-8 rounded-[2.5rem] shadow-xl border-b-8 border-blue-500">
                       <div className="flex justify-between items-start mb-4">
@@ -163,8 +157,6 @@ export default function App() {
                         Your study portal is live. Complete today's **Quick Mock** to earn points and protect your flame.
                       </p>
                     </div>
-
-                    <DailyVerse isAdmin={user.username === 'TheBrain'} />
                   </div>
                   
                   {/* RIGHT COLUMN: Goal Tracking */}
@@ -173,7 +165,6 @@ export default function App() {
                   </div>
                 </div>
                 
-                {/* Lower Section: Learning & Social */}
                 <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
                   <div className="lg:col-span-2">
                     <QuickQuiz />
@@ -185,7 +176,6 @@ export default function App() {
               </div>
             )}
 
-            {/* TAB ROUTING */}
             {activeTab === 'subjects' && <SubjectNotes user={user} />}
             {activeTab === 'mocks' && <MockEngine user={user} onFinish={() => setActiveTab('dashboard')} />}
             {activeTab === 'ranking' && <Leaderboard />}
