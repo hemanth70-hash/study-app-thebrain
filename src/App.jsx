@@ -10,7 +10,7 @@ import QuickQuiz from './components/QuickQuiz';
 import GoalTracker from './components/GoalTracker';
 import StudyChat from './components/StudyChat';
 import InviteButton from './components/InviteButton';
-import DailyVerse from './components/DailyVerse'; // New Autonomous Component
+import DailyVerse from './components/DailyVerse';
 
 export default function App() {
   const [user, setUser] = useState(null);
@@ -118,22 +118,27 @@ export default function App() {
         
         <main className={`flex-1 p-10 transition-all duration-300 ${isSidebarOpen ? 'ml-64' : 'ml-20'}`}>
           
-          {/* GLOBAL ANNOUNCEMENT BANNER */}
-          {globalMsg && (
-            <div className="bg-gradient-to-r from-blue-600 to-indigo-700 text-white p-4 rounded-3xl mb-8 shadow-lg flex items-center justify-between animate-pulse">
-              <div className="flex items-center gap-4">
-                <span className="bg-white text-blue-600 px-3 py-1 rounded-full font-black text-xs uppercase">News</span>
-                <p className="font-bold">{globalMsg}</p>
-              </div>
-              <button onClick={() => setGlobalMsg(null)} className="hover:bg-white/20 p-2 rounded-full transition-colors">✕</button>
-            </div>
-          )}
-
-          <header className="mb-10 flex justify-between items-center">
+          {/* HEADER WITH INTEGRATED ANNOUNCEMENT */}
+          <header className="mb-10 flex flex-wrap items-center gap-6">
+            {/* 1. Page Title */}
             <h2 className="text-4xl font-black capitalize text-blue-600 dark:text-blue-400">
               {activeTab === 'ranking' ? 'Leaderboard' : activeTab}
             </h2>
+
+            {/* 2. THE ANNOUNCEMENT BANNER (Positioned in middle empty space) */}
+            <div className="flex-1 min-w-[300px]">
+              {globalMsg && (
+                <div className="bg-gradient-to-r from-blue-600 to-indigo-700 text-white px-6 py-2 rounded-2xl shadow-lg flex items-center justify-between animate-pulse border border-white/20">
+                  <div className="flex items-center gap-3">
+                    <span className="bg-white text-blue-600 px-2 py-0.5 rounded-lg font-black text-[10px] uppercase">News</span>
+                    <p className="font-bold text-sm truncate max-w-md">{globalMsg}</p>
+                  </div>
+                  <button onClick={() => setGlobalMsg(null)} className="ml-4 hover:text-white/70 transition-colors">✕</button>
+                </div>
+              )}
+            </div>
             
+            {/* 3. Streak Counter */}
             <div className="flex items-center gap-3 bg-white dark:bg-gray-800 px-6 py-2 rounded-2xl shadow-sm border-2 border-orange-50">
               <span className="text-2xl">🔥</span>
               <span className="font-black text-xl text-orange-500">{user.streak_count || 0}</span>
@@ -158,7 +163,6 @@ export default function App() {
                       </p>
                     </div>
 
-                    {/* AUTONOMOUS BIBLE VERSE COMPONENT */}
                     <DailyVerse isAdmin={user.username === 'TheBrain'} />
                   </div>
                   
