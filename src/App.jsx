@@ -46,8 +46,10 @@ export default function App() {
     yesterday.setDate(yesterday.getDate() - 1);
     const yesterdayStr = yesterday.toISOString().split('T')[0];
 
+    // Check if yesterday was missed
     if (profile.last_mock_date !== yesterdayStr && profile.last_mock_date !== null) {
       if (profile.freeze_points > 0) {
+        // Automatically consume a Freeze Point to save the streak
         await supabase.from('profiles')
           .update({ 
             freeze_points: profile.freeze_points - 1,
@@ -56,6 +58,7 @@ export default function App() {
           .eq('id', profile.id);
         alert("🔥 Streak Protected! A Freeze Point was used to cover yesterday.");
       } else {
+        // Reset streak to zero if no freeze points available
         await supabase.from('profiles')
           .update({ streak_count: 0 })
           .eq('id', profile.id);
@@ -120,12 +123,11 @@ export default function App() {
           
           {/* HEADER WITH INTEGRATED ANNOUNCEMENT */}
           <header className="mb-10 flex flex-wrap items-center gap-6">
-            {/* 1. Page Title */}
             <h2 className="text-4xl font-black capitalize text-blue-600 dark:text-blue-400">
               {activeTab === 'ranking' ? 'Leaderboard' : activeTab}
             </h2>
 
-            {/* 2. THE ANNOUNCEMENT BANNER (Positioned in middle empty space) */}
+            {/* Announcement Banner filling the middle space */}
             <div className="flex-1 min-w-[300px]">
               {globalMsg && (
                 <div className="bg-gradient-to-r from-blue-600 to-indigo-700 text-white px-6 py-2 rounded-2xl shadow-lg flex items-center justify-between animate-pulse border border-white/20">
@@ -138,7 +140,6 @@ export default function App() {
               )}
             </div>
             
-            {/* 3. Streak Counter */}
             <div className="flex items-center gap-3 bg-white dark:bg-gray-800 px-6 py-2 rounded-2xl shadow-sm border-2 border-orange-50">
               <span className="text-2xl">🔥</span>
               <span className="font-black text-xl text-orange-500">{user.streak_count || 0}</span>
@@ -151,11 +152,11 @@ export default function App() {
               <div className="space-y-8">
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-8 items-start">
                   
-                  {/* Left Column: Greeting & Motivation */}
-                  <div className="space-y-6">
+                  {/* LEFT COLUMN: Stacked Greeting & Daily Verse */}
+                  <div className="flex flex-col gap-6">
                     <div className="bg-white dark:bg-gray-800 p-8 rounded-[2.5rem] shadow-xl border-b-8 border-blue-500">
                       <div className="flex justify-between items-start mb-4">
-                         <h3 className="text-2xl font-black">Hi, {user.username}!</h3>
+                         <h3 className="text-2xl font-black uppercase tracking-tighter">Hi, {user.username}!</h3>
                          <InviteButton />
                       </div>
                       <p className="text-gray-500 dark:text-gray-400 leading-relaxed font-medium">
@@ -163,10 +164,11 @@ export default function App() {
                       </p>
                     </div>
 
+                    {/* Verse now stays in the left column exactly as requested */}
                     <DailyVerse isAdmin={user.username === 'TheBrain'} />
                   </div>
                   
-                  {/* Right Column: Goal Tracking */}
+                  {/* RIGHT COLUMN: Goal Tracking */}
                   <div className="h-full">
                     <GoalTracker user={user} />
                   </div>
@@ -184,7 +186,7 @@ export default function App() {
               </div>
             )}
 
-            {/* OTHER TABS */}
+            {/* TAB ROUTING */}
             {activeTab === 'subjects' && <SubjectNotes user={user} />}
             {activeTab === 'mocks' && <MockEngine user={user} onFinish={() => setActiveTab('dashboard')} />}
             {activeTab === 'ranking' && <Leaderboard />}
