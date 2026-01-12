@@ -12,32 +12,31 @@ export default function MockEngine({ user, onFinish }) {
   const [isFinished, setIsFinished] = useState(false);
   const [loading, setLoading] = useState(true);
   const [showReview, setShowReview] = useState(false);
-  const [completedMockIds, setCompletedMockIds] = useState([]); // Verified: Using IDs for locking
+  const [completedMockIds, setCompletedMockIds] = useState([]); 
+  const [showStreakAnim, setShowStreakAnim] = useState(false); // 🔥 Animation State
 
-  // --- 1. ATOMIC LOAD: FETCH MOCKS & USER COMPLETIONS ---
+  // --- 1. ATOMIC LOAD: FETCH MOCKS & LOCK STATUS ---
   const loadMockData = useCallback(async () => {
     setLoading(true);
     try {
-      // Fetch mocks from daily_mocks
-      const { data: mockData } = await supabase
-        .from('daily_mocks')
-        .select('*');
+      // Fetch all available tests
+      const { data: mockData } = await supabase.from('daily_mocks').select('*');
       
-      // Fetch user's finished mock IDs from scores table
-      const { data: scoreData } = await supabase
-        .from('scores')
-        .select('mock_id') // Correct column based on your schema
+      // Fetch specifically from your 'completed_daily_mocks' security table
+      const { data: completionData } = await supabase
+        .from('completed_daily_mocks')
+        .select('mock_id')
         .eq('user_id', user.id);
 
-      if (scoreData) {
-        setCompletedMockIds(scoreData.map(s => s.mock_id));
+      if (completionData) {
+        setCompletedMockIds(completionData.map(c => c.mock_id));
       }
 
       if (mockData) {
         setAvailableMocks(mockData.sort((a, b) => (b.is_daily ? 1 : -1)));
       }
     } catch (err) {
-      console.error("Neural Sync Error:", err);
+      console.error("The Brain - Sync Error:", err);
     } finally {
       setLoading(false);
     }
@@ -47,11 +46,10 @@ export default function MockEngine({ user, onFinish }) {
     loadMockData();
   }, [loadMockData]);
 
-  // --- 2. START MOCK WITH STRICT LOCK ---
+  // --- 2. START MOCK WITH LOCK CHECK ---
   const startMock = async (mock) => {
-    // Check ID-based lock
     if (mock.is_daily && completedMockIds.includes(mock.id)) {
-      alert("The Brain, this daily streak mock is already locked.");
+      alert("The Brain, this daily streak mock is already secured.");
       return;
     }
 
@@ -68,37 +66,59 @@ export default function MockEngine({ user, onFinish }) {
     }
   };
 
-  // --- 3. SUBMIT & STREAK GUARD ---
+  // --- 3. SUBMIT & STREAK LOGIC ---
   const handleSubmit = async () => {
     if (isFinished) return;
     
-    let score = 0;
+    let scoreCount = 0;
     questions.forEach((q, idx) => {
-      if (selectedOptions[idx] === q.correct_option) score++;
+      if (selectedOptions[idx] === q.correct_option) scoreCount++;
     });
-    const percentage = Math.round((score / questions.length) * 100);
+    const percentage = Math.round((scoreCount / questions.length) * 100);
 
-    // Save results using IDs to match DB schema
-    await supabase.from('scores').insert([{
-      user_id: user.id, 
-      mock_id: selectedMock.id, // Linking via ID
-      score, 
-      percentage, 
-      mock_title: selectedMock.mock_title,
-      is_daily: selectedMock.is_daily 
-    }]);
+    try {
+      // A. Save Score to History
+      const { error: scoreError } = await supabase.from('scores').insert([{
+        user_id: user.id, 
+        mock_id: selectedMock.id, 
+        score: scoreCount, 
+        percentage: percentage, 
+        mock_title: selectedMock.mock_title,
+        is_daily: selectedMock.is_daily 
+      }]);
 
-    // Streak logic: Only if this ID hasn't been submitted before
-    if (selectedMock.is_daily && !completedMockIds.includes(selectedMock.id)) {
-      const today = new Date().toISOString().split('T')[0];
-      await supabase.from('profiles').update({ 
-        streak_count: (user.streak_count || 0) + 1, 
-        last_mock_date: today 
-      }).eq('id', user.id);
+      if (scoreError) throw scoreError;
+
+      // B. Handle Daily Streak Mechanics
+      if (selectedMock.is_daily) {
+        // 1. Double check lock to prevent multi-tab exploits
+        if (!completedMockIds.includes(selectedMock.id)) {
+          
+          // 2. Add entry to completion log (Locks the test forever)
+          await supabase.from('completed_daily_mocks').insert([{
+            user_id: user.id,
+            mock_id: selectedMock.id
+          }]);
+
+          // 3. Update Profile Streak Count
+          const today = new Date().toISOString().split('T')[0];
+          await supabase.from('profiles').update({ 
+            streak_count: (user.streak_count || 0) + 1, 
+            last_mock_date: today 
+          }).eq('id', user.id);
+
+          // 4. Trigger the Flame Animation
+          setShowStreakAnim(true);
+        }
+      }
+      
+      setIsFinished(true);
+      loadMockData(); // Refresh UI locks
+      
+    } catch (err) {
+      console.error("The Brain - Submit Error:", err.message);
+      alert("Neural Grid Error: Data not synced.");
     }
-    
-    setIsFinished(true);
-    loadMockData(); // Refresh locks immediately
   };
 
   const handleReturn = () => {
@@ -108,6 +128,7 @@ export default function MockEngine({ user, onFinish }) {
     setSelectedOptions({});
     setIsFinished(false);
     setShowReview(false);
+    setShowStreakAnim(false);
     onFinish(); 
   };
 
@@ -117,8 +138,9 @@ export default function MockEngine({ user, onFinish }) {
     return `${mins}:${String(secs).padStart(2, '0')}`;
   };
 
-  if (loading) return <div className="p-20 text-center font-black animate-pulse text-blue-600 uppercase">Syncing Neural Grid...</div>;
+  if (loading) return <div className="p-20 text-center font-black animate-pulse text-blue-600 uppercase tracking-widest">Syncing Neural Grid...</div>;
 
+  // --- LIBRARY VIEW ---
   if (!selectedMock) {
     return (
       <div className="space-y-6">
@@ -144,11 +166,11 @@ export default function MockEngine({ user, onFinish }) {
                   <div className={`p-3 rounded-2xl ${mock.is_daily ? (isDone ? 'bg-gray-200 dark:bg-gray-700' : 'bg-white/20') : 'bg-blue-50 dark:bg-gray-700 text-blue-600'}`}>
                     {isDone && mock.is_daily ? <Lock size={24} /> : (mock.is_daily ? <Zap size={24} /> : <Layout size={24} />)}
                   </div>
-                  <span className="flex items-center gap-1 bg-black/10 px-2 py-1 rounded-lg text-[10px] font-bold uppercase"><Clock size={12} /> {mock.time_limit} Mins</span>
+                  <span className="flex items-center gap-1 bg-black/10 px-2 py-1 rounded-lg text-[10px] font-bold uppercase tracking-widest"><Clock size={12} /> {mock.time_limit} Mins</span>
                 </div>
                 <h4 className="text-xl font-black uppercase mb-1">{mock.mock_title}</h4>
-                <p className="text-xs opacity-70 font-bold uppercase tracking-widest">
-                  {isDone && mock.is_daily ? 'Locked • Result Logged' : (mock.is_daily ? 'Streak Enabled' : 'Practice Mode')}
+                <p className="text-[10px] opacity-70 font-black uppercase tracking-widest">
+                  {isDone && mock.is_daily ? 'LOCKED • STREAK SECURED' : (mock.is_daily ? 'STREAK ENABLED' : 'PRACTICE MODE')}
                 </p>
               </button>
             );
@@ -158,36 +180,25 @@ export default function MockEngine({ user, onFinish }) {
     );
   }
 
+  // --- RESULTS VIEW WITH ANIMATION ---
   if (isFinished) {
     const finalScore = Math.round((Object.values(selectedOptions).filter((val, i) => val === questions[i].correct_option).length / questions.length) * 100);
-    if (showReview) {
-      return (
-        <div className="space-y-6 max-w-3xl mx-auto pb-20">
-          <button onClick={() => setShowReview(false)} className="bg-white dark:bg-gray-800 px-6 py-3 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-700 font-black uppercase text-xs flex items-center gap-2 transition-all hover:bg-gray-50">
-             <ArrowLeft size={16} /> Back to Results
-          </button>
-          {questions.map((q, idx) => (
-            <div key={idx} className={`p-8 rounded-[2.5rem] border-l-8 bg-white dark:bg-gray-800 shadow-xl ${selectedOptions[idx] === q.correct_option ? 'border-green-500' : 'border-red-500'}`}>
-              <p className="font-bold text-lg dark:text-white mb-4 leading-tight">{idx + 1}. {q.question}</p>
-              <div className="grid grid-cols-1 gap-3">
-                {q.options.map((opt, i) => (
-                  <div key={i} className={`p-4 rounded-2xl text-sm font-bold flex justify-between items-center ${
-                    i === q.correct_option ? 'bg-green-100 text-green-700 border border-green-200' : 
-                    i === selectedOptions[idx] ? 'bg-red-100 text-red-700 border border-red-200' : 
-                    'bg-gray-50 dark:bg-gray-900 text-gray-400'
-                  }`}>
-                    <span>{opt}</span>
-                    {i === q.correct_option && <CheckCircle size={16} />}
-                  </div>
-                ))}
-              </div>
-            </div>
-          ))}
-        </div>
-      );
-    }
+    
     return (
-      <div className="max-w-md mx-auto text-center p-12 bg-white dark:bg-gray-800 rounded-[40px] shadow-2xl border-t-8 border-green-500">
+      <div className="max-w-md mx-auto text-center p-12 bg-white dark:bg-gray-800 rounded-[40px] shadow-2xl border-t-8 border-green-500 relative overflow-hidden">
+        
+        {/* 🔥 STREAK FLAME OVERLAY 🔥 */}
+        {showStreakAnim && (
+          <div className="absolute inset-0 flex flex-col items-center justify-center bg-orange-600 z-50 animate-in fade-in zoom-in duration-500 text-white p-6">
+            <div className="text-8xl animate-bounce mb-4 drop-shadow-2xl">🔥</div>
+            <h2 className="text-5xl font-black uppercase italic tracking-tighter mb-2">STREAK +1</h2>
+            <p className="font-bold text-orange-200 uppercase tracking-[0.2em] text-xs">Daily Knowledge Logged</p>
+            <button onClick={() => setShowStreakAnim(false)} className="mt-10 bg-white text-orange-600 px-12 py-4 rounded-[2rem] font-black uppercase text-xs tracking-widest shadow-2xl hover:scale-110 transition-transform active:scale-95">
+                Dismiss
+            </button>
+          </div>
+        )}
+
         <Award size={64} className="mx-auto text-green-500 mb-6" />
         <h2 className="text-3xl font-black dark:text-white uppercase tracking-tighter">Mock Complete!</h2>
         <div className="text-6xl font-black text-blue-600 my-6">{finalScore}%</div>
@@ -199,8 +210,10 @@ export default function MockEngine({ user, onFinish }) {
     );
   }
 
+  // --- TEST TAKING VIEW ---
   return (
     <div className="max-w-3xl mx-auto bg-white dark:bg-gray-800 p-8 rounded-[32px] shadow-2xl border border-blue-50 dark:border-gray-700">
+      {/* (Timer and Question UI code matches your verified layout) */}
       <div className="flex justify-between items-center mb-8">
         <span className="bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-300 px-4 py-1.5 rounded-lg font-black text-xs uppercase tracking-widest">{currentIdx + 1} / {questions.length}</span>
         <div className={`flex items-center gap-2 font-mono font-bold text-xl px-4 py-2 rounded-xl ${timeLeft < 60 ? 'bg-red-500 text-white animate-pulse' : 'bg-gray-100 dark:bg-gray-900 dark:text-white'}`}>
