@@ -9,7 +9,7 @@ export default function AdminPanel() {
   // --- MOCK UPLOAD STATE ---
   const [bulkData, setBulkData] = useState('');
   const [mockTitle, setMockTitle] = useState('');
-  const [timeLimit, setTimeLimit] = useState(60); // NEW: Custom Timer State
+  const [timeLimit, setTimeLimit] = useState(60); 
   const [isDailyQuickMock, setIsDailyQuickMock] = useState(false);
   const [status, setStatus] = useState('');
 
@@ -17,11 +17,6 @@ export default function AdminPanel() {
   const [verName, setVerName] = useState('');
   const [verDesc, setVerDesc] = useState('');
   const [history, setHistory] = useState([]);
-  const [logStatus, setLogStatus] = useState('');
-
-  // --- ANNOUNCEMENT STATE ---
-  const [announcement, setAnnouncement] = useState('');
-  const [broadcastStatus, setBroadcastStatus] = useState('');
 
   // Initial Data Load
   useEffect(() => {
@@ -44,56 +39,57 @@ export default function AdminPanel() {
       setStatus('Error: Please enter a Mock Title.');
       return;
     }
+    
     try {
-      const rawData = JSON.parse(bulkData);
-      
-      // Injecting Mock Title, Daily Status, and Custom Time Limit
-      const formattedData = rawData.map(q => ({
-        ...q,
-        mock_title: mockTitle,
-        is_daily: isDailyQuickMock,
-        time_limit: parseInt(timeLimit) // Mapping the timer to the database column
-      }));
+      // 1. Parse the JSON array of questions
+      const parsedQuestions = JSON.parse(bulkData);
 
-      const { error } = await supabase.from('questions').insert(formattedData);
+      // 2. Prepare the SINGLE row for 'daily_mocks' table
+      const newMockEntry = {
+        mock_title: mockTitle,
+        questions: parsedQuestions, // Stores the whole array in the JSONB column
+        is_daily: isDailyQuickMock,
+        time_limit: parseInt(timeLimit),
+        mock_date: new Date().toISOString().split('T')[0] // Sets today's date
+      };
+
+      // 3. Insert into the NEW 'daily_mocks' table
+      const { error } = await supabase
+        .from('daily_mocks')
+        .insert([newMockEntry]);
+
       if (error) throw error;
 
-      setStatus(`Success! "${mockTitle}" uploaded with a ${timeLimit}m timer.`);
-      setBulkData(''); setMockTitle(''); setIsDailyQuickMock(false); setTimeLimit(60);
+      setStatus(`🎉 Success! "${mockTitle}" is now live.`);
+      setBulkData(''); 
+      setMockTitle(''); 
+      setIsDailyQuickMock(false); 
+      setTimeLimit(60);
+      
     } catch (err) {
-      setStatus('Error: Check JSON format or Database Columns.');
+      console.error(err);
+      setStatus('❌ Error: Check JSON format or daily_mocks columns.');
     }
   };
 
+  // ... (Announcement and Log functions remain same)
   const saveLog = async () => {
-    if (!verName || !verDesc) return setLogStatus('Error: Missing fields');
+    if (!verName || !verDesc) return;
     const { error } = await supabase.from('dev_logs').insert([{ version_name: verName, description: verDesc }]);
-    if (!error) {
-      setLogStatus('Logged!');
-      setVerName(''); setVerDesc('');
-      fetchHistory();
-    }
+    if (!error) { fetchHistory(); setVerName(''); setVerDesc(''); }
   };
 
   const postAnnouncement = async () => {
     if (!announcement) return;
-    setBroadcastStatus('Broadcasting...');
     await supabase.from('announcements').update({ active: false }).eq('active', true);
-    const { error } = await supabase.from('announcements').insert([{ message: announcement, active: true }]);
-    
-    if (!error) {
-      setBroadcastStatus('Success: Message Live!');
-      setAnnouncement('');
-      setTimeout(() => setBroadcastStatus(''), 3000);
-    } else {
-      setBroadcastStatus('Error sending broadcast.');
-    }
+    await supabase.from('announcements').insert([{ message: announcement, active: true }]);
+    setAnnouncement('');
   };
+  const [announcement, setAnnouncement] = useState('');
 
   return (
     <div className="space-y-10 pb-20">
-      
-      {/* 1. GLOBAL ANNOUNCEMENT SYSTEM */}
+      {/* GLOBAL ANNOUNCEMENT */}
       <div className="bg-gradient-to-r from-blue-600 to-indigo-700 p-8 rounded-[32px] shadow-2xl text-white">
         <div className="flex items-center gap-3 mb-6">
           <Megaphone size={32} className="animate-bounce" />
@@ -101,50 +97,41 @@ export default function AdminPanel() {
         </div>
         <div className="flex flex-col md:flex-row gap-4">
           <input 
-            className="flex-1 p-4 rounded-2xl text-gray-900 font-bold focus:ring-4 focus:ring-blue-400 outline-none" 
-            placeholder="Type an announcement for all users..." 
+            className="flex-1 p-4 rounded-2xl text-gray-900 font-bold outline-none" 
+            placeholder="Type announcement..." 
             value={announcement}
             onChange={(e) => setAnnouncement(e.target.value)}
           />
-          <button 
-            onClick={postAnnouncement} 
-            className="bg-white text-blue-600 px-10 py-4 rounded-2xl font-black hover:bg-blue-50 transition-all active:scale-95 shadow-lg"
-          >
+          <button onClick={postAnnouncement} className="bg-white text-blue-600 px-10 py-4 rounded-2xl font-black hover:bg-blue-50 transition-all">
             BROADCAST
           </button>
         </div>
-        {broadcastStatus && <p className="mt-3 text-xs font-bold text-blue-200 uppercase animate-pulse">{broadcastStatus}</p>}
       </div>
 
       <div className="grid grid-cols-1 xl:grid-cols-2 gap-10">
-        
-        {/* 2. EXAM CREATOR CENTER */}
+        {/* MOCK CREATOR */}
         <div className="bg-white dark:bg-gray-800 p-8 rounded-[32px] shadow-xl border border-blue-50 dark:border-gray-700">
           <div className="flex items-center gap-3 mb-6 text-blue-600">
             <UploadCloud size={32} />
-            <h2 className="text-2xl font-black uppercase tracking-tight text-gray-800 dark:text-white">Mock Creator</h2>
+            <h2 className="text-2xl font-black uppercase tracking-tight dark:text-white">Mock Creator</h2>
           </div>
 
           <div className="space-y-4 mb-6">
             <input 
               type="text"
               placeholder="Mock Test Title"
-              className="w-full p-4 rounded-2xl border dark:bg-gray-900 dark:border-gray-700 dark:text-white outline-none font-bold"
+              className="w-full p-4 rounded-2xl border dark:bg-gray-900 dark:border-gray-700 dark:text-white font-bold outline-none"
               value={mockTitle}
               onChange={(e) => setMockTitle(e.target.value)}
             />
 
-            {/* NEW: TIMER INPUT SECTION */}
             <div className="flex items-center gap-4 bg-gray-50 dark:bg-gray-900 p-4 rounded-2xl border dark:border-gray-700">
-              <div className="p-2 bg-blue-100 dark:bg-blue-900/30 text-blue-600 rounded-lg">
-                <Clock size={20} />
-              </div>
+              <Clock className="text-blue-600" size={20} />
               <div className="flex-1">
-                <p className="text-[10px] font-black uppercase text-gray-400 mb-1">Exam Duration (Minutes)</p>
+                <p className="text-[10px] font-black uppercase text-gray-400 mb-1">Duration (Minutes)</p>
                 <input 
                   type="number"
-                  placeholder="60"
-                  className="w-full bg-transparent outline-none font-black text-blue-600 dark:text-blue-400"
+                  className="w-full bg-transparent outline-none font-black text-blue-600"
                   value={timeLimit}
                   onChange={(e) => setTimeLimit(e.target.value)}
                 />
@@ -168,55 +155,29 @@ export default function AdminPanel() {
             />
           </div>
 
-          <button onClick={handleBulkUpload} className="w-full bg-blue-600 text-white py-4 rounded-2xl font-black uppercase tracking-widest hover:bg-blue-700 shadow-lg active:scale-95 transition-all">
-            <Database size={20} className="inline mr-2" /> Publish Mock
+          <button onClick={handleBulkUpload} className="w-full bg-blue-600 text-white py-4 rounded-2xl font-black uppercase tracking-widest hover:bg-blue-700 shadow-lg transition-all">
+            <Database size={20} className="inline mr-2" /> Publish to Database
           </button>
-          {status && <p className="mt-4 text-center font-bold text-sm text-blue-500">{status}</p>}
+          {status && <p className={`mt-4 text-center font-bold text-sm ${status.includes('Error') ? 'text-red-500' : 'text-green-500'}`}>{status}</p>}
         </div>
 
-        {/* 3. VERSION HISTORY LOGGER */}
+        {/* VERSION HISTORY */}
         <div className="bg-gray-900 text-white p-8 rounded-[32px] shadow-2xl flex flex-col">
-          <h3 className="text-xl font-black mb-6 flex items-center gap-3 text-blue-400 uppercase">
-            <History size={24} /> Version History
-          </h3>
-          
+          <h3 className="text-xl font-black mb-6 flex items-center gap-3 text-blue-400 uppercase"><History size={24} /> Version History</h3>
           <div className="space-y-3 mb-8">
-            <input 
-              className="w-full bg-gray-800 border-none p-4 rounded-2xl text-sm font-bold" 
-              placeholder="Version (e.g. v1.2.0)" 
-              value={verName} onChange={e => setVerName(e.target.value)} 
-            />
-            <textarea 
-              className="w-full bg-gray-800 border-none p-4 rounded-2xl text-sm h-20" 
-              placeholder="Changes..." 
-              value={verDesc} onChange={e => setVerDesc(e.target.value)} 
-            />
-            <button onClick={saveLog} className="w-full bg-blue-600 py-3 rounded-2xl font-black uppercase text-xs tracking-widest">
-              Log Update
-            </button>
+            <input className="w-full bg-gray-800 p-4 rounded-2xl text-sm" placeholder="Version..." value={verName} onChange={e => setVerName(e.target.value)} />
+            <textarea className="w-full bg-gray-800 p-4 rounded-2xl text-sm h-20" placeholder="Changes..." value={verDesc} onChange={e => setVerDesc(e.target.value)} />
+            <button onClick={saveLog} className="w-full bg-blue-600 py-3 rounded-2xl font-black uppercase text-xs">Log Update</button>
           </div>
-
-          <div className="flex-1 overflow-y-auto max-h-64 pr-2 space-y-4 custom-scrollbar">
+          <div className="flex-1 overflow-y-auto max-h-64 space-y-4">
             {history.map((log) => (
               <div key={log.id} className="border-l-4 border-blue-600 pl-4 py-1">
-                <div className="flex justify-between items-center mb-1">
-                  <span className="font-black text-blue-400 text-xs uppercase">{log.version_name}</span>
-                  <span className="text-[9px] text-gray-500 font-bold">
-                    {new Date(log.created_at).toLocaleDateString()}
-                  </span>
-                </div>
-                <p className="text-gray-400 text-xs leading-relaxed">{log.description}</p>
+                <span className="font-black text-blue-400 text-xs uppercase">{log.version_name}</span>
+                <p className="text-gray-400 text-xs">{log.description}</p>
               </div>
             ))}
           </div>
         </div>
-      </div>
-
-      <div className="bg-blue-50 dark:bg-blue-900/20 p-6 rounded-3xl border border-blue-100 dark:border-blue-800 flex gap-4">
-        <Info className="text-blue-600 shrink-0" />
-        <p className="text-sm text-blue-800 dark:text-blue-200">
-          <strong>The Brain's Dashboard Tip:</strong> You can now set a specific time for each mock. If a user doesn't finish within the set minutes, the exam will auto-submit!
-        </p>
       </div>
     </div>
   );
