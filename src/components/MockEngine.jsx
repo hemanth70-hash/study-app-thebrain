@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { supabase } from '../supabaseClient';
-import { Timer, CheckCircle, Play, Layout, Zap, Award, Clock, ArrowLeft, Eye, AlertTriangle } from 'lucide-react';
+import { Timer, CheckCircle, Play, Layout, Zap, Award, Clock, ArrowLeft, Eye, Lock } from 'lucide-react';
 
 export default function MockEngine({ user, onFinish }) {
   const [availableMocks, setAvailableMocks] = useState([]);
@@ -12,15 +12,25 @@ export default function MockEngine({ user, onFinish }) {
   const [isFinished, setIsFinished] = useState(false);
   const [loading, setLoading] = useState(true);
   const [showReview, setShowReview] = useState(false);
+  const [completedMocks, setCompletedMocks] = useState([]); // Tracking previously done mocks
 
   useEffect(() => {
     fetchMockList();
+    fetchCompletedStatus();
   }, []);
 
   const fetchMockList = async () => {
-    const { data } = await supabase.from('daily_mocks').select('mock_title, is_daily, time_limit');
+    const { data } = await supabase.from('daily_mocks').select('id, mock_title, is_daily, time_limit');
     if (data) setAvailableMocks(data.sort((a, b) => (b.is_daily ? 1 : -1)));
     setLoading(false);
+  };
+
+  const fetchCompletedStatus = async () => {
+    const { data } = await supabase
+      .from('scores')
+      .select('mock_title')
+      .eq('user_id', user.id);
+    if (data) setCompletedMocks(data.map(d => d.mock_title));
   };
 
   useEffect(() => {
@@ -32,6 +42,12 @@ export default function MockEngine({ user, onFinish }) {
   }, [selectedMock, isFinished, timeLeft]);
 
   const startMock = async (mock) => {
+    // LOCK LOGIC: No re-attempts for Daily Mocks
+    if (mock.is_daily && completedMocks.includes(mock.mock_title)) {
+      alert("The Brain, you've already secured today's streak. Access denied for re-attempt.");
+      return;
+    }
+
     const { data } = await supabase.from('daily_mocks').select('*').eq('mock_title', mock.mock_title).single();
     if (data && data.questions) {
       setQuestions(data.questions); 
@@ -48,35 +64,41 @@ export default function MockEngine({ user, onFinish }) {
     });
     const percentage = Math.round((score / questions.length) * 100);
 
+    // Save results with 'is_daily' flag
     await supabase.from('scores').insert({
-      user_id: user.id, score, percentage, mock_title: selectedMock.mock_title
+      user_id: user.id, 
+      score, 
+      percentage, 
+      mock_title: selectedMock.mock_title,
+      is_daily: selectedMock.is_daily 
     });
 
-    if (selectedMock.is_daily) {
+    // --- STREAK LOGIC: ONLY ONCE PER DAY ---
+    if (selectedMock.is_daily && !completedMocks.includes(selectedMock.mock_title)) {
       const today = new Date().toISOString().split('T')[0];
       await supabase.from('profiles').update({ 
-        streak_count: (user.streak_count || 0) + 1, last_mock_date: today 
+        streak_count: (user.streak_count || 0) + 1, 
+        last_mock_date: today 
       }).eq('id', user.id);
     }
+    
     setIsFinished(true);
   };
 
-  const formatTime = (seconds) => {
-    const mins = Math.floor(seconds / 60);
-    const secs = seconds % 60;
-    return `${mins}:${String(secs).padStart(2, '0')}`;
-  };
-
-  // --- FIX 1: RETURN TO DASHBOARD WITHOUT RELOAD ---
   const handleReturn = () => {
-    // Instead of window.location.reload(), we reset the local state
     setSelectedMock(null);
     setQuestions([]);
     setCurrentIdx(0);
     setSelectedOptions({});
     setIsFinished(false);
     setShowReview(false);
-    onFinish(); // This calls the setActiveTab('dashboard') from App.jsx
+    onFinish();
+  };
+
+  const formatTime = (seconds) => {
+    const mins = Math.floor(seconds / 60);
+    const secs = seconds % 60;
+    return `${mins}:${String(secs).padStart(2, '0')}`;
   };
 
   if (loading) return <div className="text-center p-10 font-bold animate-pulse text-blue-600">Syncing Exam Servers...</div>;
@@ -89,16 +111,32 @@ export default function MockEngine({ user, onFinish }) {
           <h3 className="text-2xl font-black text-gray-800 dark:text-white uppercase">Exam Library</h3>
         </div>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-          {availableMocks.map((mock, i) => (
-            <button key={i} onClick={() => startMock(mock)} className={`p-8 rounded-[32px] text-left transition-all hover:scale-[1.02] shadow-xl border-b-8 active:scale-95 ${mock.is_daily ? 'bg-gradient-to-br from-orange-500 to-red-600 text-white border-orange-700' : 'bg-white dark:bg-gray-800 border-blue-500 dark:border-blue-900 dark:text-white'}`}>
-              <div className="flex justify-between items-start mb-4">
-                <div className={`p-3 rounded-2xl ${mock.is_daily ? 'bg-white/20' : 'bg-blue-50 dark:bg-gray-700 text-blue-600'}`}>{mock.is_daily ? <Zap size={24} /> : <Layout size={24} />}</div>
-                <span className="flex items-center gap-1 bg-black/10 px-2 py-1 rounded-lg text-[10px] font-bold"><Clock size={12} /> {mock.time_limit} Mins</span>
-              </div>
-              <h4 className="text-xl font-black uppercase mb-1">{mock.mock_title}</h4>
-              <p className={`text-sm ${mock.is_daily ? 'text-white/80' : 'text-gray-500'}`}>{mock.is_daily ? 'Attendance Required' : 'Practice Mode'}</p>
-            </button>
-          ))}
+          {availableMocks.map((mock, i) => {
+            const isDone = completedMocks.includes(mock.mock_title);
+            return (
+              <button 
+                key={i} 
+                disabled={mock.is_daily && isDone}
+                onClick={() => startMock(mock)} 
+                className={`p-8 rounded-[32px] text-left transition-all shadow-xl border-b-8 relative ${
+                  mock.is_daily 
+                    ? (isDone ? 'bg-gray-200 text-gray-400 border-gray-300' : 'bg-gradient-to-br from-orange-500 to-red-600 text-white border-orange-700 hover:scale-[1.02]') 
+                    : 'bg-white dark:bg-gray-800 border-blue-500 dark:border-blue-900 dark:text-white hover:scale-[1.02]'
+                }`}
+              >
+                <div className="flex justify-between items-start mb-4">
+                  <div className={`p-3 rounded-2xl ${mock.is_daily ? (isDone ? 'bg-gray-300' : 'bg-white/20') : 'bg-blue-50 dark:bg-gray-700 text-blue-600'}`}>
+                    {isDone && mock.is_daily ? <Lock size={24} /> : (mock.is_daily ? <Zap size={24} /> : <Layout size={24} />)}
+                  </div>
+                  <span className="flex items-center gap-1 bg-black/10 px-2 py-1 rounded-lg text-[10px] font-bold"><Clock size={12} /> {mock.time_limit} Mins</span>
+                </div>
+                <h4 className="text-xl font-black uppercase mb-1">{mock.mock_title}</h4>
+                <p className={`text-sm ${mock.is_daily && !isDone ? 'text-white/80' : 'text-gray-500'}`}>
+                  {isDone && mock.is_daily ? 'Streak Secured' : (mock.is_daily ? 'Daily Attendance' : 'Practice Mode')}
+                </p>
+              </button>
+            );
+          })}
         </div>
       </div>
     );
@@ -106,8 +144,6 @@ export default function MockEngine({ user, onFinish }) {
 
   if (isFinished) {
     const finalScore = Math.round((Object.values(selectedOptions).filter((val, i) => val === questions[i].correct_option).length / questions.length) * 100);
-
-    // --- FIX 2: REVIEW VIEW ---
     if (showReview) {
       return (
         <div className="space-y-6 max-w-3xl mx-auto pb-20">
@@ -117,7 +153,7 @@ export default function MockEngine({ user, onFinish }) {
           {questions.map((q, idx) => (
             <div key={idx} className={`p-8 rounded-[2.5rem] border-l-8 bg-white dark:bg-gray-800 shadow-xl ${selectedOptions[idx] === q.correct_option ? 'border-green-500' : 'border-red-500'}`}>
               <div className="flex items-start justify-between gap-4 mb-4">
-                <p className="font-bold text-lg dark:text-white">{idx + 1}. {q.question}</p>
+                <p className="font-bold text-lg dark:text-white leading-tight">{idx + 1}. {q.question}</p>
               </div>
               <div className="grid grid-cols-1 gap-3">
                 {q.options.map((opt, i) => (
@@ -136,20 +172,14 @@ export default function MockEngine({ user, onFinish }) {
         </div>
       );
     }
-
     return (
       <div className="max-w-md mx-auto text-center p-12 bg-white dark:bg-gray-800 rounded-[40px] shadow-2xl border-t-8 border-green-500">
         <Award size={64} className="mx-auto text-green-500 mb-6" />
         <h2 className="text-3xl font-black dark:text-white uppercase tracking-tighter">Mock Complete!</h2>
         <div className="text-6xl font-black text-blue-600 my-6">{finalScore}%</div>
         <div className="flex flex-col gap-4">
-            <button onClick={() => setShowReview(true)} className="flex items-center justify-center gap-2 w-full bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-white py-4 rounded-2xl font-black uppercase tracking-widest hover:bg-gray-200 transition-all">
-                <Eye size={20} /> Review Answers
-            </button>
-            {/* FIX: Use handleReturn instead of reload */}
-            <button onClick={handleReturn} className="w-full bg-blue-600 text-white py-4 rounded-2xl font-black uppercase tracking-widest hover:bg-blue-700 shadow-xl transition-all">
-                Return to Hub
-            </button>
+            <button onClick={() => setShowReview(true)} className="flex items-center justify-center gap-2 w-full bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-white py-4 rounded-2xl font-black uppercase tracking-widest hover:bg-gray-200 transition-all"><Eye size={20} /> Review Answers</button>
+            <button onClick={handleReturn} className="w-full bg-blue-600 text-white py-4 rounded-2xl font-black uppercase tracking-widest hover:bg-blue-700 shadow-xl transition-all">Return to Hub</button>
         </div>
       </div>
     );
@@ -176,7 +206,7 @@ export default function MockEngine({ user, onFinish }) {
         <button disabled={currentIdx === 0} onClick={() => setCurrentIdx(prev => prev - 1)} className="px-6 py-2 text-gray-400 font-bold hover:text-blue-600 disabled:opacity-0 uppercase text-xs tracking-widest">Previous</button>
         {currentIdx === questions.length - 1 
           ? <button onClick={handleSubmit} className="px-10 py-4 bg-green-500 text-white rounded-2xl font-black uppercase tracking-widest hover:bg-green-600 shadow-lg transition-all active:scale-95">Finish Test</button>
-          : <button onClick={() => setCurrentIdx(prev => prev + 1)} className="px-10 py-4 bg-blue-600 text-white rounded-2xl font-black uppercase tracking-widest hover:bg-blue-700 shadow-lg transition-all active:scale-95">Next</button>
+          : <button onClick={() => setCurrentIdx(prev => prev + 1)} className="px-10 py-4 bg-blue-600 text-white rounded-2xl font-black uppercase tracking-widest hover:bg-blue-700 shadow-lg active:scale-95">Next</button>
         }
       </div>
     </div>
