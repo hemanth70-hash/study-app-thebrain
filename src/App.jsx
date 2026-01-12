@@ -83,7 +83,7 @@ export default function App() {
   if (!user) {
     return (
       <div className={`flex items-center justify-center min-h-screen ${isDarkMode ? 'bg-gray-900' : 'bg-blue-50'}`}>
-        <div className="bg-white dark:bg-gray-800 p-8 rounded-[2.5rem] shadow-2xl border-2 border-blue-200 w-96 text-center">
+        <div className="bg-white dark:bg-gray-800 p-8 rounded-[2.5rem] shadow-xl border-2 border-blue-200 w-96 text-center">
           <h1 className="text-3xl font-black mb-6 text-blue-600 italic tracking-tighter">The Brain Portal</h1>
           <input 
             className="w-full p-4 rounded-2xl border mb-4 text-black dark:bg-gray-700 dark:text-white outline-none focus:ring-4 focus:ring-blue-100 transition-all" 
@@ -120,14 +120,17 @@ export default function App() {
               {activeTab === 'ranking' ? 'Leaderboard' : activeTab}
             </h2>
 
+            {/* MARQUEE ANNOUNCEMENT SYSTEM */}
             <div className="flex-1 min-w-[300px]">
               {globalMsg && (
-                <div className="bg-gradient-to-r from-blue-600 to-indigo-700 text-white px-6 py-3 rounded-[1.5rem] shadow-lg flex items-center justify-between animate-pulse border border-white/20">
-                  <div className="flex items-center gap-3">
-                    <span className="bg-white text-blue-600 px-2 py-0.5 rounded-lg font-black text-[10px] uppercase">News</span>
-                    <p className="font-bold text-sm truncate max-w-md">{globalMsg}</p>
+                <div className="bg-gradient-to-r from-blue-600 to-indigo-700 text-white px-6 py-3 rounded-[1.5rem] shadow-lg flex items-center border border-white/20 overflow-hidden">
+                  <span className="bg-white text-blue-600 px-2 py-0.5 rounded-lg font-black text-[10px] uppercase mr-4 shrink-0 z-10">News</span>
+                  <div className="flex-1 overflow-hidden relative">
+                    <marquee className="font-bold text-sm whitespace-nowrap" scrollamount="6">
+                      {globalMsg}
+                    </marquee>
                   </div>
-                  <button onClick={() => setGlobalMsg(null)} className="ml-4 hover:text-white/70">✕</button>
+                  <button onClick={() => setGlobalMsg(null)} className="ml-4 hover:text-white/70 transition-colors shrink-0 z-10">✕</button>
                 </div>
               )}
             </div>
