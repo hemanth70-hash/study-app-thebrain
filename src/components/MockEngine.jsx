@@ -32,7 +32,10 @@ export default function MockEngine({ user, onFinish }) {
   const loadMockData = useCallback(async () => {
     setLoading(true);
     try {
+      // Fetch all available tests
       const { data: mockData } = await supabase.from('daily_mocks').select('*');
+      
+      // Fetch specifically from your 'completed_daily_mocks' security table
       const { data: completionData } = await supabase
         .from('completed_daily_mocks')
         .select('mock_id')
@@ -46,7 +49,7 @@ export default function MockEngine({ user, onFinish }) {
         setAvailableMocks(mockData.sort((a, b) => (b.is_daily ? 1 : -1)));
       }
     } catch (err) {
-      console.error("Neural Sync Error:", err);
+      console.error("The Brain - Sync Error:", err);
     } finally {
       setLoading(false);
     }
@@ -87,7 +90,7 @@ export default function MockEngine({ user, onFinish }) {
     const percentage = Math.round((scoreCount / questions.length) * 100);
 
     try {
-      // Save Score to History
+      // A. Save Score to History
       const { error: scoreError } = await supabase.from('scores').insert([{
         user_id: user.id, 
         mock_id: selectedMock.id, 
@@ -99,31 +102,33 @@ export default function MockEngine({ user, onFinish }) {
 
       if (scoreError) throw scoreError;
 
-      // Handle Daily Logic
+      // B. Handle Daily Streak Mechanics
       if (selectedMock.is_daily) {
         if (!completedMockIds.includes(selectedMock.id)) {
-          // Log completion to security table
+          
+          // 2. Add entry to completion log (Locks the test forever)
           await supabase.from('completed_daily_mocks').insert([{
             user_id: user.id,
             mock_id: selectedMock.id
           }]);
 
-          // Update Profile Streak
+          // 3. Update Profile Streak Count
           const today = new Date().toISOString().split('T')[0];
           await supabase.from('profiles').update({ 
             streak_count: (user.streak_count || 0) + 1, 
             last_mock_date: today 
           }).eq('id', user.id);
 
-          setShowStreakAnim(true); // Trigger Flame
+          // 4. Trigger the Flame Animation
+          setShowStreakAnim(true);
         }
       }
       
       setIsFinished(true);
-      loadMockData(); 
+      loadMockData(); // Refresh UI locks
       
     } catch (err) {
-      console.error("Submit Error:", err.message);
+      console.error("The Brain - Submit Error:", err.message);
       alert("Neural Grid Error: Data not synced.");
     }
   };
@@ -187,19 +192,20 @@ export default function MockEngine({ user, onFinish }) {
     );
   }
 
-  // --- RESULTS VIEW ---
+  // --- RESULTS VIEW WITH ANIMATION ---
   if (isFinished) {
     const finalScore = Math.round((Object.values(selectedOptions).filter((val, i) => val === questions[i].correct_option).length / questions.length) * 100);
     
     return (
       <div className="max-w-md mx-auto text-center p-12 bg-white dark:bg-gray-800 rounded-[40px] shadow-2xl border-t-8 border-green-500 relative overflow-hidden">
         
+        {/* 🔥 STREAK FLAME OVERLAY 🔥 */}
         {showStreakAnim && (
           <div className="absolute inset-0 flex flex-col items-center justify-center bg-orange-600 z-50 animate-in fade-in zoom-in duration-500 text-white p-6 text-center">
             <div className="text-8xl animate-bounce mb-4 drop-shadow-2xl">🔥</div>
             <h2 className="text-5xl font-black uppercase italic tracking-tighter mb-2">STREAK +1</h2>
             <p className="font-bold text-orange-200 uppercase tracking-[0.2em] text-xs">Knowledge Record Synced</p>
-            <button onClick={() => setShowStreakAnim(false)} className="mt-10 bg-white text-orange-600 px-12 py-4 rounded-[2rem] font-black uppercase text-xs tracking-widest shadow-2xl active:scale-95">
+            <button onClick={() => setShowStreakAnim(false)} className="mt-10 bg-white text-orange-600 px-12 py-4 rounded-[2rem] font-black uppercase text-xs tracking-widest shadow-2xl active:scale-95 transition-transform hover:scale-110">
                 Continue
             </button>
           </div>
@@ -216,7 +222,7 @@ export default function MockEngine({ user, onFinish }) {
     );
   }
 
-  // --- TEST UI ---
+  // --- TEST TAKING VIEW ---
   return (
     <div className="max-w-3xl mx-auto bg-white dark:bg-gray-800 p-8 rounded-[32px] shadow-2xl border border-blue-50 dark:border-gray-700">
       <div className="flex justify-between items-center mb-8">
@@ -237,8 +243,8 @@ export default function MockEngine({ user, onFinish }) {
       <div className="mt-12 flex justify-between items-center pt-8 border-t dark:border-gray-700">
         <button disabled={currentIdx === 0} onClick={() => setCurrentIdx(prev => prev - 1)} className="px-6 py-2 text-gray-400 font-bold hover:text-blue-600 disabled:opacity-0 uppercase text-xs tracking-widest">Previous</button>
         {currentIdx === questions.length - 1 
-          ? <button onClick={handleSubmit} className="px-10 py-4 bg-green-500 text-white rounded-2xl font-black uppercase tracking-widest hover:bg-green-600 shadow-lg active:scale-95">Finish Test</button>
-          : <button onClick={() => setCurrentIdx(prev => prev + 1)} className="px-10 py-4 bg-blue-600 text-white rounded-2xl font-black uppercase tracking-widest hover:bg-blue-700 shadow-lg active:scale-95">Next</button>
+          ? <button onClick={handleSubmit} className="px-10 py-4 bg-green-500 text-white rounded-2xl font-black uppercase tracking-widest hover:bg-green-600 shadow-xl active:scale-95 transition-all">Finish Test</button>
+          : <button onClick={() => setCurrentIdx(prev => prev + 1)} className="px-10 py-4 bg-blue-600 text-white rounded-2xl font-black uppercase tracking-widest hover:bg-blue-700 shadow-xl active:scale-95 transition-all">Next</button>
         }
       </div>
     </div>
