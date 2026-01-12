@@ -23,19 +23,16 @@ export default function MockEngine({ user, onFinish }) {
         setTimeLeft((prev) => prev - 1);
       }, 1000);
     } else if (timeLeft === 0 && selectedMock && !isFinished) {
-      handleSubmit(); // Auto-submit when countdown hits zero
+      handleSubmit(); 
     }
     return () => clearInterval(interval);
   }, [selectedMock, isFinished, timeLeft]);
 
-  // --- 2. ATOMIC LOAD: FETCH MOCKS & LOCK STATUS ---
+  // --- 2. ATOMIC LOAD ---
   const loadMockData = useCallback(async () => {
     setLoading(true);
     try {
-      // Fetch all available tests
       const { data: mockData } = await supabase.from('daily_mocks').select('*');
-      
-      // Fetch specifically from your 'completed_daily_mocks' security table
       const { data: completionData } = await supabase
         .from('completed_daily_mocks')
         .select('mock_id')
@@ -59,7 +56,7 @@ export default function MockEngine({ user, onFinish }) {
     loadMockData();
   }, [loadMockData]);
 
-  // --- 3. START MOCK WITH SECURITY CHECK ---
+  // --- 3. START MOCK ---
   const startMock = async (mock) => {
     if (mock.is_daily && completedMockIds.includes(mock.id)) {
       alert("The Brain, this daily streak mock is already secured.");
@@ -75,7 +72,7 @@ export default function MockEngine({ user, onFinish }) {
     if (data && data.questions) {
       setQuestions(data.questions); 
       setSelectedMock(data);
-      setTimeLeft((data.time_limit || 10) * 60); // Standardize to seconds
+      setTimeLeft((data.time_limit || 10) * 60); 
     }
   };
 
@@ -90,7 +87,6 @@ export default function MockEngine({ user, onFinish }) {
     const percentage = Math.round((scoreCount / questions.length) * 100);
 
     try {
-      // A. Save Score to History
       const { error: scoreError } = await supabase.from('scores').insert([{
         user_id: user.id, 
         mock_id: selectedMock.id, 
@@ -102,30 +98,25 @@ export default function MockEngine({ user, onFinish }) {
 
       if (scoreError) throw scoreError;
 
-      // B. Handle Daily Streak Mechanics
       if (selectedMock.is_daily) {
         if (!completedMockIds.includes(selectedMock.id)) {
-          
-          // 2. Add entry to completion log (Locks the test forever)
           await supabase.from('completed_daily_mocks').insert([{
             user_id: user.id,
             mock_id: selectedMock.id
           }]);
 
-          // 3. Update Profile Streak Count
           const today = new Date().toISOString().split('T')[0];
           await supabase.from('profiles').update({ 
             streak_count: (user.streak_count || 0) + 1, 
             last_mock_date: today 
           }).eq('id', user.id);
 
-          // 4. Trigger the Flame Animation
           setShowStreakAnim(true);
         }
       }
       
       setIsFinished(true);
-      loadMockData(); // Refresh UI locks
+      loadMockData(); 
       
     } catch (err) {
       console.error("The Brain - Submit Error:", err.message);
@@ -192,14 +183,40 @@ export default function MockEngine({ user, onFinish }) {
     );
   }
 
-  // --- RESULTS VIEW WITH ANIMATION ---
+  // --- RESULTS & REVIEW VIEW ---
   if (isFinished) {
-    const finalScore = Math.round((Object.values(selectedOptions).filter((val, i) => val === questions[i].correct_option).length / questions.length) * 100);
+    const finalScore = Math.round((questions.filter((q, i) => selectedOptions[i] === q.correct_option).length / questions.length) * 100);
     
+    // 🔥 NEW: MISSING REVIEW RENDER BLOCK 🔥
+    if (showReview) {
+      return (
+        <div className="space-y-6 max-w-3xl mx-auto pb-20 animate-in fade-in slide-in-from-bottom-4 duration-500">
+          <button onClick={() => setShowReview(false)} className="bg-white dark:bg-gray-800 px-6 py-3 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-700 font-black uppercase text-xs flex items-center gap-2 transition-all hover:bg-gray-50 dark:text-white">
+             <ArrowLeft size={16} /> Back to Results
+          </button>
+          {questions.map((q, idx) => (
+            <div key={idx} className={`p-8 rounded-[2.5rem] border-l-8 bg-white dark:bg-gray-800 shadow-xl ${selectedOptions[idx] === q.correct_option ? 'border-green-500' : 'border-red-500'}`}>
+              <p className="font-bold text-lg dark:text-white mb-4 leading-tight">{idx + 1}. {q.question}</p>
+              <div className="grid grid-cols-1 gap-3">
+                {q.options.map((opt, i) => (
+                  <div key={i} className={`p-4 rounded-2xl text-sm font-bold flex justify-between items-center ${
+                    i === q.correct_option ? 'bg-green-100 text-green-700 border border-green-200' : 
+                    i === selectedOptions[idx] ? 'bg-red-100 text-red-700 border border-red-200' : 
+                    'bg-gray-50 dark:bg-gray-900 text-gray-400'
+                  }`}>
+                    <span>{opt}</span>
+                    {i === q.correct_option && <CheckCircle size={16} />}
+                  </div>
+                ))}
+              </div>
+            </div>
+          ))}
+        </div>
+      );
+    }
+
     return (
       <div className="max-w-md mx-auto text-center p-12 bg-white dark:bg-gray-800 rounded-[40px] shadow-2xl border-t-8 border-green-500 relative overflow-hidden">
-        
-        {/* 🔥 STREAK FLAME OVERLAY 🔥 */}
         {showStreakAnim && (
           <div className="absolute inset-0 flex flex-col items-center justify-center bg-orange-600 z-50 animate-in fade-in zoom-in duration-500 text-white p-6 text-center">
             <div className="text-8xl animate-bounce mb-4 drop-shadow-2xl">🔥</div>
@@ -210,7 +227,6 @@ export default function MockEngine({ user, onFinish }) {
             </button>
           </div>
         )}
-
         <Award size={64} className="mx-auto text-green-500 mb-6" />
         <h2 className="text-3xl font-black dark:text-white uppercase tracking-tighter">Mock Complete!</h2>
         <div className="text-6xl font-black text-blue-600 my-6">{finalScore}%</div>
