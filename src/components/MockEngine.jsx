@@ -12,25 +12,25 @@ export default function MockEngine({ user, onFinish }) {
   const [isFinished, setIsFinished] = useState(false);
   const [loading, setLoading] = useState(true);
   const [showReview, setShowReview] = useState(false);
-  const [completedTitles, setCompletedTitles] = useState([]); 
+  const [completedMockIds, setCompletedMockIds] = useState([]); // Verified: Using IDs for locking
 
-  // --- CORE LOGIC: FETCH MOCKS & COMPLETED STATUS ---
+  // --- 1. ATOMIC LOAD: FETCH MOCKS & USER COMPLETIONS ---
   const loadMockData = useCallback(async () => {
     setLoading(true);
     try {
-      // 1. Fetch all available mocks
+      // Fetch mocks from daily_mocks
       const { data: mockData } = await supabase
         .from('daily_mocks')
-        .select('id, mock_title, is_daily, time_limit');
+        .select('*');
       
-      // 2. Fetch user scores to determine "Attempted" status
+      // Fetch user's finished mock IDs from scores table
       const { data: scoreData } = await supabase
         .from('scores')
-        .select('mock_title')
+        .select('mock_id') // Correct column based on your schema
         .eq('user_id', user.id);
 
       if (scoreData) {
-        setCompletedTitles(scoreData.map(s => s.mock_title));
+        setCompletedMockIds(scoreData.map(s => s.mock_id));
       }
 
       if (mockData) {
@@ -47,26 +47,28 @@ export default function MockEngine({ user, onFinish }) {
     loadMockData();
   }, [loadMockData]);
 
+  // --- 2. START MOCK WITH STRICT LOCK ---
   const startMock = async (mock) => {
-    // STRICT LOCK: Prevent re-entry if already attempted
-    if (mock.is_daily && completedTitles.includes(mock.mock_title)) {
-      alert("The Brain, this daily streak is already secured. Re-entry denied.");
+    // Check ID-based lock
+    if (mock.is_daily && completedMockIds.includes(mock.id)) {
+      alert("The Brain, this daily streak mock is already locked.");
       return;
     }
 
     const { data } = await supabase
       .from('daily_mocks')
       .select('*')
-      .eq('mock_title', mock.mock_title)
+      .eq('id', mock.id)
       .single();
 
     if (data && data.questions) {
       setQuestions(data.questions); 
       setSelectedMock(data);
-      setTimeLeft((data.time_limit || 60) * 60); 
+      setTimeLeft((data.time_limit || 10) * 60); 
     }
   };
 
+  // --- 3. SUBMIT & STREAK GUARD ---
   const handleSubmit = async () => {
     if (isFinished) return;
     
@@ -76,17 +78,18 @@ export default function MockEngine({ user, onFinish }) {
     });
     const percentage = Math.round((score / questions.length) * 100);
 
-    // 1. Save results with 'is_daily' flag
+    // Save results using IDs to match DB schema
     await supabase.from('scores').insert([{
       user_id: user.id, 
+      mock_id: selectedMock.id, // Linking via ID
       score, 
       percentage, 
       mock_title: selectedMock.mock_title,
       is_daily: selectedMock.is_daily 
     }]);
 
-    // 2. Update Streak (Only if it's the first time attempting THIS title)
-    if (selectedMock.is_daily && !completedTitles.includes(selectedMock.mock_title)) {
+    // Streak logic: Only if this ID hasn't been submitted before
+    if (selectedMock.is_daily && !completedMockIds.includes(selectedMock.id)) {
       const today = new Date().toISOString().split('T')[0];
       await supabase.from('profiles').update({ 
         streak_count: (user.streak_count || 0) + 1, 
@@ -95,8 +98,7 @@ export default function MockEngine({ user, onFinish }) {
     }
     
     setIsFinished(true);
-    // Reload local lock status immediately
-    loadMockData();
+    loadMockData(); // Refresh locks immediately
   };
 
   const handleReturn = () => {
@@ -106,7 +108,7 @@ export default function MockEngine({ user, onFinish }) {
     setSelectedOptions({});
     setIsFinished(false);
     setShowReview(false);
-    onFinish(); // This triggers the App.jsx refreshUser logic
+    onFinish(); 
   };
 
   const formatTime = (seconds) => {
@@ -115,7 +117,7 @@ export default function MockEngine({ user, onFinish }) {
     return `${mins}:${String(secs).padStart(2, '0')}`;
   };
 
-  if (loading) return <div className="text-center p-10 font-bold animate-pulse text-blue-600 uppercase tracking-widest">Accessing Neural Network...</div>;
+  if (loading) return <div className="p-20 text-center font-black animate-pulse text-blue-600 uppercase">Syncing Neural Grid...</div>;
 
   if (!selectedMock) {
     return (
@@ -125,16 +127,16 @@ export default function MockEngine({ user, onFinish }) {
           <h3 className="text-2xl font-black text-gray-800 dark:text-white uppercase tracking-tighter">Exam Library</h3>
         </div>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-          {availableMocks.map((mock, i) => {
-            const isDone = completedTitles.includes(mock.mock_title);
+          {availableMocks.map((mock) => {
+            const isDone = completedMockIds.includes(mock.id);
             return (
               <button 
-                key={mock.id || i} 
+                key={mock.id} 
                 disabled={mock.is_daily && isDone}
                 onClick={() => startMock(mock)} 
                 className={`p-8 rounded-[32px] text-left transition-all shadow-xl border-b-8 relative group ${
                   mock.is_daily 
-                    ? (isDone ? 'bg-gray-100 dark:bg-gray-800/50 text-gray-400 border-gray-200 cursor-not-allowed' : 'bg-gradient-to-br from-orange-500 to-red-600 text-white border-orange-700 hover:scale-[1.02]') 
+                    ? (isDone ? 'bg-gray-100 dark:bg-gray-800/50 text-gray-400 border-gray-200 opacity-60' : 'bg-gradient-to-br from-orange-500 to-red-600 text-white border-orange-700 hover:scale-[1.02]') 
                     : 'bg-white dark:bg-gray-800 border-blue-500 dark:border-blue-900 dark:text-white hover:scale-[1.02]'
                 }`}
               >
@@ -142,11 +144,11 @@ export default function MockEngine({ user, onFinish }) {
                   <div className={`p-3 rounded-2xl ${mock.is_daily ? (isDone ? 'bg-gray-200 dark:bg-gray-700' : 'bg-white/20') : 'bg-blue-50 dark:bg-gray-700 text-blue-600'}`}>
                     {isDone && mock.is_daily ? <Lock size={24} /> : (mock.is_daily ? <Zap size={24} /> : <Layout size={24} />)}
                   </div>
-                  <span className="flex items-center gap-1 bg-black/10 px-2 py-1 rounded-lg text-[10px] font-bold uppercase tracking-widest"><Clock size={12} /> {mock.time_limit} Mins</span>
+                  <span className="flex items-center gap-1 bg-black/10 px-2 py-1 rounded-lg text-[10px] font-bold uppercase"><Clock size={12} /> {mock.time_limit} Mins</span>
                 </div>
-                <h4 className="text-xl font-black uppercase mb-1 tracking-tight">{mock.mock_title}</h4>
-                <p className={`text-sm ${mock.is_daily && !isDone ? 'text-white/80' : 'text-gray-500'} font-medium`}>
-                  {isDone && mock.is_daily ? 'Streak Secured' : (mock.is_daily ? 'Daily Attendance' : 'Practice Mode')}
+                <h4 className="text-xl font-black uppercase mb-1">{mock.mock_title}</h4>
+                <p className="text-xs opacity-70 font-bold uppercase tracking-widest">
+                  {isDone && mock.is_daily ? 'Locked • Result Logged' : (mock.is_daily ? 'Streak Enabled' : 'Practice Mode')}
                 </p>
               </button>
             );
@@ -217,8 +219,8 @@ export default function MockEngine({ user, onFinish }) {
       <div className="mt-12 flex justify-between items-center pt-8 border-t dark:border-gray-700">
         <button disabled={currentIdx === 0} onClick={() => setCurrentIdx(prev => prev - 1)} className="px-6 py-2 text-gray-400 font-bold hover:text-blue-600 disabled:opacity-0 uppercase text-xs tracking-widest">Previous</button>
         {currentIdx === questions.length - 1 
-          ? <button onClick={handleSubmit} className="px-10 py-4 bg-green-500 text-white rounded-2xl font-black uppercase tracking-widest hover:bg-green-600 shadow-xl transition-all active:scale-95">Finish Test</button>
-          : <button onClick={() => setCurrentIdx(prev => prev + 1)} className="px-10 py-4 bg-blue-600 text-white rounded-2xl font-black uppercase tracking-widest hover:bg-blue-700 shadow-xl transition-all active:scale-95">Next</button>
+          ? <button onClick={handleSubmit} className="px-10 py-4 bg-green-500 text-white rounded-2xl font-black uppercase tracking-widest hover:bg-green-600 shadow-lg active:scale-95">Finish Test</button>
+          : <button onClick={() => setCurrentIdx(prev => prev + 1)} className="px-10 py-4 bg-blue-600 text-white rounded-2xl font-black uppercase tracking-widest hover:bg-blue-700 shadow-lg active:scale-95">Next</button>
         }
       </div>
     </div>

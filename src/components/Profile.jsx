@@ -11,38 +11,46 @@ export default function Profile({ user }) {
     if (!user?.id) return;
     setLoading(true);
     
-    // Define the 24-hour cutoff
+    // Define the 24-hour cutoff for daily mocks
     const cutOff = new Date();
     cutOff.setHours(cutOff.getHours() - 24);
 
-    const { data, error } = await supabase
-      .from('scores')
-      .select('*')
-      .eq('user_id', user.id)
-      .order('created_at', { ascending: false });
+    try {
+      const { data, error } = await supabase
+        .from('scores')
+        .select('*')
+        .eq('user_id', user.id)
+        .order('created_at', { ascending: false });
 
-    if (!error && data) {
-      // Logic Fix: Handle potential NULL values for is_daily
-      const visibleHistory = data.filter(item => {
-        // If it's a regular mock or is_daily is null/undefined, keep it permanently
-        if (item.is_daily === false || item.is_daily === null) return true;
-        
-        // If it's a daily mock, check the 24h timer
-        const itemDate = new Date(item.created_at);
-        return itemDate > cutOff;
-      });
+      if (error) throw error;
 
-      const avg = visibleHistory.length > 0 
-        ? visibleHistory.reduce((acc, curr) => acc + curr.percentage, 0) / visibleHistory.length 
-        : 0;
+      if (data) {
+        // Filter logic: Permanent for regular mocks, 24h for daily mocks
+        const visibleHistory = data.filter(item => {
+          // If is_daily is false or null, it's a permanent record
+          if (!item.is_daily) return true;
+          
+          // If it's a daily mock, show it only if it's within the 24h window
+          const itemDate = new Date(item.created_at);
+          return itemDate > cutOff;
+        });
 
-      setStats({
-        totalMocks: visibleHistory.length,
-        avgScore: avg.toFixed(1),
-        history: visibleHistory
-      });
+        // Calculate average from all-time data or visible data (The Brain chooses visible)
+        const avg = visibleHistory.length > 0 
+          ? visibleHistory.reduce((acc, curr) => acc + (curr.percentage || 0), 0) / visibleHistory.length 
+          : 0;
+
+        setStats({
+          totalMocks: visibleHistory.length,
+          avgScore: avg.toFixed(1),
+          history: visibleHistory
+        });
+      }
+    } catch (err) {
+      console.error("Profile Fetch Error:", err);
+    } finally {
+      setLoading(false);
     }
-    setLoading(false);
   }, [user?.id]);
 
   useEffect(() => {
@@ -61,6 +69,8 @@ export default function Profile({ user }) {
       if (!error) {
         alert("History Wiped.");
         fetchUserStats();
+      } else {
+        alert("Error wiping records.");
       }
     }
   };
@@ -90,7 +100,7 @@ export default function Profile({ user }) {
           <div>
             <p className="text-[10px] font-black uppercase text-gray-400">User Rank</p>
             <h4 className="text-2xl font-bold dark:text-white uppercase tracking-tighter">
-              {stats.totalMocks > 10 ? 'Elite' : 'Student'}
+              {stats.totalMocks > 10 ? 'Elite Scholar' : 'Active Learner'}
             </h4>
           </div>
         </div>
@@ -102,7 +112,7 @@ export default function Profile({ user }) {
           <h3 className="text-xl font-black uppercase tracking-tighter flex items-center gap-2">
             <Clock size={20} className="text-blue-600" /> Neural History
           </h3>
-          <span className="text-[10px] font-bold text-gray-400 uppercase tracking-widest bg-gray-50 dark:bg-gray-900 px-3 py-1 rounded-lg">
+          <span className="text-[10px] font-bold text-gray-400 uppercase tracking-widest bg-gray-50 dark:bg-gray-900 px-3 py-1 rounded-lg border dark:border-gray-700">
             Dailies expire in 24h
           </span>
         </div>
@@ -111,15 +121,15 @@ export default function Profile({ user }) {
           {loading ? (
              <div className="flex flex-col items-center justify-center py-20 text-blue-600">
                <div className="w-8 h-8 border-4 border-t-transparent border-blue-600 rounded-full animate-spin mb-4"></div>
-               <p className="font-black uppercase text-xs tracking-widest">Retrieving Records...</p>
+               <p className="font-black uppercase text-xs tracking-widest">Retrieving Neural Data...</p>
              </div>
           ) : stats.history.length > 0 ? (
             <table className="w-full text-left">
               <thead>
                 <tr className="text-gray-400 text-[10px] font-black uppercase tracking-widest border-b dark:border-gray-700">
                   <th className="pb-4">Exam Title</th>
-                  <th className="pb-4">Date & Time</th>
-                  <th className="pb-4">Score</th>
+                  <th className="pb-4">Attempted On</th>
+                  <th className="pb-4">Accuracy</th>
                   <th className="pb-4">Status</th>
                 </tr>
               </thead>
@@ -128,10 +138,10 @@ export default function Profile({ user }) {
                   <tr key={item.id || i} className="hover:bg-blue-50/30 dark:hover:bg-gray-900 transition-colors group">
                     <td className="py-4 font-bold text-sm dark:text-gray-200">
                       <div className="flex flex-col">
-                        {item.mock_title}
+                        <span className="tracking-tight">{item.mock_title}</span>
                         {item.is_daily && (
-                          <span className="text-[8px] text-orange-500 font-black uppercase tracking-tighter flex items-center gap-1">
-                            <Zap size={8} /> Temporary Daily Record
+                          <span className="text-[8px] text-orange-500 font-black uppercase tracking-tighter flex items-center gap-1 mt-0.5">
+                            <Zap size={8} className="fill-current" /> Temporary Record
                           </span>
                         )}
                       </div>
@@ -144,7 +154,9 @@ export default function Profile({ user }) {
                     </td>
                     <td className="py-4">
                       <span className={`px-3 py-1 rounded-lg text-[10px] font-black uppercase tracking-wider ${
-                        item.percentage >= 50 ? 'bg-green-100 text-green-600' : 'bg-red-100 text-red-600'
+                        item.percentage >= 50 
+                        ? 'bg-green-100 text-green-600 dark:bg-green-900/30 dark:text-green-400' 
+                        : 'bg-red-100 text-red-600 dark:bg-red-900/30 dark:text-red-400'
                       }`}>
                         {item.percentage >= 50 ? 'Passed' : 'Failed'}
                       </span>
@@ -156,19 +168,19 @@ export default function Profile({ user }) {
           ) : (
             <div className="text-center py-20">
               <ShieldAlert className="mx-auto text-gray-300 mb-4" size={48} />
-              <p className="text-gray-400 font-bold uppercase text-xs tracking-widest">No neural history detected.</p>
+              <p className="text-gray-400 font-bold uppercase text-xs tracking-widest italic">No neural history detected in the cloud.</p>
             </div>
           )}
         </div>
       </div>
 
       {/* DANGER ZONE */}
-      <div className="flex justify-end">
+      <div className="flex justify-end pt-4">
         <button 
           onClick={clearHistory}
-          className="flex items-center gap-2 text-red-400 hover:text-red-600 text-xs font-black uppercase tracking-widest p-4 transition-colors"
+          className="flex items-center gap-2 text-red-400 hover:text-red-600 text-[10px] font-black uppercase tracking-widest p-4 transition-all bg-red-50/50 dark:bg-red-900/10 rounded-2xl border border-transparent hover:border-red-200"
         >
-          <Trash2 size={16} /> Wipe Neural Records
+          <Trash2 size={14} /> Wipe Neural History
         </button>
       </div>
     </div>
