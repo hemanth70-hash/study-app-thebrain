@@ -36,10 +36,8 @@ export default function App() {
 
   // --- 2. STREAK & ATTENDANCE LOGIC ---
   const handleStreakCheck = async (profile) => {
-    const today = new Date();
-    const todayStr = today.toISOString().split('T')[0];
-    
-    if (profile.last_mock_date === todayStr) return;
+    const today = new Date().toISOString().split('T')[0];
+    if (profile.last_mock_date === today) return;
 
     const yesterday = new Date();
     yesterday.setDate(yesterday.getDate() - 1);
@@ -85,15 +83,15 @@ export default function App() {
   if (!user) {
     return (
       <div className={`flex items-center justify-center min-h-screen ${isDarkMode ? 'bg-gray-900' : 'bg-blue-50'}`}>
-        <div className="bg-white dark:bg-gray-800 p-8 rounded-2xl shadow-xl border-2 border-blue-200 w-96 text-center">
-          <h1 className="text-2xl font-bold mb-4 text-blue-600 italic tracking-tighter">The Brain Portal</h1>
+        <div className="bg-white dark:bg-gray-800 p-8 rounded-[2.5rem] shadow-2xl border-2 border-blue-200 w-96 text-center">
+          <h1 className="text-3xl font-black mb-6 text-blue-600 italic tracking-tighter">The Brain Portal</h1>
           <input 
-            className="w-full p-3 rounded-lg border mb-4 text-black dark:bg-gray-700 dark:text-white outline-none" 
+            className="w-full p-4 rounded-2xl border mb-4 text-black dark:bg-gray-700 dark:text-white outline-none focus:ring-4 focus:ring-blue-100 transition-all" 
             placeholder="Enter Username" 
             value={username} 
             onChange={(e) => setUsername(e.target.value)} 
           />
-          <button onClick={handleLogin} className="w-full bg-blue-600 text-white p-3 rounded-lg font-bold hover:bg-blue-700 transition-all">
+          <button onClick={handleLogin} className="w-full bg-blue-600 text-white p-4 rounded-2xl font-black uppercase tracking-widest hover:bg-blue-700 shadow-lg transition-all active:scale-95">
             Enter Portal
           </button>
         </div>
@@ -124,20 +122,20 @@ export default function App() {
 
             <div className="flex-1 min-w-[300px]">
               {globalMsg && (
-                <div className="bg-gradient-to-r from-blue-600 to-indigo-700 text-white px-6 py-2 rounded-2xl shadow-lg flex items-center justify-between animate-pulse border border-white/20">
+                <div className="bg-gradient-to-r from-blue-600 to-indigo-700 text-white px-6 py-3 rounded-[1.5rem] shadow-lg flex items-center justify-between animate-pulse border border-white/20">
                   <div className="flex items-center gap-3">
                     <span className="bg-white text-blue-600 px-2 py-0.5 rounded-lg font-black text-[10px] uppercase">News</span>
                     <p className="font-bold text-sm truncate max-w-md">{globalMsg}</p>
                   </div>
-                  <button onClick={() => setGlobalMsg(null)} className="ml-4 hover:text-white/70 transition-colors">✕</button>
+                  <button onClick={() => setGlobalMsg(null)} className="ml-4 hover:text-white/70">✕</button>
                 </div>
               )}
             </div>
             
-            <div className="flex items-center gap-3 bg-white dark:bg-gray-800 px-6 py-2 rounded-2xl shadow-sm border-2 border-orange-50">
+            <div className="flex items-center gap-3 bg-white dark:bg-gray-800 px-6 py-2 rounded-2xl shadow-sm border-2 border-orange-50 dark:border-gray-700">
               <span className="text-2xl">🔥</span>
               <span className="font-black text-xl text-orange-500">{user.streak_count || 0}</span>
-              <span className="text-xs font-black uppercase text-gray-400 tracking-widest">Streak</span>
+              <span className="text-xs font-black uppercase text-gray-400 tracking-widest ml-1">Streak</span>
             </div>
           </header>
 
@@ -145,8 +143,6 @@ export default function App() {
             {activeTab === 'dashboard' && (
               <div className="space-y-8">
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-8 items-start">
-                  
-                  {/* LEFT COLUMN: Greeting Only */}
                   <div className="flex flex-col gap-6">
                     <div className="bg-white dark:bg-gray-800 p-8 rounded-[2.5rem] shadow-xl border-b-8 border-blue-500">
                       <div className="flex justify-between items-start mb-4">
@@ -158,8 +154,6 @@ export default function App() {
                       </p>
                     </div>
                   </div>
-                  
-                  {/* RIGHT COLUMN: Goal Tracking */}
                   <div className="h-full">
                     <GoalTracker user={user} />
                   </div>
@@ -176,6 +170,7 @@ export default function App() {
               </div>
             )}
 
+            {/* TAB ROUTING */}
             {activeTab === 'subjects' && <SubjectNotes user={user} />}
             {activeTab === 'mocks' && <MockEngine user={user} onFinish={() => setActiveTab('dashboard')} />}
             {activeTab === 'ranking' && <Leaderboard />}
