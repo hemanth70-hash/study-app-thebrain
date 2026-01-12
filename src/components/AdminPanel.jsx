@@ -3,7 +3,7 @@ import { supabase } from '../supabaseClient';
 import { 
   UploadCloud, Database, Info, Calendar, 
   Clock, History, CheckCircle, AlertTriangle, 
-  Megaphone, Trash2, ListChecks, Zap, Loader2
+  Megaphone, Trash2, ListChecks, Zap, Loader2, ShieldAlert
 } from 'lucide-react';
 
 export default function AdminPanel() {
@@ -12,13 +12,14 @@ export default function AdminPanel() {
   const [mockTitle, setMockTitle] = useState('');
   const [timeLimit, setTimeLimit] = useState(10); 
   const [isDailyQuickMock, setIsDailyQuickMock] = useState(false);
+  const [isStrict, setIsStrict] = useState(false); // 🔥 NEW: Strict Mode State
   const [status, setStatus] = useState('');
-  const [existingMocks, setExistingMocks] = useState([]); // Initialized as empty array
+  const [existingMocks, setExistingMocks] = useState([]); 
 
   // --- VERSION HISTORY STATE ---
   const [verName, setVerName] = useState('');
   const [verDesc, setVerDesc] = useState('');
-  const [history, setHistory] = useState([]); // Initialized as empty array
+  const [history, setHistory] = useState([]); 
 
   // --- ANNOUNCEMENT STATE ---
   const [announcement, setAnnouncement] = useState('');
@@ -36,7 +37,7 @@ export default function AdminPanel() {
       
       const { data: mocks } = await supabase
         .from('daily_mocks')
-        .select('id, mock_title, mock_date, is_daily')
+        .select('*') // Selected * to include is_strict
         .order('mock_date', { ascending: false });
 
       if (logs) setHistory(logs);
@@ -65,6 +66,7 @@ export default function AdminPanel() {
         mock_title: mockTitle,
         questions: parsedQuestions, 
         is_daily: isDailyQuickMock,
+        is_strict: isStrict, // 🔥 NEW: Logic Preservation
         time_limit: parseInt(timeLimit) || 10,
         mock_date: new Date().toISOString().split('T')[0] 
       };
@@ -73,8 +75,8 @@ export default function AdminPanel() {
       if (error) throw error;
 
       setStatus(`🎉 Success! "${mockTitle}" is live.`);
-      setBulkData(''); setMockTitle(''); setIsDailyQuickMock(false); setTimeLimit(10);
-      fetchAdminData(); // Refresh list
+      setBulkData(''); setMockTitle(''); setIsDailyQuickMock(false); setTimeLimit(10); setIsStrict(false);
+      fetchAdminData(); 
     } catch (err) {
       setStatus(`❌ Error: ${err.message}`);
     }
@@ -113,7 +115,6 @@ export default function AdminPanel() {
     }
   };
 
-  // --- PREVENT BLANK SCREEN DURING INITIAL LOAD ---
   if (loading && history.length === 0 && existingMocks.length === 0) {
     return (
       <div className="flex flex-col items-center justify-center py-20 text-blue-600">
@@ -171,12 +172,21 @@ export default function AdminPanel() {
               </div>
             </div>
 
-            <button onClick={() => setIsDailyQuickMock(!isDailyQuickMock)}
-              className={`w-full p-4 rounded-2xl font-black uppercase text-xs flex items-center justify-center gap-2 transition-all ${
-                isDailyQuickMock ? 'bg-orange-500 text-white shadow-lg' : 'bg-gray-100 dark:bg-gray-700 text-gray-500'
-              }`}>
-              <Zap size={18} fill={isDailyQuickMock ? "currentColor" : "none"} /> {isDailyQuickMock ? "Daily Streak Mock" : "Regular Mock"}
-            </button>
+            <div className="grid grid-cols-2 gap-4">
+              <button onClick={() => setIsDailyQuickMock(!isDailyQuickMock)}
+                className={`p-4 rounded-2xl font-black uppercase text-[10px] flex items-center justify-center gap-2 transition-all ${
+                  isDailyQuickMock ? 'bg-orange-500 text-white shadow-lg' : 'bg-gray-100 dark:bg-gray-700 text-gray-500'
+                }`}>
+                <Zap size={14} fill={isDailyQuickMock ? "currentColor" : "none"} /> {isDailyQuickMock ? "Daily" : "Regular"}
+              </button>
+
+              <button onClick={() => setIsStrict(!isStrict)}
+                className={`p-4 rounded-2xl font-black uppercase text-[10px] flex items-center justify-center gap-2 transition-all ${
+                  isStrict ? 'bg-red-600 text-white shadow-lg' : 'bg-gray-100 dark:bg-gray-700 text-gray-500'
+                }`}>
+                <ShieldAlert size={14} /> {isStrict ? "Strict ON" : "Strict OFF"}
+              </button>
+            </div>
 
             <textarea 
               className="w-full h-40 p-4 font-mono text-[10px] border dark:border-gray-700 rounded-2xl dark:bg-gray-900 dark:text-white outline-none focus:border-blue-500"
@@ -195,14 +205,14 @@ export default function AdminPanel() {
               <ListChecks size={20} /> Active Mocks Library
             </h3>
             <div className="space-y-3 max-h-64 overflow-y-auto pr-2 custom-scrollbar">
-              {/* FALLBACK: ensures the map doesn't break if existingMocks is null */}
               {(existingMocks || []).map(m => (
                 <div key={m.id} className="flex justify-between items-center p-4 bg-gray-50 dark:bg-gray-900 rounded-2xl border border-gray-100 dark:border-gray-800 hover:border-blue-300 transition-all group">
                   <div>
-                    <p className="font-bold text-sm dark:text-white">{m.mock_title}</p>
+                    <p className="font-bold text-sm dark:text-white uppercase tracking-tight">{m.mock_title}</p>
                     <div className="flex items-center gap-2 mt-1">
                         <span className="text-[8px] text-gray-400 font-black uppercase tracking-widest">{m.mock_date}</span>
-                        {m.is_daily && <span className="bg-orange-100 text-orange-600 px-1 rounded text-[8px] font-black uppercase">Daily</span>}
+                        {m.is_daily && <span className="bg-orange-100 text-orange-600 px-1 rounded text-[7px] font-black uppercase">Daily</span>}
+                        {m.is_strict && <span className="bg-red-100 text-red-600 px-1 rounded text-[7px] font-black uppercase">Strict</span>}
                     </div>
                   </div>
                   <button onClick={() => deleteMock(m.id)} className="text-gray-300 hover:text-red-500 transition-all p-2">
@@ -225,7 +235,6 @@ export default function AdminPanel() {
             </button>
           </div>
           <div className="flex-1 overflow-y-auto max-h-[340px] space-y-4 custom-scrollbar pr-4">
-            {/* FALLBACK: ensures the map doesn't break if history is null */}
             {(history || []).map((log) => (
               <div key={log.id} className="border-l-4 border-blue-600 pl-4 py-1 hover:bg-white/5 transition-all rounded-r-xl">
                 <div className="flex justify-between items-center mb-1">
