@@ -1,67 +1,71 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { supabase } from '../supabaseClient';
 import { 
   UploadCloud, Database, Info, Calendar, 
   Clock, History, CheckCircle, AlertTriangle, 
-  Megaphone, Trash2, ListChecks
+  Megaphone, Trash2, ListChecks, Zap, Loader2
 } from 'lucide-react';
 
 export default function AdminPanel() {
   // --- MOCK UPLOAD STATE ---
   const [bulkData, setBulkData] = useState('');
   const [mockTitle, setMockTitle] = useState('');
-  const [timeLimit, setTimeLimit] = useState(10); // Default to 10 mins
+  const [timeLimit, setTimeLimit] = useState(10); 
   const [isDailyQuickMock, setIsDailyQuickMock] = useState(false);
   const [status, setStatus] = useState('');
-  const [existingMocks, setExistingMocks] = useState([]);
+  const [existingMocks, setExistingMocks] = useState([]); // Initialized as empty array
 
   // --- VERSION HISTORY STATE ---
   const [verName, setVerName] = useState('');
   const [verDesc, setVerDesc] = useState('');
-  const [history, setHistory] = useState([]);
+  const [history, setHistory] = useState([]); // Initialized as empty array
 
   // --- ANNOUNCEMENT STATE ---
   const [announcement, setAnnouncement] = useState('');
   const [broadcastStatus, setBroadcastStatus] = useState('');
+  const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
-    fetchHistory();
-    fetchExistingMocks();
+  // --- 1. ATOMIC DATA FETCH ---
+  const fetchAdminData = useCallback(async () => {
+    setLoading(true);
+    try {
+      const { data: logs } = await supabase
+        .from('dev_logs')
+        .select('*')
+        .order('created_at', { ascending: false });
+      
+      const { data: mocks } = await supabase
+        .from('daily_mocks')
+        .select('id, mock_title, mock_date, is_daily')
+        .order('mock_date', { ascending: false });
+
+      if (logs) setHistory(logs);
+      if (mocks) setExistingMocks(mocks);
+    } catch (err) {
+      console.error("Admin Load Error:", err);
+    } finally {
+      setLoading(false);
+    }
   }, []);
 
-  const fetchHistory = async () => {
-    const { data } = await supabase
-      .from('dev_logs')
-      .select('*')
-      .order('created_at', { ascending: false });
-    if (data) setHistory(data);
-  };
-
-  const fetchExistingMocks = async () => {
-    const { data } = await supabase
-      .from('daily_mocks')
-      .select('id, mock_title, mock_date, is_daily')
-      .order('mock_date', { ascending: false });
-    if (data) setExistingMocks(data);
-  };
+  useEffect(() => {
+    fetchAdminData();
+  }, [fetchAdminData]);
 
   // --- HANDLERS ---
-
   const handleBulkUpload = async () => {
     if (!mockTitle) return setStatus('❌ Error: Enter a Mock Title.');
     if (!bulkData) return setStatus('❌ Error: JSON field is empty.');
     
     try {
       const parsedQuestions = JSON.parse(bulkData);
-      
-      // Verification: Ensure the JSON is an array
       if (!Array.isArray(parsedQuestions)) throw new Error("JSON must be an array");
 
       const newMockEntry = {
         mock_title: mockTitle,
         questions: parsedQuestions, 
         is_daily: isDailyQuickMock,
-        time_limit: parseInt(timeLimit) || 10, // Force integer
+        time_limit: parseInt(timeLimit) || 10,
         mock_date: new Date().toISOString().split('T')[0] 
       };
 
@@ -70,9 +74,9 @@ export default function AdminPanel() {
 
       setStatus(`🎉 Success! "${mockTitle}" is live.`);
       setBulkData(''); setMockTitle(''); setIsDailyQuickMock(false); setTimeLimit(10);
-      fetchExistingMocks();
+      fetchAdminData(); // Refresh list
     } catch (err) {
-      setStatus(`❌ JSON Error: ${err.message}`);
+      setStatus(`❌ Error: ${err.message}`);
     }
   };
 
@@ -81,7 +85,7 @@ export default function AdminPanel() {
       const { error } = await supabase.from('daily_mocks').delete().eq('id', id);
       if (!error) {
         setStatus('🗑️ Mock deleted.');
-        fetchExistingMocks();
+        fetchAdminData();
       }
     }
   };
@@ -89,7 +93,11 @@ export default function AdminPanel() {
   const saveLog = async () => {
     if (!verName || !verDesc) return;
     const { error } = await supabase.from('dev_logs').insert([{ version_name: verName, description: verDesc }]);
-    if (!error) { fetchHistory(); setVerName(''); setVerDesc(''); }
+    if (!error) { 
+      fetchAdminData(); 
+      setVerName(''); 
+      setVerDesc(''); 
+    }
   };
 
   const postAnnouncement = async () => {
@@ -104,6 +112,16 @@ export default function AdminPanel() {
       setTimeout(() => setBroadcastStatus(''), 3000);
     }
   };
+
+  // --- PREVENT BLANK SCREEN DURING INITIAL LOAD ---
+  if (loading && history.length === 0 && existingMocks.length === 0) {
+    return (
+      <div className="flex flex-col items-center justify-center py-20 text-blue-600">
+        <Loader2 className="animate-spin mb-4" size={48} />
+        <p className="font-black uppercase tracking-widest text-xs">Accessing Neural Admin Network...</p>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-10 pb-20 animate-in fade-in duration-700">
@@ -177,7 +195,8 @@ export default function AdminPanel() {
               <ListChecks size={20} /> Active Mocks Library
             </h3>
             <div className="space-y-3 max-h-64 overflow-y-auto pr-2 custom-scrollbar">
-              {existingMocks.map(m => (
+              {/* FALLBACK: ensures the map doesn't break if existingMocks is null */}
+              {(existingMocks || []).map(m => (
                 <div key={m.id} className="flex justify-between items-center p-4 bg-gray-50 dark:bg-gray-900 rounded-2xl border border-gray-100 dark:border-gray-800 hover:border-blue-300 transition-all group">
                   <div>
                     <p className="font-bold text-sm dark:text-white">{m.mock_title}</p>
@@ -206,7 +225,8 @@ export default function AdminPanel() {
             </button>
           </div>
           <div className="flex-1 overflow-y-auto max-h-[340px] space-y-4 custom-scrollbar pr-4">
-            {history.map((log) => (
+            {/* FALLBACK: ensures the map doesn't break if history is null */}
+            {(history || []).map((log) => (
               <div key={log.id} className="border-l-4 border-blue-600 pl-4 py-1 hover:bg-white/5 transition-all rounded-r-xl">
                 <div className="flex justify-between items-center mb-1">
                   <span className="font-black text-blue-400 text-xs uppercase tracking-widest">{log.version_name}</span>
