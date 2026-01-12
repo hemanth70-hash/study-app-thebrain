@@ -12,43 +12,53 @@ export default function MockEngine({ user, onFinish }) {
   const [isFinished, setIsFinished] = useState(false);
   const [loading, setLoading] = useState(true);
   const [showReview, setShowReview] = useState(false);
-  const [completedMocks, setCompletedMocks] = useState([]); // Tracking previously done mocks
+  const [completedMocks, setCompletedMocks] = useState([]); 
 
   useEffect(() => {
-    fetchMockList();
-    fetchCompletedStatus();
-  }, []);
+    loadMockData();
+  }, [user]);
 
-  const fetchMockList = async () => {
-    const { data } = await supabase.from('daily_mocks').select('id, mock_title, is_daily, time_limit');
-    if (data) setAvailableMocks(data.sort((a, b) => (b.is_daily ? 1 : -1)));
+  // --- CORE LOGIC: FETCH MOCKS & FILTER HISTORY ---
+  const loadMockData = async () => {
+    setLoading(true);
+    
+    // 1. Fetch all available mocks
+    const { data: mockData } = await supabase
+      .from('daily_mocks')
+      .select('id, mock_title, is_daily, time_limit');
+    
+    // 2. Fetch user scores to determine "Attempted" status
+    const { data: scoreData } = await supabase
+      .from('scores')
+      .select('mock_title, created_at, is_daily')
+      .eq('user_id', user.id);
+
+    if (scoreData) {
+      // Logic: A mock is "Completed" if it exists in scores.
+      // For the Selection UI, we just need the titles.
+      setCompletedMocks(scoreData.map(s => s.mock_title));
+    }
+
+    if (mockData) {
+      setAvailableMocks(mockData.sort((a, b) => (b.is_daily ? 1 : -1)));
+    }
+    
     setLoading(false);
   };
 
-  const fetchCompletedStatus = async () => {
-    const { data } = await supabase
-      .from('scores')
-      .select('mock_title')
-      .eq('user_id', user.id);
-    if (data) setCompletedMocks(data.map(d => d.mock_title));
-  };
-
-  useEffect(() => {
-    if (selectedMock && !isFinished) {
-      if (timeLeft <= 0) { handleSubmit(); return; }
-      const timer = setInterval(() => setTimeLeft((prev) => (prev > 0 ? prev - 1 : 0)), 1000);
-      return () => clearInterval(timer);
-    }
-  }, [selectedMock, isFinished, timeLeft]);
-
   const startMock = async (mock) => {
-    // LOCK LOGIC: No re-attempts for Daily Mocks
+    // STRICT LOCK: Prevent re-entry if already attempted
     if (mock.is_daily && completedMocks.includes(mock.mock_title)) {
-      alert("The Brain, you've already secured today's streak. Access denied for re-attempt.");
+      alert("The Brain, this daily streak is already secured. Re-entry denied.");
       return;
     }
 
-    const { data } = await supabase.from('daily_mocks').select('*').eq('mock_title', mock.mock_title).single();
+    const { data } = await supabase
+      .from('daily_mocks')
+      .select('*')
+      .eq('mock_title', mock.mock_title)
+      .single();
+
     if (data && data.questions) {
       setQuestions(data.questions); 
       setSelectedMock(data);
@@ -58,13 +68,14 @@ export default function MockEngine({ user, onFinish }) {
 
   const handleSubmit = async () => {
     if (isFinished) return;
+    
     let score = 0;
     questions.forEach((q, idx) => {
       if (selectedOptions[idx] === q.correct_option) score++;
     });
     const percentage = Math.round((score / questions.length) * 100);
 
-    // Save results with 'is_daily' flag
+    // 1. Save results with 'is_daily' flag for history filtering
     await supabase.from('scores').insert({
       user_id: user.id, 
       score, 
@@ -73,7 +84,7 @@ export default function MockEngine({ user, onFinish }) {
       is_daily: selectedMock.is_daily 
     });
 
-    // --- STREAK LOGIC: ONLY ONCE PER DAY ---
+    // 2. Update Streak (Only if it's a new daily attempt for today)
     if (selectedMock.is_daily && !completedMocks.includes(selectedMock.mock_title)) {
       const today = new Date().toISOString().split('T')[0];
       await supabase.from('profiles').update({ 
@@ -83,6 +94,8 @@ export default function MockEngine({ user, onFinish }) {
     }
     
     setIsFinished(true);
+    // Reload data to update the 'completedMocks' list for the UI
+    loadMockData();
   };
 
   const handleReturn = () => {
@@ -101,7 +114,7 @@ export default function MockEngine({ user, onFinish }) {
     return `${mins}:${String(secs).padStart(2, '0')}`;
   };
 
-  if (loading) return <div className="text-center p-10 font-bold animate-pulse text-blue-600">Syncing Exam Servers...</div>;
+  if (loading) return <div className="text-center p-10 font-bold animate-pulse text-blue-600 uppercase tracking-widest">Accessing Neural Network...</div>;
 
   if (!selectedMock) {
     return (
@@ -118,14 +131,14 @@ export default function MockEngine({ user, onFinish }) {
                 key={i} 
                 disabled={mock.is_daily && isDone}
                 onClick={() => startMock(mock)} 
-                className={`p-8 rounded-[32px] text-left transition-all shadow-xl border-b-8 relative ${
+                className={`p-8 rounded-[32px] text-left transition-all shadow-xl border-b-8 relative group ${
                   mock.is_daily 
-                    ? (isDone ? 'bg-gray-200 text-gray-400 border-gray-300' : 'bg-gradient-to-br from-orange-500 to-red-600 text-white border-orange-700 hover:scale-[1.02]') 
+                    ? (isDone ? 'bg-gray-100 dark:bg-gray-800/50 text-gray-400 border-gray-200 cursor-not-allowed opacity-75' : 'bg-gradient-to-br from-orange-500 to-red-600 text-white border-orange-700 hover:scale-[1.02]') 
                     : 'bg-white dark:bg-gray-800 border-blue-500 dark:border-blue-900 dark:text-white hover:scale-[1.02]'
                 }`}
               >
                 <div className="flex justify-between items-start mb-4">
-                  <div className={`p-3 rounded-2xl ${mock.is_daily ? (isDone ? 'bg-gray-300' : 'bg-white/20') : 'bg-blue-50 dark:bg-gray-700 text-blue-600'}`}>
+                  <div className={`p-3 rounded-2xl ${mock.is_daily ? (isDone ? 'bg-gray-200 dark:bg-gray-700' : 'bg-white/20') : 'bg-blue-50 dark:bg-gray-700 text-blue-600'}`}>
                     {isDone && mock.is_daily ? <Lock size={24} /> : (mock.is_daily ? <Zap size={24} /> : <Layout size={24} />)}
                   </div>
                   <span className="flex items-center gap-1 bg-black/10 px-2 py-1 rounded-lg text-[10px] font-bold"><Clock size={12} /> {mock.time_limit} Mins</span>
@@ -142,19 +155,18 @@ export default function MockEngine({ user, onFinish }) {
     );
   }
 
+  // (The Results and Review views remain the same, ensuring handleReturn is used for the button)
   if (isFinished) {
     const finalScore = Math.round((Object.values(selectedOptions).filter((val, i) => val === questions[i].correct_option).length / questions.length) * 100);
     if (showReview) {
       return (
         <div className="space-y-6 max-w-3xl mx-auto pb-20">
-          <button onClick={() => setShowReview(false)} className="bg-white dark:bg-gray-800 px-6 py-3 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-700 font-black uppercase text-xs flex items-center gap-2">
+          <button onClick={() => setShowReview(false)} className="bg-white dark:bg-gray-800 px-6 py-3 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-700 font-black uppercase text-xs flex items-center gap-2 transition-all hover:bg-gray-50">
              <ArrowLeft size={16} /> Back to Results
           </button>
           {questions.map((q, idx) => (
             <div key={idx} className={`p-8 rounded-[2.5rem] border-l-8 bg-white dark:bg-gray-800 shadow-xl ${selectedOptions[idx] === q.correct_option ? 'border-green-500' : 'border-red-500'}`}>
-              <div className="flex items-start justify-between gap-4 mb-4">
-                <p className="font-bold text-lg dark:text-white leading-tight">{idx + 1}. {q.question}</p>
-              </div>
+              <p className="font-bold text-lg dark:text-white mb-4">{idx + 1}. {q.question}</p>
               <div className="grid grid-cols-1 gap-3">
                 {q.options.map((opt, i) => (
                   <div key={i} className={`p-4 rounded-2xl text-sm font-bold flex justify-between items-center ${
