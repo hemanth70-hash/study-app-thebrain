@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import Sidebar from './components/Sidebar';
 import MockEngine from './components/MockEngine';
 import Leaderboard from './components/Leaderboard';
@@ -19,7 +19,17 @@ export default function App() {
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
   const [globalMsg, setGlobalMsg] = useState(null);
 
-  // --- 1. GLOBAL ANNOUNCEMENT FETCH ---
+  // --- 1. REFRESH USER DATA (Crucial for Streaks/History) ---
+  const refreshUser = useCallback(async (userId) => {
+    const { data, error } = await supabase
+      .from('profiles')
+      .select('*')
+      .eq('id', userId)
+      .single();
+    if (data && !error) setUser(data);
+  }, []);
+
+  // --- 2. GLOBAL ANNOUNCEMENT FETCH ---
   useEffect(() => {
     const fetchAnnouncement = async () => {
       const { data } = await supabase
@@ -34,7 +44,7 @@ export default function App() {
     fetchAnnouncement();
   }, [user]);
 
-  // --- 2. STREAK & ATTENDANCE LOGIC ---
+  // --- 3. STREAK & ATTENDANCE LOGIC ---
   const handleStreakCheck = async (profile) => {
     const today = new Date().toISOString().split('T')[0];
     if (profile.last_mock_date === today) return;
@@ -43,6 +53,7 @@ export default function App() {
     yesterday.setDate(yesterday.getDate() - 1);
     const yesterdayStr = yesterday.toISOString().split('T')[0];
 
+    // If missed yesterday
     if (profile.last_mock_date !== yesterdayStr && profile.last_mock_date !== null) {
       if (profile.freeze_points > 0) {
         await supabase.from('profiles')
@@ -52,10 +63,12 @@ export default function App() {
           })
           .eq('id', profile.id);
         alert("🔥 Streak Protected! A Freeze Point was used to cover yesterday.");
+        refreshUser(profile.id);
       } else {
         await supabase.from('profiles')
           .update({ streak_count: 0 })
           .eq('id', profile.id);
+        refreshUser(profile.id);
       }
     }
   };
@@ -84,7 +97,7 @@ export default function App() {
     return (
       <div className={`flex items-center justify-center min-h-screen ${isDarkMode ? 'bg-gray-900' : 'bg-blue-50'}`}>
         <div className="bg-white dark:bg-gray-800 p-8 rounded-[2.5rem] shadow-xl border-2 border-blue-200 w-96 text-center">
-          <h1 className="text-3xl font-black mb-6 text-blue-600 italic tracking-tighter">The Brain Portal</h1>
+          <h1 className="text-3xl font-black mb-6 text-blue-600 italic tracking-tighter uppercase">The Brain Portal</h1>
           <input 
             className="w-full p-4 rounded-2xl border mb-4 text-black dark:bg-gray-700 dark:text-white outline-none focus:ring-4 focus:ring-blue-100 transition-all" 
             placeholder="Enter Username" 
@@ -120,12 +133,11 @@ export default function App() {
               {activeTab === 'ranking' ? 'Leaderboard' : activeTab}
             </h2>
 
-            {/* MARQUEE ANNOUNCEMENT SYSTEM */}
             <div className="flex-1 min-w-[300px]">
               {globalMsg && (
-                <div className="bg-gradient-to-r from-blue-600 to-indigo-700 text-white px-6 py-3 rounded-[1.5rem] shadow-lg flex items-center border border-white/20 overflow-hidden">
+                <div className="bg-gradient-to-r from-blue-600 to-indigo-700 text-white px-6 py-3 rounded-[1.5rem] shadow-lg flex items-center border border-white/20 overflow-hidden relative">
                   <span className="bg-white text-blue-600 px-2 py-0.5 rounded-lg font-black text-[10px] uppercase mr-4 shrink-0 z-10">News</span>
-                  <div className="flex-1 overflow-hidden relative">
+                  <div className="flex-1 overflow-hidden">
                     <marquee className="font-bold text-sm whitespace-nowrap" scrollamount="6">
                       {globalMsg}
                     </marquee>
@@ -173,9 +185,17 @@ export default function App() {
               </div>
             )}
 
-            {/* TAB ROUTING */}
+            {/* TAB ROUTING - Logic check passed */}
             {activeTab === 'subjects' && <SubjectNotes user={user} />}
-            {activeTab === 'mocks' && <MockEngine user={user} onFinish={() => setActiveTab('dashboard')} />}
+            {activeTab === 'mocks' && (
+              <MockEngine 
+                user={user} 
+                onFinish={() => {
+                  setActiveTab('dashboard');
+                  refreshUser(user.id); // Sync streak/history immediately
+                }} 
+              />
+            )}
             {activeTab === 'ranking' && <Leaderboard />}
             {activeTab === 'admin' && <AdminPanel />}
             {activeTab === 'profile' && <Profile user={user} />}
