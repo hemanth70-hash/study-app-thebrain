@@ -3,7 +3,7 @@ import { supabase } from '../supabaseClient';
 import { 
   UploadCloud, Database, History, Megaphone, Trash2, 
   ListChecks, Zap, Loader2, ShieldAlert, Key, UserPlus, 
-  Clock, MessageSquare, Check, X
+  Clock, MessageSquare, Check, X, Users, Flame, Target, GraduationCap
 } from 'lucide-react';
 
 export default function AdminPanel() {
@@ -20,6 +20,7 @@ export default function AdminPanel() {
   const [assignedName, setAssignedName] = useState('');
   const [activeKeys, setActiveKeys] = useState([]);
   const [userRequests, setUserRequests] = useState([]);
+  const [allUsers, setAllUsers] = useState([]); // 🔥 New: User Roster State
 
   // --- VERSION HISTORY STATE ---
   const [verName, setVerName] = useState('');
@@ -35,19 +36,20 @@ export default function AdminPanel() {
   const fetchAdminData = useCallback(async () => {
     setLoading(true);
     try {
-      // Fetch Logs
       const { data: logs } = await supabase.from('dev_logs').select('*').order('created_at', { ascending: false });
-      // Fetch Mocks
       const { data: mocks } = await supabase.from('daily_mocks').select('*').order('mock_date', { ascending: false });
-      // Fetch Authorized Keys
       const { data: keys } = await supabase.from('authorized_users').select('*').order('created_at', { ascending: false });
-      // Fetch Admin Requests
       const { data: requests } = await supabase.from('admin_requests').select('*').order('created_at', { ascending: false });
+      
+      // 🔥 Fetching all user profiles for the Roster
+      const { data: profiles } = await supabase.from('profiles').select('*').order('streak_count', { ascending: false });
 
       if (logs) setHistory(logs);
       if (mocks) setExistingMocks(mocks);
       if (keys) setActiveKeys(keys);
       if (requests) setUserRequests(requests);
+      if (profiles) setAllUsers(profiles);
+
     } catch (err) {
       console.error("Admin Load Error:", err);
     } finally {
@@ -61,33 +63,19 @@ export default function AdminPanel() {
 
   // --- 2. HANDLERS ---
 
-  // Generate unique BRAIN access key for friends
   const generateKey = async () => {
     if (!assignedName) return alert("The Brain, enter a friend's name first.");
     const newKey = `BRAIN-${Math.random().toString(36).substring(2, 8).toUpperCase()}`;
-    
-    const { error } = await supabase.from('authorized_users').insert([{ 
-      access_key: newKey, 
-      assigned_to: assignedName 
-    }]);
-
-    if (!error) {
-      setAssignedName('');
-      fetchAdminData();
-      alert(`Access Key Primed for ${assignedName}: ${newKey}`);
-    }
+    const { error } = await supabase.from('authorized_users').insert([{ access_key: newKey, assigned_to: assignedName }]);
+    if (!error) { setAssignedName(''); fetchAdminData(); alert(`Access Key Primed: ${newKey}`); }
   };
 
   const handleBulkUpload = async () => {
     if (!mockTitle) return setStatus('❌ Error: Enter a Mock Title.');
     if (!bulkData) return setStatus('❌ Error: JSON field is empty.');
-    
     setStatus('⏳ Processing Neural Upload...');
     try {
       const parsedQuestions = JSON.parse(bulkData);
-      if (!Array.isArray(parsedQuestions)) throw new Error("JSON must be an array");
-
-      // 🔥 SELECTIVE OVERWRITE: Only triggers if "Daily" is toggled ON
       if (isDailyQuickMock) {
         const { data: oldMocks } = await supabase.from('daily_mocks').select('id').eq('is_daily', true);
         if (oldMocks?.length > 0) {
@@ -97,25 +85,13 @@ export default function AdminPanel() {
           await supabase.from('daily_mocks').delete().in('id', ids);
         }
       }
-
-      const newMockEntry = {
-        mock_title: mockTitle,
-        questions: parsedQuestions, 
-        is_daily: isDailyQuickMock,
-        is_strict: isStrict,
-        time_limit: parseInt(timeLimit) || 10,
-        mock_date: new Date().toISOString().split('T')[0] 
-      };
-
+      const newMockEntry = { mock_title: mockTitle, questions: parsedQuestions, is_daily: isDailyQuickMock, is_strict: isStrict, time_limit: parseInt(timeLimit) || 10, mock_date: new Date().toISOString().split('T')[0] };
       const { error } = await supabase.from('daily_mocks').insert([newMockEntry]);
       if (error) throw error;
-
       setStatus(`🎉 Grid Updated! Mock Live.`);
       setBulkData(''); setMockTitle(''); setIsDailyQuickMock(false); setIsStrict(false);
       fetchAdminData(); 
-    } catch (err) {
-      setStatus(`❌ Error: ${err.message}`);
-    }
+    } catch (err) { setStatus(`❌ Error: ${err.message}`); }
   };
 
   const deleteMock = async (id) => {
@@ -157,9 +133,58 @@ export default function AdminPanel() {
         </div>
       </div>
 
+      {/* 🔥 2. NEURAL ROSTER (BRAIN'S VIEW) */}
+      <div className="bg-white dark:bg-gray-800 p-8 rounded-[32px] shadow-xl border dark:border-gray-700">
+        <div className="flex items-center gap-3 mb-6 text-blue-600">
+          <Users size={32} />
+          <h2 className="text-2xl font-black uppercase dark:text-white tracking-tighter">Neural Roster</h2>
+        </div>
+        <div className="overflow-x-auto">
+          <table className="w-full text-left border-separate border-spacing-y-3">
+            <thead>
+              <tr className="text-[10px] font-black uppercase text-gray-400 tracking-[0.2em]">
+                <th className="px-6 pb-2">User Identity</th>
+                <th className="px-6 pb-2">Background</th>
+                <th className="px-6 pb-2">Target Goal</th>
+                <th className="px-6 pb-2 text-center">Streak</th>
+              </tr>
+            </thead>
+            <tbody>
+              {allUsers.map((u) => (
+                <tr key={u.id} className="bg-gray-50 dark:bg-gray-900/50 rounded-2xl group transition-all hover:scale-[1.01]">
+                  <td className="px-6 py-4 rounded-l-2xl">
+                    <div className="flex items-center gap-3">
+                      <div className="w-10 h-10 rounded-xl bg-blue-100 dark:bg-blue-900/30 flex items-center justify-center overflow-hidden border border-blue-200">
+                        <img 
+                          src={`https://api.dicebear.com/7.x/${u.gender === 'neutral' ? 'bottts' : 'avataaars'}/svg?seed=${u.avatar_seed || u.username}${u.gender === 'female' ? '&facialHairProbability=0' : ''}`} 
+                          className="w-8 h-8"
+                        />
+                      </div>
+                      <span className="font-black dark:text-white uppercase text-sm">{u.username}</span>
+                    </div>
+                  </td>
+                  <td className="px-6 py-4 text-xs font-bold text-gray-500 uppercase tracking-widest italic">
+                    <div className="flex items-center gap-2"><GraduationCap size={14}/> {u.education || 'Student'}</div>
+                  </td>
+                  <td className="px-6 py-4 text-xs font-black text-red-500 uppercase tracking-widest">
+                    <div className="flex items-center gap-2"><Target size={14}/> {u.preparing_for || 'General'}</div>
+                  </td>
+                  <td className="px-6 py-4 text-center rounded-r-2xl">
+                    <div className="inline-flex items-center gap-1 bg-orange-100 dark:bg-orange-900/20 px-3 py-1 rounded-lg">
+                      <Flame size={12} className="text-orange-500 fill-orange-500" />
+                      <span className="text-xs font-black text-orange-600">{u.streak_count || 0}</span>
+                    </div>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-10">
         
-        {/* 2. MOCK CREATOR */}
+        {/* 3. MOCK CREATOR */}
         <div className="bg-white dark:bg-gray-800 p-8 rounded-[32px] shadow-xl border dark:border-gray-700">
           <div className="flex items-center gap-3 mb-6 text-blue-600">
             <UploadCloud size={32} />
@@ -177,7 +202,7 @@ export default function AdminPanel() {
           </div>
         </div>
 
-        {/* 3. ACCESS KEY GENERATOR */}
+        {/* 4. ACCESS KEY GENERATOR */}
         <div className="bg-white dark:bg-gray-800 p-8 rounded-[32px] shadow-xl border dark:border-gray-700">
           <div className="flex items-center gap-3 mb-6 text-indigo-600">
             <Key size={32} />
@@ -202,7 +227,7 @@ export default function AdminPanel() {
           </div>
         </div>
 
-        {/* 4. USER REQUESTS LOG */}
+        {/* 5. USER REQUESTS LOG */}
         <div className="bg-gray-900 text-white p-8 rounded-[32px] shadow-2xl border border-white/5">
           <div className="flex items-center gap-3 mb-6 text-orange-400">
             <MessageSquare size={28} />
@@ -230,7 +255,7 @@ export default function AdminPanel() {
           </div>
         </div>
 
-        {/* 5. VERSION LOGS */}
+        {/* 6. DEV LOGS */}
         <div className="bg-white dark:bg-gray-800 p-8 rounded-[32px] shadow-xl border dark:border-gray-700">
            <h3 className="text-xl font-black mb-6 flex items-center gap-3 text-blue-600 uppercase tracking-tighter"><History size={24} /> Dev Logs</h3>
            <div className="space-y-3 mb-6">
