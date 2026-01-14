@@ -11,7 +11,7 @@ export default function Profile({ user }) {
   const [stats, setStats] = useState({ totalMocks: 0, avgScore: 0, history: [] });
   const [loading, setLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
-  const [showTools, setShowTools] = useState(false); // 🔥 State for hidden tools
+  const [showTools, setShowTools] = useState(false); // 🔥 State for hiding टेक्निकल tools
   
   // --- IDENTITY & GOAL STATES ---
   const [gender, setGender] = useState(user.gender || 'neutral');
@@ -47,6 +47,7 @@ export default function Profile({ user }) {
 
       if (error) throw error;
       if (data) {
+        // Logic: Permanent mocks stay, Daily mocks expire after 24h
         const visibleHistory = data.filter(item => {
           if (item.is_daily === false || item.is_daily === null) return true;
           const itemDate = new Date(item.created_at);
@@ -113,11 +114,12 @@ export default function Profile({ user }) {
       <div className="bg-white dark:bg-gray-800 p-10 rounded-[3rem] shadow-2xl border-b-8 border-blue-600 relative overflow-hidden">
         <div className="flex flex-col md:flex-row items-center gap-10 relative z-10">
           
-          {/* Avatar with Shuffle Toggle */}
+          {/* Avatar Box */}
           <div className="relative group">
             <div className="w-44 h-44 rounded-[2.5rem] bg-gray-100 dark:bg-gray-900 flex items-center justify-center border-4 border-white dark:border-gray-700 shadow-xl overflow-hidden">
               <img src={getAvatarUrl(currentSeed, gender)} alt="Avatar" className="w-36 h-36" />
             </div>
+            {/* Seed Shuffle button is considered a "tool" but kept here for easy access, or move inside toggle if desired */}
             <button 
               onClick={shuffleAvatar}
               className="absolute -bottom-2 -right-2 bg-indigo-600 text-white p-3 rounded-2xl shadow-lg hover:rotate-180 transition-all duration-500"
@@ -129,7 +131,7 @@ export default function Profile({ user }) {
           <div className="text-center md:text-left flex-1 space-y-4">
             <div className="flex items-center justify-center md:justify-start gap-4">
               <h2 className="text-5xl font-black uppercase tracking-tighter dark:text-white">{user.username}</h2>
-              {/* 🔥 ARROW TOGGLE BUTTON */}
+              {/* 🔥 THE ARROW TOGGLE BUTTON */}
               <button 
                 onClick={() => setShowTools(!showTools)}
                 className="p-2 bg-blue-50 dark:bg-gray-700 rounded-full text-blue-600 hover:scale-110 transition-all"
@@ -138,29 +140,29 @@ export default function Profile({ user }) {
               </button>
             </div>
             
-            {/* EDUCATION & GOALS SECTION */}
+            {/* EDUCATION & PREPARATION (VISIBLE BY DEFAULT) */}
             <div className="space-y-3">
-              <div className="flex items-center justify-center md:justify-start gap-3 text-gray-500 font-bold">
-                <GraduationCap size={20} className="text-blue-500" />
+              <div className="flex items-center justify-center md:justify-start gap-3 text-gray-500 font-bold group">
+                <GraduationCap size={20} className="text-blue-500 group-hover:scale-110 transition-transform" />
                 <input 
-                  className="bg-transparent border-none outline-none focus:ring-0 text-sm uppercase tracking-widest w-full max-w-xs"
+                  className="bg-transparent border-none outline-none focus:ring-0 text-sm uppercase tracking-widest w-full max-w-xs border-b border-transparent focus:border-blue-200"
                   value={education}
                   onChange={(e) => setEducation(e.target.value)}
-                  placeholder="Your Education"
+                  placeholder="Your Education (e.g. BSc Physics)"
                 />
               </div>
-              <div className="flex items-center justify-center md:justify-start gap-3 text-gray-500 font-bold">
-                <Target size={20} className="text-red-500" />
+              <div className="flex items-center justify-center md:justify-start gap-3 text-gray-500 font-bold group">
+                <Target size={20} className="text-red-500 group-hover:scale-110 transition-transform" />
                 <input 
-                  className="bg-transparent border-none outline-none focus:ring-0 text-sm uppercase tracking-widest w-full max-w-xs text-red-500"
+                  className="bg-transparent border-none outline-none focus:ring-0 text-sm uppercase tracking-widest w-full max-w-xs text-red-500 border-b border-transparent focus:border-red-200"
                   value={preparingFor}
                   onChange={(e) => setPreparingFor(e.target.value)}
-                  placeholder="Preparing For..."
+                  placeholder="Preparing For (e.g. NEET 2026)"
                 />
               </div>
             </div>
 
-            {/* 🔥 HIDDEN IDENTITY TOOLS (ONLY SHOWS ON ARROW CLICK) */}
+            {/* 🔥 HIDDEN TOOLS (GENDER & SYNC BUTTON) */}
             {showTools && (
               <div className="flex flex-wrap gap-2 mt-6 justify-center md:justify-start animate-in slide-in-from-top-4 duration-300">
                 {['male', 'female', 'neutral'].map((g) => (
@@ -180,7 +182,7 @@ export default function Profile({ user }) {
                   className="bg-green-600 text-white px-8 py-2 rounded-xl hover:bg-green-700 transition-all flex items-center gap-2 shadow-lg"
                 >
                   {isSaving ? <RefreshCw size={14} className="animate-spin" /> : <Save size={14} />}
-                  <span className="text-[10px] font-black uppercase">Save All Changes</span>
+                  <span className="text-[10px] font-black uppercase">Sync Identity</span>
                 </button>
               </div>
             )}
@@ -188,7 +190,7 @@ export default function Profile({ user }) {
         </div>
       </div>
 
-      {/* --- STATS OVERVIEW --- */}
+      {/* --- STATS GRID --- */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
         <div className="bg-white dark:bg-gray-800 p-8 rounded-[2.5rem] shadow-xl border-b-8 border-blue-500 flex items-center gap-6 group">
           <div className="p-4 bg-blue-100 dark:bg-blue-900/30 rounded-2xl text-blue-600 transition-transform group-hover:rotate-12">
@@ -221,7 +223,7 @@ export default function Profile({ user }) {
         </div>
       </div>
 
-      {/* --- NEURAL HISTORY TABLE (NO LOGIC MISSING) --- */}
+      {/* --- NEURAL HISTORY TABLE --- */}
       <div className="bg-white dark:bg-gray-800 rounded-[32px] shadow-2xl overflow-hidden border border-blue-50 dark:border-gray-700">
         <div className="p-8 border-b border-gray-100 dark:border-gray-700 flex justify-between items-center bg-gray-50/50 dark:bg-gray-900/50">
           <div className="flex items-center gap-3">
@@ -241,9 +243,9 @@ export default function Profile({ user }) {
             <table className="w-full text-left">
               <thead>
                 <tr className="text-gray-400 text-[10px] font-black uppercase tracking-widest border-b dark:border-gray-700">
-                  <th className="pb-6 px-4">Exam</th>
+                  <th className="pb-6 px-4">Exam Details</th>
                   <th className="pb-6 px-4">Date</th>
-                  <th className="pb-6 px-4">Result</th>
+                  <th className="pb-6 px-4">Accuracy</th>
                   <th className="pb-6 px-4 text-right">Status</th>
                 </tr>
               </thead>
@@ -253,7 +255,7 @@ export default function Profile({ user }) {
                     <td className="py-6 px-4">
                       <div className="flex flex-col">
                         <span className="text-lg font-bold dark:text-white tracking-tight">{item.mock_title}</span>
-                        {item.is_daily && <span className="text-[8px] text-orange-500 font-black uppercase mt-1">Daily Streak Mock</span>}
+                        {item.is_daily && <span className="text-[8px] text-orange-500 font-black uppercase mt-1">Daily Entry</span>}
                       </div>
                     </td>
                     <td className="py-6 px-4 text-xs text-gray-500 font-bold uppercase">{new Date(item.created_at).toLocaleDateString()}</td>
@@ -265,7 +267,7 @@ export default function Profile({ user }) {
                     </td>
                     <td className="py-6 px-4 text-right">
                       <span className={`px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest ${item.percentage >= 50 ? 'bg-green-100 text-green-600' : 'bg-red-100 text-red-600'}`}>
-                        {item.percentage >= 50 ? 'Validated' : 'Retake'}
+                        {item.percentage >= 50 ? 'Passed' : 'Retake'}
                       </span>
                     </td>
                   </tr>
