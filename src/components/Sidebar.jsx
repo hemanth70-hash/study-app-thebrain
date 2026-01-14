@@ -2,27 +2,25 @@ import React from 'react';
 import { motion } from 'framer-motion';
 import { 
   LayoutDashboard, BookOpen, Timer, Trophy, 
-  User, Moon, Sun, ChevronLeft, ChevronRight, Database, Flame 
+  User, Moon, Sun, ChevronLeft, ChevronRight, Database, Flame, Youtube, ShieldCheck
 } from 'lucide-react';
 
 export default function Sidebar({ user, activeTab, setActiveTab, setIsDarkMode, isDarkMode, isOpen, setIsOpen }) {
   
   // --- 🔥 1. IDENTITY SYNC LOGIC ---
-  // This matches Profile.jsx to ensure the avatar is consistent across the grid
   const getAvatarUrl = (seed, gender) => {
-    // Style switching: humans for gendered, robots for neutral
     const style = gender === 'neutral' ? 'bottts' : 'avataaars';
-    // Security: facialHairProbability=0 for female prevents beard generation
     const params = gender === 'female' ? '&topProbability=100&facialHairProbability=0' : '';
-    // Use saved seed or fallback to username
-    const finalSeed = user.avatar_seed || user.username;
+    const finalSeed = seed || user.username;
     return `https://api.dicebear.com/7.x/${style}/svg?seed=${finalSeed}${params}`;
   };
 
   // --- 2. DYNAMIC MENU CONFIGURATION ---
+  // Added 'study' to the menu items
   const menuItems = [
     { id: 'dashboard', icon: <LayoutDashboard />, label: 'Dashboard' },
-    { id: 'subjects', icon: <BookOpen />, label: 'Subjects' },
+    { id: 'study', icon: <Youtube />, label: 'Study Hub' }, // 🔥 NEW: Neural Player & Library
+    { id: 'subjects', icon: <BookOpen />, label: 'Resources' },
     { id: 'mocks', icon: <Timer />, label: 'Mock Tests' },
     { id: 'ranking', icon: <Trophy />, label: 'Leaderboard' },
     { id: 'profile', icon: <User />, label: 'Profile' },
@@ -32,7 +30,7 @@ export default function Sidebar({ user, activeTab, setActiveTab, setIsDarkMode, 
   if (user.username?.toLowerCase() === 'thebrain') {
     const adminExists = menuItems.find(item => item.id === 'admin');
     if (!adminExists) {
-      menuItems.splice(4, 0, { id: 'admin', icon: <Database />, label: 'Admin Panel' });
+      menuItems.splice(menuItems.length - 1, 0, { id: 'admin', icon: <Database />, label: 'Admin Panel' });
     }
   }
 
@@ -62,13 +60,21 @@ export default function Sidebar({ user, activeTab, setActiveTab, setIsDarkMode, 
           >
              <div className="absolute inset-0 bg-blue-500/10 animate-pulse" />
              <img 
-              src={getAvatarUrl(user.avatar_seed || user.username, user.gender || 'neutral')} 
-              alt="Neural Identity" 
+              src={getAvatarUrl(user.avatar_seed, user.gender)} 
+              alt="Identity" 
               className="w-20 h-20 object-contain relative z-10" 
             />
           </motion.div>
           
-          <h3 className="font-black text-gray-800 dark:text-white uppercase tracking-tighter text-sm">{user.username}</h3>
+          <div className="text-center">
+            <h3 className="font-black text-gray-800 dark:text-white uppercase tracking-tighter text-sm flex items-center justify-center gap-1">
+              {user.username}
+              {user.total_exams_completed > 15 && <ShieldCheck size={14} className="text-blue-500" />}
+            </h3>
+            <p className="text-[8px] font-black text-blue-600 dark:text-blue-400 uppercase tracking-[0.2em] mt-1">
+              {user.education || 'Neural Aspirant'}
+            </p>
+          </div>
           
           {/* Dynamic Streak Badge */}
           <motion.div 
@@ -76,12 +82,12 @@ export default function Sidebar({ user, activeTab, setActiveTab, setIsDarkMode, 
             transition={{ repeat: Infinity, duration: 2 }}
             className={`mt-3 flex items-center gap-2 px-4 py-1.5 rounded-full border-2 transition-all ${
               user.streak_count > 0 
-              ? 'bg-orange-50 border-orange-200 dark:bg-orange-900/20 dark:border-orange-800 shadow-[0_0_10px_rgba(249,115,22,0.1)]' 
+              ? 'bg-orange-50 border-orange-200 dark:bg-orange-900/20 dark:border-orange-800' 
               : 'bg-gray-50 border-gray-100 dark:bg-gray-900/50 dark:border-gray-700'
             }`}
           >
-            <Flame size={16} className={`${user.streak_count > 0 ? 'text-orange-500 fill-orange-500' : 'text-gray-300'}`} />
-            <span className={`text-xs font-black tracking-widest ${user.streak_count > 0 ? 'text-orange-600 dark:text-orange-400' : 'text-gray-400'}`}>
+            <Flame size={14} className={`${user.streak_count > 0 ? 'text-orange-500 fill-orange-500' : 'text-gray-300'}`} />
+            <span className={`text-[9px] font-black tracking-widest ${user.streak_count > 0 ? 'text-orange-600' : 'text-gray-400'}`}>
               {user.streak_count || 0} DAY STREAK
             </span>
           </motion.div>
@@ -100,7 +106,7 @@ export default function Sidebar({ user, activeTab, setActiveTab, setIsDarkMode, 
               }`}
             >
               <span className={`transition-colors duration-300 ${activeTab === item.id ? 'text-white' : 'text-blue-500 group-hover:scale-110'}`}>
-                {React.cloneElement(item.icon, { size: 20 })}
+                {React.cloneElement(item.icon, { size: 18 })}
               </span>
               <span className="font-black text-[10px] uppercase tracking-widest leading-none">{item.label}</span>
             </button>
@@ -110,10 +116,10 @@ export default function Sidebar({ user, activeTab, setActiveTab, setIsDarkMode, 
         {/* 6. NEURAL THEME SWITCHER */}
         <button 
           onClick={() => setIsDarkMode(!isDarkMode)}
-          className="mt-8 flex items-center justify-between p-4 bg-gray-50 dark:bg-gray-800/50 rounded-[1.5rem] border border-gray-100 dark:border-gray-700 transition-all hover:border-blue-200 dark:hover:border-blue-900"
+          className="mt-8 flex items-center justify-between p-4 bg-gray-50 dark:bg-gray-800/50 rounded-[1.5rem] border border-gray-100 dark:border-gray-700 transition-all"
         >
           <div className="flex items-center gap-3">
-            {isDarkMode ? <Sun size={18} className="text-yellow-500 animate-pulse" /> : <Moon size={18} className="text-indigo-500" />}
+            {isDarkMode ? <Sun size={16} className="text-yellow-500" /> : <Moon size={16} className="text-indigo-500" />}
             <span className="font-black text-[10px] uppercase tracking-widest text-gray-400">
               {isDarkMode ? 'Solar' : 'Lunar'}
             </span>
