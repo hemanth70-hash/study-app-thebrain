@@ -6,7 +6,7 @@ export default function Leaderboard() {
   const [rankings, setRankings] = useState([]);
   const [loading, setLoading] = useState(true);
 
-  // --- 1. NEURAL RANK HELPER (Logic matched with Profile.jsx) ---
+  // --- 1. NEURAL RANK HELPER ---
   const getNeuralRank = (totalPoints, totalExams) => {
     const gpa = totalExams > 0 ? (totalPoints / totalExams) : 0;
     if (gpa >= 95) return { label: 'Architect', color: 'text-purple-500 bg-purple-50 dark:bg-purple-900/30 border-purple-200' };
@@ -20,11 +20,11 @@ export default function Leaderboard() {
     const fetchRankings = async () => {
       setLoading(true);
       try {
-        // 🔥 Logic: We query 'profiles' because 'scores' are temporary/deletable.
-        // Primary Sort: Streak (Highest first), Secondary Sort: Lifetime Exams
+        // 🔥 STEALTH LOGIC: .neq('username', 'thebrain') filters the Admin from public view
         const { data, error } = await supabase
           .from('profiles')
           .select('*')
+          .neq('username', 'thebrain') 
           .order('streak_count', { ascending: false })
           .order('total_exams_completed', { ascending: false })
           .limit(20);
@@ -42,7 +42,7 @@ export default function Leaderboard() {
   if (loading) return (
     <div className="flex flex-col items-center justify-center py-32 text-blue-600 animate-pulse">
       <Loader2 className="animate-spin mb-4" size={48} />
-      <p className="font-black uppercase tracking-widest text-[10px]">Syncing Neural Rankings...</p>
+      <p className="font-black uppercase tracking-widest text-[10px]">Filtering Neural Standings...</p>
     </div>
   );
 
@@ -57,12 +57,12 @@ export default function Leaderboard() {
         <div className="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-6">
           <div>
             <h2 className="text-5xl font-black uppercase tracking-tighter mb-2 italic">The Hall of Fame</h2>
-            <p className="text-blue-100 font-bold uppercase text-[10px] tracking-[0.4em] opacity-80">Synchronization level: Omega</p>
+            <p className="text-blue-100 font-bold uppercase text-[10px] tracking-[0.4em] opacity-80">Public Standings (Admin Identity Hidden)</p>
           </div>
           <div className="flex items-center gap-4 bg-white/10 backdrop-blur-md p-4 rounded-3xl border border-white/20">
              <Award size={32} className="text-yellow-400" />
              <div className="text-left">
-               <p className="text-[8px] font-black uppercase tracking-widest">Active Nodes</p>
+               <p className="text-[8px] font-black uppercase tracking-widest">Global Nodes</p>
                <p className="text-xl font-black">{rankings.length}</p>
              </div>
           </div>
@@ -75,9 +75,9 @@ export default function Leaderboard() {
           <table className="w-full text-left border-separate border-spacing-y-4">
             <thead>
               <tr className="text-[10px] font-black uppercase text-gray-400 tracking-[0.2em]">
-                <th className="px-6 pb-2">Position</th>
-                <th className="px-6 pb-2">Identity</th>
-                <th className="px-6 pb-2">Focus & Goal</th>
+                <th className="px-6 pb-2 text-center">Rank</th>
+                <th className="px-6 pb-2">User Identity</th>
+                <th className="px-6 pb-2">Goal Profile</th>
                 <th className="px-6 pb-2 text-center">Neural GPA</th>
                 <th className="px-6 pb-2 text-right">Streak</th>
               </tr>
@@ -90,59 +90,61 @@ export default function Leaderboard() {
                   : 0;
                 
                 return (
-                  <tr key={u.id} className={`group transition-all hover:scale-[1.01] ${index === 0 ? 'bg-blue-50 dark:bg-blue-900/20' : 'bg-gray-50/50 dark:bg-gray-900/40'} rounded-2xl`}>
+                  <tr key={u.id} className={`group transition-all hover:scale-[1.01] ${index === 0 ? 'bg-blue-50/50 dark:bg-blue-900/20' : 'bg-gray-50 dark:bg-gray-900/40'} rounded-2xl`}>
                     
                     {/* 1. POSITION & AVATAR */}
                     <td className="px-6 py-4 rounded-l-[2rem]">
-                      <div className="flex items-center gap-4">
-                        <span className={`font-black text-2xl italic ${index === 0 ? 'text-yellow-500' : 'text-gray-300'} w-10`}>
+                      <div className="flex flex-col items-center">
+                        <span className={`font-black text-2xl italic ${index === 0 ? 'text-yellow-500' : 'text-gray-300'}`}>
                           {index === 0 ? <Medal size={28} /> : `#${index + 1}`}
                         </span>
-                        <div className="w-14 h-14 rounded-2xl bg-white dark:bg-gray-800 border-2 border-blue-100 dark:border-gray-700 p-1 overflow-hidden relative">
+                      </div>
+                    </td>
+
+                    {/* 2. IDENTITY */}
+                    <td className="px-6 py-4">
+                      <div className="flex items-center gap-4">
+                        <div className="w-12 h-12 rounded-2xl bg-white dark:bg-gray-800 border-2 border-blue-100 dark:border-gray-700 p-0.5 overflow-hidden">
                           <img 
                             src={`https://api.dicebear.com/7.x/${u.gender === 'neutral' ? 'bottts' : 'avataaars'}/svg?seed=${u.avatar_seed || u.username}${u.gender === 'female' ? '&facialHairProbability=0' : ''}`} 
-                            alt="avatar" 
                             className="w-full h-full object-contain"
+                            alt="Node"
                           />
                         </div>
-                      </div>
-                    </td>
-
-                    {/* 2. USERNAME & RANK BADGE */}
-                    <td className="px-6 py-4">
-                      <div className="flex flex-col">
-                        <span className="font-black dark:text-white uppercase text-md tracking-tighter">{u.username}</span>
-                        <div className={`mt-1.5 inline-flex items-center gap-1.5 px-3 py-1 rounded-xl border text-[9px] font-black uppercase tracking-widest w-fit shadow-sm ${nodeRank.color}`}>
-                          <ShieldCheck size={12} />
-                          {nodeRank.label}
+                        <div className="flex flex-col">
+                          <span className="font-black dark:text-white uppercase text-sm tracking-tight">{u.username}</span>
+                          <div className={`mt-1 inline-flex items-center gap-1.5 px-2 py-0.5 rounded-lg border text-[8px] font-black uppercase tracking-widest w-fit shadow-sm ${nodeRank.color}`}>
+                            <ShieldCheck size={10} />
+                            {nodeRank.label}
+                          </div>
                         </div>
                       </div>
                     </td>
 
-                    {/* 3. EDUCATION & PREPARING FOR */}
+                    {/* 3. FOCUS & GOAL */}
                     <td className="px-6 py-4">
-                      <div className="flex flex-col gap-1.5">
-                        <div className="flex items-center gap-2 text-[10px] font-bold text-gray-500 uppercase tracking-widest italic">
-                          <GraduationCap size={14} className="text-blue-500" /> {u.education || 'Aspirant'}
+                      <div className="flex flex-col gap-1">
+                        <div className="flex items-center gap-2 text-[10px] font-bold text-gray-500 uppercase tracking-widest">
+                          <GraduationCap size={14} className="text-blue-500" /> {u.education || 'Student'}
                         </div>
                         <div className="flex items-center gap-2 text-[10px] font-black text-red-500 uppercase tracking-widest">
-                          <Target size={14} /> {u.preparing_for || 'Syncing Goal...'}
+                          <Target size={14} /> {u.preparing_for || 'Syncing...'}
                         </div>
                       </div>
                     </td>
 
-                    {/* 4. GPA (SEMESTER AGGREGATE) */}
+                    {/* 4. GPA */}
                     <td className="px-6 py-4 text-center">
                       <div className="flex flex-col">
                         <span className={`font-black text-2xl ${parseFloat(gpa) >= 75 ? 'text-green-600' : 'text-blue-600'}`}>{gpa}%</span>
-                        <span className="text-[8px] font-black text-gray-400 uppercase tracking-tighter">Lifetime Accuracy</span>
+                        <span className="text-[8px] font-black text-gray-400 uppercase">Lifetime Avg</span>
                       </div>
                     </td>
 
                     {/* 5. STREAK */}
                     <td className="px-6 py-4 text-right rounded-r-[2rem]">
-                      <div className="inline-flex items-center gap-3 bg-white dark:bg-gray-800 px-6 py-3 rounded-2xl border-2 border-orange-100 dark:border-gray-700 shadow-lg group-hover:border-orange-500 transition-all">
-                        <Flame size={20} className={`${u.streak_count > 0 ? 'text-orange-500 fill-orange-500 animate-pulse' : 'text-gray-200'}`} />
+                      <div className="inline-flex items-center gap-3 bg-white dark:bg-gray-800 px-5 py-2.5 rounded-2xl border-2 border-orange-100 dark:border-gray-700 shadow-sm group-hover:border-orange-500 transition-all">
+                        <Flame size={18} className={`${u.streak_count > 0 ? 'text-orange-500 fill-orange-500 animate-pulse' : 'text-gray-200'}`} />
                         <span className={`font-black text-xl ${u.streak_count > 0 ? 'text-orange-600' : 'text-gray-400'}`}>{u.streak_count || 0}</span>
                       </div>
                     </td>
@@ -151,8 +153,8 @@ export default function Leaderboard() {
                 );
               }) : (
                 <tr>
-                  <td colSpan="5" className="text-center py-20 text-gray-400 font-black uppercase tracking-widest text-xs opacity-50">
-                    Neural Roster Empty. Take a mock to initialize.
+                  <td colSpan="5" className="text-center py-20 text-gray-400 font-black uppercase text-xs opacity-50">
+                    No civilian nodes identified.
                   </td>
                 </tr>
               )}
