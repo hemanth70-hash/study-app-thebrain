@@ -2,23 +2,32 @@ import React, { useEffect, useState, useCallback } from 'react';
 import { supabase } from '../supabaseClient';
 import { 
   Award, BookOpen, Clock, Zap, Trash2, ShieldAlert, 
-  Loader2, TrendingUp, Camera, Save, RefreshCw 
+  Loader2, TrendingUp, Camera, Save, RefreshCw, Dice5
 } from 'lucide-react';
 
 export default function Profile({ user }) {
-  const [profile, setProfile] = useState(user);
+  // --- IDENTITY STATES ---
   const [stats, setStats] = useState({ totalMocks: 0, avgScore: 0, history: [] });
   const [loading, setLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
+  
+  // 🔥 NEURAL IDENTITY LOGIC: Load from user profile or defaults
   const [gender, setGender] = useState(user.gender || 'neutral');
+  const [currentSeed, setCurrentSeed] = useState(user.avatar_seed || user.username);
 
-  // --- 1. AVATAR LOGIC (ANTI-BEARD PROTECTION) ---
+  // --- 1. AVATAR LOGIC (ANTI-BEARD + SEED SHUFFLE) ---
   const getAvatarUrl = (seed, g) => {
-    // We use 'avataaars' for human styles. 'bottts' for neutral/default.
+    // Style switching: humans for gendered, robots for neutral
     const style = g === 'neutral' ? 'bottts' : 'avataaars';
-    // 🔥 Security: facialHairProbability=0 for female prevents beard generation.
+    // 🔥 Security: facialHairProbability=0 for female ensures a clean profile
     const params = g === 'female' ? '&topProbability=100&facialHairProbability=0' : '';
     return `https://api.dicebear.com/7.x/${style}/svg?seed=${seed}${params}`;
+  };
+
+  const shuffleAvatar = () => {
+    // Generate a fresh neural seed for the avatar
+    const newSeed = Math.random().toString(36).substring(2, 10).toUpperCase();
+    setCurrentSeed(newSeed);
   };
 
   // --- 2. ATOMIC FETCH: SYNC WITH NEURAL GRID ---
@@ -39,7 +48,7 @@ export default function Profile({ user }) {
       if (error) throw error;
 
       if (data) {
-        // Logic: Regular mocks stay, Daily mocks expire after 24h
+        // Filter: Permanent mocks stay, Daily mocks expire after 24h
         const visibleHistory = data.filter(item => {
           if (item.is_daily === false || item.is_daily === null) return true;
           const itemDate = new Date(item.created_at);
@@ -67,27 +76,36 @@ export default function Profile({ user }) {
     fetchUserStats();
   }, [fetchUserStats]);
 
-  // --- 3. IDENTITY UPDATE ---
+  // --- 3. IDENTITY UPDATE (SAVE TO SUPABASE) ---
   const handleUpdate = async () => {
     setIsSaving(true);
-    const { error } = await supabase
-      .from('profiles')
-      .update({ gender: gender })
-      .eq('id', user.id);
+    try {
+      const { error } = await supabase
+        .from('profiles')
+        .update({ 
+          gender: gender,
+          avatar_seed: currentSeed 
+        })
+        .eq('id', user.id);
 
-    if (!error) {
-      alert("Identity Refined, The Brain.");
-      // Refresh local user state if needed
+      if (error) throw error;
+      alert("Neural Identity Refined. The Brain has updated your records.");
+    } catch (err) {
+      alert(`Sync Error: ${err.message}`);
+    } finally {
+      setIsSaving(false);
     }
-    setIsSaving(false);
   };
 
   // --- 4. SECURITY: WIPE RECORDS ---
   const clearHistory = async () => {
-    const confirmation = window.confirm("The Brain, wipe your neural records permanently?");
+    const confirmation = window.confirm("The Brain, wipe your neural records permanently? This cannot be undone.");
     if (confirmation) {
       const { error } = await supabase.from('scores').delete().eq('user_id', user.id);
-      if (!error) { alert("Grid Purged."); fetchUserStats(); }
+      if (!error) { 
+        alert("Neural Grid Purged."); 
+        fetchUserStats(); 
+      }
     }
   };
 
@@ -97,10 +115,23 @@ export default function Profile({ user }) {
       {/* --- IDENTITY SECTION --- */}
       <div className="bg-white dark:bg-gray-800 p-10 rounded-[3rem] shadow-2xl border-b-8 border-blue-600 relative overflow-hidden">
         <div className="flex flex-col md:flex-row items-center gap-10 relative z-10">
+          
+          {/* AVATAR BOX WITH SHUFFLE OVERLAY */}
           <div className="relative group">
-            <div className="w-40 h-40 rounded-[2.5rem] bg-gray-100 dark:bg-gray-900 flex items-center justify-center border-4 border-white dark:border-gray-700 shadow-xl overflow-hidden">
-              <img src={getAvatarUrl(user.username, gender)} alt="Avatar" className="w-32 h-32" />
+            <div className="w-44 h-44 rounded-[2.5rem] bg-gray-100 dark:bg-gray-900 flex items-center justify-center border-4 border-white dark:border-gray-700 shadow-xl overflow-hidden">
+              <img 
+                src={getAvatarUrl(currentSeed, gender)} 
+                alt="Identity Avatar" 
+                className="w-36 h-36 transform transition-transform group-hover:scale-110 duration-500" 
+              />
             </div>
+            <button 
+              onClick={shuffleAvatar}
+              className="absolute -bottom-2 -right-2 bg-indigo-600 text-white p-3 rounded-2xl shadow-lg hover:rotate-180 transition-all duration-500 active:scale-90"
+              title="Shuffle Appearance"
+            >
+              <Dice5 size={24} />
+            </button>
           </div>
 
           <div className="text-center md:text-left space-y-4">
@@ -115,7 +146,7 @@ export default function Profile({ user }) {
                   key={g}
                   onClick={() => setGender(g)}
                   className={`px-6 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${
-                    gender === g ? 'bg-blue-600 text-white shadow-lg' : 'bg-gray-100 dark:bg-gray-700 text-gray-400'
+                    gender === g ? 'bg-blue-600 text-white shadow-lg' : 'bg-gray-100 dark:bg-gray-700 text-gray-400 hover:text-blue-500'
                   }`}
                 >
                   {g}
@@ -123,9 +154,11 @@ export default function Profile({ user }) {
               ))}
               <button 
                 onClick={handleUpdate}
-                className="bg-green-600 text-white px-4 py-2 rounded-xl hover:bg-green-700 transition-all active:scale-95"
+                disabled={isSaving}
+                className="bg-green-600 text-white px-6 py-2 rounded-xl hover:bg-green-700 transition-all active:scale-95 flex items-center gap-2"
               >
                 {isSaving ? <RefreshCw size={14} className="animate-spin" /> : <Save size={14} />}
+                <span className="text-[10px] font-black uppercase">Sync Identity</span>
               </button>
             </div>
           </div>
@@ -139,7 +172,7 @@ export default function Profile({ user }) {
             <BookOpen size={32} />
           </div>
           <div>
-            <p className="text-[10px] font-black uppercase text-gray-400 tracking-widest">Exams Taken</p>
+            <p className="text-[10px] font-black uppercase text-gray-400 tracking-widest">Total Exams</p>
             <h4 className="text-3xl font-black dark:text-white tracking-tighter">{stats.totalMocks}</h4>
           </div>
         </div>
@@ -149,7 +182,7 @@ export default function Profile({ user }) {
             <Award size={32} />
           </div>
           <div>
-            <p className="text-[10px] font-black uppercase text-gray-400 tracking-widest">Avg Accuracy</p>
+            <p className="text-[10px] font-black uppercase text-gray-400 tracking-widest">Accuracy</p>
             <h4 className="text-3xl font-black dark:text-white tracking-tighter">{stats.avgScore}%</h4>
           </div>
         </div>
@@ -179,15 +212,15 @@ export default function Profile({ user }) {
           {loading ? (
              <div className="flex flex-col items-center justify-center py-20 text-blue-600">
                <Loader2 className="animate-spin mb-4" size={48} />
-               <p className="font-black uppercase tracking-widest text-[10px]">Retrieving Grid Data...</p>
+               <p className="font-black uppercase tracking-widest text-[10px]">Accessing Grid History...</p>
              </div>
           ) : stats.history.length > 0 ? (
             <table className="w-full text-left">
               <thead>
                 <tr className="text-gray-400 text-[10px] font-black uppercase tracking-widest border-b dark:border-gray-700">
-                  <th className="pb-6 px-4">Exam Details</th>
-                  <th className="pb-6 px-4">Timestamp</th>
-                  <th className="pb-6 px-4">Accuracy</th>
+                  <th className="pb-6 px-4">Exam</th>
+                  <th className="pb-6 px-4">Date</th>
+                  <th className="pb-6 px-4">Result</th>
                   <th className="pb-6 px-4 text-right">Status</th>
                 </tr>
               </thead>
@@ -197,7 +230,7 @@ export default function Profile({ user }) {
                     <td className="py-6 px-4">
                       <div className="flex flex-col">
                         <span className="text-lg font-bold dark:text-white tracking-tight">{item.mock_title}</span>
-                        {item.is_daily && <span className="text-[8px] text-orange-500 font-black uppercase mt-1">Daily Entry</span>}
+                        {item.is_daily && <span className="text-[8px] text-orange-500 font-black uppercase mt-1">Daily Streak Mock</span>}
                       </div>
                     </td>
                     <td className="py-6 px-4 text-xs text-gray-500 font-bold uppercase">
@@ -211,7 +244,7 @@ export default function Profile({ user }) {
                     </td>
                     <td className="py-6 px-4 text-right">
                       <span className={`px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest ${item.percentage >= 50 ? 'bg-green-100 text-green-600' : 'bg-red-100 text-red-600'}`}>
-                        {item.percentage >= 50 ? 'Passed' : 'Retake'}
+                        {item.percentage >= 50 ? 'Validated' : 'Retake'}
                       </span>
                     </td>
                   </tr>
@@ -221,7 +254,7 @@ export default function Profile({ user }) {
           ) : (
             <div className="flex flex-col items-center justify-center py-24 opacity-40">
               <ShieldAlert size={64} className="text-gray-300 mb-4" />
-              <p className="text-gray-400 font-black uppercase text-xs tracking-widest">No History Detected</p>
+              <p className="text-gray-400 font-black uppercase text-xs tracking-widest">Neural Grid Empty</p>
             </div>
           )}
         </div>
@@ -229,7 +262,7 @@ export default function Profile({ user }) {
 
       <div className="flex justify-end">
         <button onClick={clearHistory} className="flex items-center gap-2 text-red-400 hover:text-red-600 px-6 py-4 rounded-2xl text-[10px] font-black uppercase tracking-widest border-2 border-transparent hover:border-red-100 transition-all">
-          <Trash2 size={16} /> Wipe History
+          <Trash2 size={16} /> Wipe Grid History
         </button>
       </div>
     </div>
