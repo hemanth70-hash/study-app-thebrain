@@ -165,7 +165,7 @@ export default function App() {
         
         <Sidebar user={user} activeTab={activeTab} setActiveTab={setActiveTab} setIsDarkMode={setIsDarkMode} isDarkMode={isDarkMode} isOpen={isSidebarOpen} setIsOpen={setIsSidebarOpen} />
         
-        <main className={`flex-1 p-10 transition-all duration-300 ${isSidebarOpen ? 'ml-64' : 'ml-20'}`}>
+        <main className={`flex-1 p-6 md:p-10 transition-all duration-300 ${isSidebarOpen ? 'ml-64' : 'ml-20'}`}>
           <header className="mb-10 flex flex-wrap items-center gap-6">
             <h2 className="text-4xl font-black capitalize text-blue-600 dark:text-blue-400">
               {activeTab === 'ranking' ? 'Leaderboard' : activeTab === 'study' ? 'Study Hub' : activeTab}
@@ -174,9 +174,7 @@ export default function App() {
             <div className="flex-1 min-w-[300px]">
               {globalMsg && (
                 <div className="bg-gradient-to-r from-blue-600 to-indigo-700 text-white px-6 py-3 rounded-3xl shadow-lg flex items-center border border-white/20 overflow-hidden relative">
-                  <div className="flex-1 overflow-hidden">
-                    <marquee className="font-bold text-sm whitespace-nowrap" scrollamount="6">{globalMsg}</marquee>
-                  </div>
+                  <div className="flex-1 overflow-hidden"><marquee className="font-bold text-sm whitespace-nowrap" scrollamount="6">{globalMsg}</marquee></div>
                   <button onClick={() => setGlobalMsg(null)} className="ml-4 hover:text-white/70 transition-colors shrink-0 z-10">✕</button>
                 </div>
               )}
@@ -191,7 +189,7 @@ export default function App() {
           <div className="max-w-7xl mx-auto space-y-8">
             {activeTab === 'dashboard' && (
               <div className="space-y-8 animate-in fade-in zoom-in duration-500">
-                {/* ROW 1: USER STATUS & GOALS */}
+                {/* 🔥 BALANCED ROW 1: STATUS & GOALS (2:1 Ratio) */}
                 <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 items-stretch">
                   <div className="lg:col-span-2 bg-white dark:bg-gray-900 p-8 rounded-[2.5rem] shadow-xl border-b-8 border-blue-500 flex flex-col justify-between relative overflow-hidden group">
                     <div className="absolute top-0 right-0 p-10 opacity-5 group-hover:rotate-12 transition-transform duration-700"><Layout size={160} /></div>
@@ -203,9 +201,9 @@ export default function App() {
                         </div>
                         <InviteButton />
                       </div>
-                      <div className="bg-blue-50 dark:bg-blue-900/20 p-4 rounded-2xl border border-blue-100 dark:border-blue-800">
-                        <p className="text-sm font-bold text-gray-600 dark:text-gray-400">
-                          GPA: <span className="text-blue-600 font-black">{(user.total_percentage_points / (user.total_exams_completed || 1)).toFixed(1)}%</span>
+                      <div className="bg-blue-50 dark:bg-blue-900/20 p-5 rounded-2xl border border-blue-100 dark:border-blue-800">
+                        <p className="text-sm font-bold text-gray-600 dark:text-gray-400 leading-relaxed">
+                          Synchronization level: Omega. Lifetime GPA: <span className="text-blue-600 font-black">{(user.total_percentage_points / (user.total_exams_completed || 1)).toFixed(1)}%</span>
                         </p>
                       </div>
                     </div>
@@ -213,10 +211,14 @@ export default function App() {
                   <div className="lg:col-span-1 h-full"><GoalTracker user={user} /></div>
                 </div>
 
-                {/* ROW 2: INTERACTION TOOLS */}
+                {/* 🔥 BALANCED ROW 2: INTERACTION TOOLS (3:2 Ratio) */}
                 <div className="grid grid-cols-1 lg:grid-cols-5 gap-8 items-start">
-                  <div className="lg:col-span-3 h-full"><QuickQuiz /></div>
-                  <div className="lg:col-span-2 h-full flex flex-col"><StudyChat user={user} /></div>
+                  <div className="lg:col-span-3 h-full">
+                    <QuickQuiz />
+                  </div>
+                  <div className="lg:col-span-2 h-full flex flex-col">
+                    <StudyChat user={user} />
+                  </div>
                 </div>
               </div>
             )}
