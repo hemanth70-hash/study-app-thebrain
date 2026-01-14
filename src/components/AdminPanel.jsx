@@ -3,7 +3,7 @@ import { supabase } from '../supabaseClient';
 import { 
   UploadCloud, Database, History, Megaphone, Trash2, 
   ListChecks, Zap, Loader2, ShieldAlert, Key, UserPlus, 
-  Clock, MessageSquare, Check, X, Users, Flame, Target, GraduationCap
+  Clock, MessageSquare, Check, X, Users, Flame, Target, GraduationCap, ChevronDown
 } from 'lucide-react';
 
 export default function AdminPanel() {
@@ -20,7 +20,8 @@ export default function AdminPanel() {
   const [assignedName, setAssignedName] = useState('');
   const [activeKeys, setActiveKeys] = useState([]);
   const [userRequests, setUserRequests] = useState([]);
-  const [allUsers, setAllUsers] = useState([]); // 🔥 New: User Roster State
+  const [allUsers, setAllUsers] = useState([]); 
+  const [showRoster, setShowRoster] = useState(false); // 🔥 Controls the Dropdown visibility
 
   // --- VERSION HISTORY STATE ---
   const [verName, setVerName] = useState('');
@@ -40,8 +41,6 @@ export default function AdminPanel() {
       const { data: mocks } = await supabase.from('daily_mocks').select('*').order('mock_date', { ascending: false });
       const { data: keys } = await supabase.from('authorized_users').select('*').order('created_at', { ascending: false });
       const { data: requests } = await supabase.from('admin_requests').select('*').order('created_at', { ascending: false });
-      
-      // 🔥 Fetching all user profiles for the Roster
       const { data: profiles } = await supabase.from('profiles').select('*').order('streak_count', { ascending: false });
 
       if (logs) setHistory(logs);
@@ -49,7 +48,6 @@ export default function AdminPanel() {
       if (keys) setActiveKeys(keys);
       if (requests) setUserRequests(requests);
       if (profiles) setAllUsers(profiles);
-
     } catch (err) {
       console.error("Admin Load Error:", err);
     } finally {
@@ -62,7 +60,6 @@ export default function AdminPanel() {
   }, [fetchAdminData]);
 
   // --- 2. HANDLERS ---
-
   const generateKey = async () => {
     if (!assignedName) return alert("The Brain, enter a friend's name first.");
     const newKey = `BRAIN-${Math.random().toString(36).substring(2, 8).toUpperCase()}`;
@@ -125,65 +122,82 @@ export default function AdminPanel() {
       <div className="bg-gradient-to-r from-blue-600 to-indigo-700 p-8 rounded-[32px] shadow-2xl text-white">
         <div className="flex items-center gap-3 mb-6">
           <Megaphone size={32} className="animate-bounce" />
-          <h2 className="text-2xl font-black uppercase">Global Broadcast</h2>
+          <h2 className="text-2xl font-black uppercase tracking-tighter">Global Broadcast</h2>
         </div>
         <div className="flex flex-col md:flex-row gap-4">
-          <input className="flex-1 p-4 rounded-2xl text-gray-900 font-bold border-none outline-none focus:ring-4" placeholder="Type transmission..." value={announcement} onChange={(e) => setAnnouncement(e.target.value)} />
-          <button onClick={postAnnouncement} className="bg-white text-blue-600 px-10 py-4 rounded-2xl font-black uppercase tracking-widest hover:bg-blue-50">BROADCAST</button>
+          <input className="flex-1 p-4 rounded-2xl text-gray-900 font-bold border-none outline-none focus:ring-4 focus:ring-blue-400" placeholder="Type transmission..." value={announcement} onChange={(e) => setAnnouncement(e.target.value)} />
+          <button onClick={postAnnouncement} className="bg-white text-blue-600 px-10 py-4 rounded-2xl font-black uppercase tracking-widest hover:bg-blue-50 transition-all active:scale-95 shadow-lg">BROADCAST</button>
         </div>
       </div>
 
-      {/* 🔥 2. NEURAL ROSTER (BRAIN'S VIEW) */}
-      <div className="bg-white dark:bg-gray-800 p-8 rounded-[32px] shadow-xl border dark:border-gray-700">
-        <div className="flex items-center gap-3 mb-6 text-blue-600">
-          <Users size={32} />
-          <h2 className="text-2xl font-black uppercase dark:text-white tracking-tighter">Neural Roster</h2>
+      {/* 🔥 2. NEURAL ROSTER (COLLAPSIBLE BRAIN'S VIEW) */}
+      <div className="bg-white dark:bg-gray-800 p-8 rounded-[32px] shadow-xl border dark:border-gray-700 transition-all duration-500">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-3 text-blue-600">
+            <Users size={32} />
+            <h2 className="text-2xl font-black uppercase dark:text-white tracking-tighter">Neural Roster</h2>
+          </div>
+          
+          {/* THE DROP BUTTON */}
+          <button 
+            onClick={() => setShowRoster(!showRoster)}
+            className={`p-3 rounded-2xl bg-blue-50 dark:bg-gray-700 text-blue-600 transition-all duration-300 hover:scale-110 ${showRoster ? 'rotate-180 bg-blue-600 text-white shadow-lg' : ''}`}
+          >
+            <ChevronDown size={28} strokeWidth={3} />
+          </button>
         </div>
-        <div className="overflow-x-auto">
-          <table className="w-full text-left border-separate border-spacing-y-3">
-            <thead>
-              <tr className="text-[10px] font-black uppercase text-gray-400 tracking-[0.2em]">
-                <th className="px-6 pb-2">User Identity</th>
-                <th className="px-6 pb-2">Background</th>
-                <th className="px-6 pb-2">Target Goal</th>
-                <th className="px-6 pb-2 text-center">Streak</th>
-              </tr>
-            </thead>
-            <tbody>
-              {allUsers.map((u) => (
-                <tr key={u.id} className="bg-gray-50 dark:bg-gray-900/50 rounded-2xl group transition-all hover:scale-[1.01]">
-                  <td className="px-6 py-4 rounded-l-2xl">
-                    <div className="flex items-center gap-3">
-                      <div className="w-10 h-10 rounded-xl bg-blue-100 dark:bg-blue-900/30 flex items-center justify-center overflow-hidden border border-blue-200">
-                        <img 
-                          src={`https://api.dicebear.com/7.x/${u.gender === 'neutral' ? 'bottts' : 'avataaars'}/svg?seed=${u.avatar_seed || u.username}${u.gender === 'female' ? '&facialHairProbability=0' : ''}`} 
-                          className="w-8 h-8"
-                        />
-                      </div>
-                      <span className="font-black dark:text-white uppercase text-sm">{u.username}</span>
-                    </div>
-                  </td>
-                  <td className="px-6 py-4 text-xs font-bold text-gray-500 uppercase tracking-widest italic">
-                    <div className="flex items-center gap-2"><GraduationCap size={14}/> {u.education || 'Student'}</div>
-                  </td>
-                  <td className="px-6 py-4 text-xs font-black text-red-500 uppercase tracking-widest">
-                    <div className="flex items-center gap-2"><Target size={14}/> {u.preparing_for || 'General'}</div>
-                  </td>
-                  <td className="px-6 py-4 text-center rounded-r-2xl">
-                    <div className="inline-flex items-center gap-1 bg-orange-100 dark:bg-orange-900/20 px-3 py-1 rounded-lg">
-                      <Flame size={12} className="text-orange-500 fill-orange-500" />
-                      <span className="text-xs font-black text-orange-600">{u.streak_count || 0}</span>
-                    </div>
-                  </td>
+        
+        <p className="text-[10px] font-black uppercase text-gray-400 tracking-widest mt-1 mb-4">
+          {allUsers.length} Active Nodes Synchronized
+        </p>
+
+        {showRoster && (
+          <div className="overflow-x-auto animate-in slide-in-from-top-4 duration-500 mt-6">
+            <table className="w-full text-left border-separate border-spacing-y-3">
+              <thead>
+                <tr className="text-[10px] font-black uppercase text-gray-400 tracking-[0.2em]">
+                  <th className="px-6 pb-2">User Identity</th>
+                  <th className="px-6 pb-2">Education</th>
+                  <th className="px-6 pb-2 text-red-500">Goal</th>
+                  <th className="px-6 pb-2 text-center">Streak</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+              </thead>
+              <tbody>
+                {allUsers.map((u) => (
+                  <tr key={u.id} className="bg-gray-50 dark:bg-gray-900/50 rounded-2xl group transition-all hover:scale-[1.01]">
+                    <td className="px-6 py-4 rounded-l-2xl">
+                      <div className="flex items-center gap-3">
+                        <div className="w-10 h-10 rounded-xl bg-blue-100 dark:bg-blue-900/30 flex items-center justify-center overflow-hidden border border-blue-200">
+                          <img 
+                            src={`https://api.dicebear.com/7.x/${u.gender === 'neutral' ? 'bottts' : 'avataaars'}/svg?seed=${u.avatar_seed || u.username}${u.gender === 'female' ? '&facialHairProbability=0' : ''}`} 
+                            className="w-8 h-8"
+                            alt="avatar"
+                          />
+                        </div>
+                        <span className="font-black dark:text-white uppercase text-sm">{u.username}</span>
+                      </div>
+                    </td>
+                    <td className="px-6 py-4 text-xs font-bold text-gray-500 uppercase tracking-widest italic">
+                      <div className="flex items-center gap-2"><GraduationCap size={14}/> {u.education || 'N/A'}</div>
+                    </td>
+                    <td className="px-6 py-4 text-xs font-black text-red-500 uppercase tracking-widest">
+                      <div className="flex items-center gap-2"><Target size={14}/> {u.preparing_for || 'General'}</div>
+                    </td>
+                    <td className="px-6 py-4 text-center rounded-r-2xl">
+                      <div className="inline-flex items-center gap-1 bg-orange-100 dark:bg-orange-900/20 px-3 py-1 rounded-lg">
+                        <Flame size={12} className="text-orange-500 fill-orange-500" />
+                        <span className="text-xs font-black text-orange-600">{u.streak_count || 0}</span>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-10">
-        
         {/* 3. MOCK CREATOR */}
         <div className="bg-white dark:bg-gray-800 p-8 rounded-[32px] shadow-xl border dark:border-gray-700">
           <div className="flex items-center gap-3 mb-6 text-blue-600">
@@ -211,7 +225,7 @@ export default function AdminPanel() {
           <div className="space-y-4 mb-6">
             <div className="flex gap-2">
               <input type="text" placeholder="Friend's Name" className="flex-1 p-4 rounded-2xl border dark:bg-gray-900 dark:border-gray-700 dark:text-white font-bold outline-none" value={assignedName} onChange={(e) => setAssignedName(e.target.value)} />
-              <button onClick={generateKey} className="bg-indigo-600 text-white p-4 rounded-2xl hover:bg-indigo-700"><UserPlus size={24} /></button>
+              <button onClick={generateKey} className="bg-indigo-600 text-white p-4 rounded-2xl hover:bg-indigo-700 transition-all"><UserPlus size={24} /></button>
             </div>
           </div>
           <div className="space-y-2 max-h-64 overflow-y-auto pr-2 custom-scrollbar">
@@ -235,7 +249,7 @@ export default function AdminPanel() {
           </div>
           <div className="space-y-4 max-h-[400px] overflow-y-auto pr-4 custom-scrollbar">
             {userRequests.length === 0 ? (
-              <p className="text-gray-500 text-center font-bold text-xs py-10">No incoming requests.</p>
+              <p className="text-gray-500 text-center font-bold text-xs py-10 uppercase tracking-widest opacity-50">No incoming requests.</p>
             ) : (
               userRequests.map(req => (
                 <div key={req.id} className="p-4 bg-white/5 rounded-2xl border border-white/10 hover:border-orange-500/50 transition-all">
@@ -261,11 +275,11 @@ export default function AdminPanel() {
            <div className="space-y-3 mb-6">
             <input className="w-full bg-gray-50 dark:bg-gray-900 p-4 rounded-2xl text-sm border dark:border-gray-700 outline-none" placeholder="Version (e.g. v2.0.0)" value={verName} onChange={e => setVerName(e.target.value)} />
             <textarea className="w-full bg-gray-50 dark:bg-gray-900 p-4 rounded-2xl text-sm border dark:border-gray-700 outline-none h-20 resize-none" placeholder="Update details..." value={verDesc} onChange={e => setVerDesc(e.target.value)} />
-            <button onClick={saveLog} className="w-full bg-indigo-600 text-white py-4 rounded-2xl font-black uppercase text-xs shadow-lg hover:bg-indigo-700">Save Log</button>
+            <button onClick={saveLog} className="w-full bg-indigo-600 text-white py-4 rounded-2xl font-black uppercase text-xs shadow-lg hover:bg-indigo-700 transition-all active:scale-95">Save Log</button>
           </div>
           <div className="space-y-4 max-h-60 overflow-y-auto pr-2 custom-scrollbar">
             {history.map(log => (
-              <div key={log.id} className="border-l-4 border-blue-600 pl-4 py-1">
+              <div key={log.id} className="border-l-4 border-blue-600 pl-4 py-1 hover:bg-gray-50 dark:hover:bg-gray-900/50 transition-all">
                 <p className="text-blue-600 font-black text-xs uppercase">{log.version_name} • <span className="text-gray-400 text-[10px]">{new Date(log.created_at).toLocaleDateString()}</span></p>
                 <p className="text-gray-500 text-[10px] leading-relaxed">{log.description}</p>
               </div>
