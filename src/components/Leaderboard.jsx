@@ -20,16 +20,20 @@ export default function Leaderboard() {
     const fetchRankings = async () => {
       setLoading(true);
       try {
-        // 🔥 STEALTH LOGIC: .neq('username', 'thebrain') filters the Admin from public view
+        // 🔥 PRIMARY STEALTH: Filter Admin identity at the query level
         const { data, error } = await supabase
           .from('profiles')
           .select('*')
-          .neq('username', 'thebrain') 
+          .not('username', 'ilike', 'thebrain') // Case-insensitive filter
           .order('streak_count', { ascending: false })
           .order('total_exams_completed', { ascending: false })
-          .limit(20);
+          .limit(25);
 
-        if (!error && data) setRankings(data);
+        if (!error && data) {
+          // 🔥 SECONDARY STEALTH: JS Filter backup for absolute security
+          const civilianNodes = data.filter(u => u.username.toLowerCase() !== 'thebrain');
+          setRankings(civilianNodes);
+        }
       } catch (err) {
         console.error("Leaderboard Sync Error:", err);
       } finally {
@@ -92,7 +96,6 @@ export default function Leaderboard() {
                 return (
                   <tr key={u.id} className={`group transition-all hover:scale-[1.01] ${index === 0 ? 'bg-blue-50/50 dark:bg-blue-900/20' : 'bg-gray-50 dark:bg-gray-900/40'} rounded-2xl`}>
                     
-                    {/* 1. POSITION & AVATAR */}
                     <td className="px-6 py-4 rounded-l-[2rem]">
                       <div className="flex flex-col items-center">
                         <span className={`font-black text-2xl italic ${index === 0 ? 'text-yellow-500' : 'text-gray-300'}`}>
@@ -101,7 +104,6 @@ export default function Leaderboard() {
                       </div>
                     </td>
 
-                    {/* 2. IDENTITY */}
                     <td className="px-6 py-4">
                       <div className="flex items-center gap-4">
                         <div className="w-12 h-12 rounded-2xl bg-white dark:bg-gray-800 border-2 border-blue-100 dark:border-gray-700 p-0.5 overflow-hidden">
@@ -121,7 +123,6 @@ export default function Leaderboard() {
                       </div>
                     </td>
 
-                    {/* 3. FOCUS & GOAL */}
                     <td className="px-6 py-4">
                       <div className="flex flex-col gap-1">
                         <div className="flex items-center gap-2 text-[10px] font-bold text-gray-500 uppercase tracking-widest">
@@ -133,7 +134,6 @@ export default function Leaderboard() {
                       </div>
                     </td>
 
-                    {/* 4. GPA */}
                     <td className="px-6 py-4 text-center">
                       <div className="flex flex-col">
                         <span className={`font-black text-2xl ${parseFloat(gpa) >= 75 ? 'text-green-600' : 'text-blue-600'}`}>{gpa}%</span>
@@ -141,9 +141,8 @@ export default function Leaderboard() {
                       </div>
                     </td>
 
-                    {/* 5. STREAK */}
                     <td className="px-6 py-4 text-right rounded-r-[2rem]">
-                      <div className="inline-flex items-center gap-3 bg-white dark:bg-gray-800 px-5 py-2.5 rounded-2xl border-2 border-orange-100 dark:border-gray-700 shadow-sm group-hover:border-orange-500 transition-all">
+                      <div className="inline-flex items-center gap-3 bg-white dark:bg-gray-800 px-5 py-2.5 rounded-2xl border-2 border-orange-100 dark:border-gray-700 shadow-sm group-hover:border-orange-50 transition-all">
                         <Flame size={18} className={`${u.streak_count > 0 ? 'text-orange-500 fill-orange-500 animate-pulse' : 'text-gray-200'}`} />
                         <span className={`font-black text-xl ${u.streak_count > 0 ? 'text-orange-600' : 'text-gray-400'}`}>{u.streak_count || 0}</span>
                       </div>
