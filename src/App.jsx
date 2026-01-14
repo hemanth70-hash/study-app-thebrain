@@ -22,7 +22,6 @@ export default function App() {
   const [globalMsg, setGlobalMsg] = useState(null);
 
   // --- ACCESS KEY STATES ---
-  const [isAuthorized, setIsAuthorized] = useState(false);
   const [accessKey, setAccessKey] = useState('');
   const [authError, setAuthError] = useState('');
 
@@ -36,11 +35,8 @@ export default function App() {
     if (data && !error) setUser(data);
   }, []);
 
-  // --- 2. GLOBAL ANNOUNCEMENT & AUTH PERSISTENCE ---
+  // --- 2. GLOBAL ANNOUNCEMENT (Auth persistence removed to favor Identity check) ---
   useEffect(() => {
-    const savedAuth = localStorage.getItem('brain_portal_auth');
-    if (savedAuth === 'true') setIsAuthorized(true);
-
     const fetchAnnouncement = async () => {
       const { data } = await supabase
         .from('announcements')
@@ -77,50 +73,54 @@ export default function App() {
     }
   };
 
-  // --- 4. AUTHENTICATION & PORTAL KEY CHECK ---
+  // --- 4. LOGIN LOGIC ---
   const handleLogin = async () => {
     if (!username) return;
     try {
       const { data, error } = await supabase
         .from('profiles')
-        .upsert({ username: username }, { onConflict: 'username' })
+        .upsert({ username: username.trim() }, { onConflict: 'username' })
         .select().single();
 
       if (!error) {
         setUser(data);
         handleStreakCheck(data);
-        if (username.toLowerCase() === 'thebrain') {
-          setIsAuthorized(true);
-        }
       }
     } catch (err) { console.error("Login Error", err); }
   };
 
+  // --- 5. IDENTITY-LEVEL VERIFICATION (Updates DB) ---
   const validateAccessKey = async () => {
-    setAuthError('⏳ Validating Key...');
-    const { data, error } = await supabase
+    setAuthError('⏳ Validating Identity...');
+    
+    // Check key validity
+    const { data: keyData, error: keyError } = await supabase
       .from('authorized_users')
       .select('*')
       .eq('access_key', accessKey.trim().toUpperCase())
       .single();
 
-    if (data && !error) {
-      setIsAuthorized(true);
-      localStorage.setItem('brain_portal_auth', 'true');
-      setAuthError('');
+    if (keyData && !keyError) {
+      // 🔥 Update the USER profile in the DB (Permanent verification)
+      const { error: updateError } = await supabase
+        .from('profiles')
+        .update({ is_verified: true })
+        .eq('id', user.id);
+
+      if (!updateError) {
+        await refreshUser(user.id); // Unlocks portal for this identity
+        setAuthError('');
+      }
     } else {
-      setAuthError('❌ Invalid Access Key. Access Denied.');
+      setAuthError('❌ Invalid Access Key. Verification Failed.');
     }
   };
 
   const sendAdminRequest = async () => {
-    const msg = window.prompt("The Brain, what is your request? (Key, Feature, or Mock)");
+    const msg = window.prompt("The Brain, what is your request?");
     if (!msg) return;
     await supabase.from('admin_requests').insert([{
-      user_id: user.id,
-      user_name: user.username,
-      message: msg,
-      request_type: 'USER_REQUEST'
+      user_id: user.id, user_name: user.username, message: msg, request_type: 'USER_REQUEST'
     }]);
     alert("Request transmitted to The Brain.");
   };
@@ -134,24 +134,25 @@ export default function App() {
              <ShieldAlert className="text-white" size={40} />
           </div>
           <h1 className="text-4xl font-black mb-2 text-blue-600 italic tracking-tighter uppercase">Neural Portal</h1>
-          <p className="text-gray-400 font-bold text-xs uppercase tracking-widest mb-8">Secure Access Only</p>
+          <p className="text-gray-400 font-bold text-xs uppercase tracking-widest mb-8">Identify Node</p>
           <input className="w-full p-5 rounded-2xl border-2 mb-4 dark:bg-gray-800 dark:border-gray-700 dark:text-white font-black outline-none focus:border-blue-500 transition-all text-center" placeholder="ENTER USERNAME" value={username} onChange={(e) => setUsername(e.target.value)} />
-          <button onClick={handleLogin} className="w-full bg-blue-600 text-white p-5 rounded-2xl font-black uppercase tracking-widest hover:bg-blue-700 shadow-xl transition-all active:scale-95">Identify User</button>
+          <button onClick={handleLogin} className="w-full bg-blue-600 text-white p-5 rounded-2xl font-black uppercase tracking-widest hover:bg-blue-700 shadow-xl transition-all active:scale-95">Verify Identity</button>
         </div>
       </div>
     );
   }
 
-  // --- VIEW: AUTHORIZATION LOCK ---
-  if (user && !isAuthorized) {
+  // --- VIEW: IDENTITY AUTHORIZATION LOCK (DB-Based) ---
+  const isAdmin = user.username.toLowerCase() === 'thebrain';
+  if (!isAdmin && !user.is_verified) {
     return (
       <div className={`flex items-center justify-center min-h-screen ${isDarkMode ? 'bg-gray-950' : 'bg-blue-50'}`}>
         <div className="bg-white dark:bg-gray-900 p-10 rounded-[3rem] shadow-2xl border-2 border-indigo-500/20 w-full max-w-md text-center">
           <Key className="mx-auto mb-6 text-indigo-500" size={48} />
-          <h2 className="text-2xl font-black dark:text-white uppercase tracking-tighter mb-2">Access Key Required</h2>
-          <p className="text-gray-500 text-xs font-bold uppercase mb-8">Enter your BRAIN-XXXXXX key to proceed</p>
-          <input className="w-full p-5 rounded-2xl border-2 mb-4 dark:bg-gray-800 dark:border-gray-700 dark:text-white font-mono text-center text-xl tracking-[0.2em] outline-none focus:border-indigo-500 transition-all" placeholder="BRAIN-000000" value={accessKey} onChange={(e) => setAccessKey(e.target.value)} />
-          <button onClick={validateAccessKey} className="w-full bg-indigo-600 text-white p-5 rounded-2xl font-black uppercase tracking-widest hover:bg-indigo-700 shadow-xl transition-all mb-4">Verify Identity</button>
+          <h2 className="text-2xl font-black dark:text-white uppercase tracking-tighter mb-2">Access Locked</h2>
+          <p className="text-gray-500 text-xs font-bold uppercase mb-8">Node "{user.username}" requires verification key.</p>
+          <input className="w-full p-5 rounded-2xl border-2 mb-4 dark:bg-gray-800 dark:border-gray-700 dark:text-white font-mono text-center text-xl tracking-[0.2em] outline-none focus:border-indigo-500 transition-all" placeholder="BRAIN-XXXXXX" value={accessKey} onChange={(e) => setAccessKey(e.target.value)} />
+          <button onClick={validateAccessKey} className="w-full bg-indigo-600 text-white p-5 rounded-2xl font-black uppercase tracking-widest hover:bg-indigo-700 shadow-xl transition-all mb-4">Authorize Identity</button>
           {authError && <p className="text-red-500 font-black text-[10px] uppercase tracking-widest">{authError}</p>}
         </div>
       </div>
@@ -189,7 +190,6 @@ export default function App() {
           <div className="max-w-7xl mx-auto space-y-8">
             {activeTab === 'dashboard' && (
               <div className="space-y-8 animate-in fade-in zoom-in duration-500">
-                {/* 🔥 BALANCED ROW 1: STATUS & GOALS (2:1 Ratio) */}
                 <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 items-stretch">
                   <div className="lg:col-span-2 bg-white dark:bg-gray-900 p-8 rounded-[2.5rem] shadow-xl border-b-8 border-blue-500 flex flex-col justify-between relative overflow-hidden group">
                     <div className="absolute top-0 right-0 p-10 opacity-5 group-hover:rotate-12 transition-transform duration-700"><Layout size={160} /></div>
@@ -202,28 +202,23 @@ export default function App() {
                         <InviteButton />
                       </div>
                       <div className="bg-blue-50 dark:bg-blue-900/20 p-5 rounded-2xl border border-blue-100 dark:border-blue-800">
-                        <p className="text-sm font-bold text-gray-600 dark:text-gray-400 leading-relaxed">
-                          Synchronization level: Omega. Lifetime GPA: <span className="text-blue-600 font-black">{(user.total_percentage_points / (user.total_exams_completed || 1)).toFixed(1)}%</span>
+                        <p className="text-sm font-bold text-gray-600 dark:text-gray-400">
+                          GPA: <span className="text-blue-600 font-black">{(user.total_percentage_points / (user.total_exams_completed || 1)).toFixed(1)}%</span>
                         </p>
                       </div>
                     </div>
                   </div>
-                  <div className="lg:col-span-1 h-full"><GoalTracker user={user} /></div>
+                  <div className="lg:col-span-1 h-full min-h-[250px]"><GoalTracker user={user} /></div>
                 </div>
 
-                {/* 🔥 BALANCED ROW 2: INTERACTION TOOLS (3:2 Ratio) */}
                 <div className="grid grid-cols-1 lg:grid-cols-5 gap-8 items-start">
-                  <div className="lg:col-span-3 h-full">
-                    <QuickQuiz />
-                  </div>
-                  <div className="lg:col-span-2 h-full flex flex-col">
-                    <StudyChat user={user} />
-                  </div>
+                  <div className="lg:col-span-3 h-full"><QuickQuiz /></div>
+                  <div className="lg:col-span-2 h-full flex flex-col min-h-[400px]"><StudyChat user={user} /></div>
                 </div>
               </div>
             )}
 
-            {/* TAB ROUTING */}
+            {/* PERSISTENT TAB ROUTING */}
             {activeTab === 'study' && <StudyHub user={user} />}
             {activeTab === 'subjects' && <SubjectNotes user={user} />}
             {activeTab === 'mocks' && <MockEngine user={user} onFinish={() => { setActiveTab('dashboard'); refreshUser(user.id); }} />}
@@ -232,7 +227,6 @@ export default function App() {
             {activeTab === 'profile' && <Profile user={user} />}
           </div>
 
-          {/* FLOATING REQUEST BUTTON */}
           {user.username.toLowerCase() !== 'thebrain' && (
             <button onClick={sendAdminRequest} className="fixed bottom-8 right-8 bg-blue-600/10 backdrop-blur-md text-blue-600 p-4 rounded-full border border-blue-600/20 hover:bg-blue-600 hover:text-white transition-all shadow-2xl group" title="Request Admin">
               <Megaphone size={24} className="group-hover:animate-bounce" />
