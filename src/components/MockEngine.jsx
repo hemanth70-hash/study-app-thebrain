@@ -20,9 +20,9 @@ export default function MockEngine({ user, onFinish }) {
   const [completedMockIds, setCompletedMockIds] = useState([]); 
   const [showStreakAnim, setShowStreakAnim] = useState(false);
   const [warnings, setWarnings] = useState(0); 
-  const [timeUntilMidnight, setTimeUntilMidnight] = useState(""); // 🔥 Expiry state
+  const [timeUntilMidnight, setTimeUntilMidnight] = useState(""); 
 
-  // --- 1. NEURAL TIMER & PROCTORING SYSTEM ---
+  // --- 1. NEURAL TIMER & PROCTORING ---
   useEffect(() => {
     let interval = null;
     if (selectedMock && !isFinished && timeLeft > 0) {
@@ -39,7 +39,7 @@ export default function MockEngine({ user, onFinish }) {
                 handleSubmit(true); 
                 return next;
               }
-              alert(`STRICT MODE WARNING: Tab switch detected. Strike ${next}/3.`);
+              alert(`STRICT MODE WARNING: Strike ${next}/3.`);
               return next;
             });
           }
@@ -53,27 +53,24 @@ export default function MockEngine({ user, onFinish }) {
     return () => clearInterval(interval);
   }, [selectedMock, isFinished, timeLeft]);
 
-  // --- 2. GLOBAL EXPIRY COUNTDOWN (MIDNIGHT RESET) ---
+  // --- 2. MIDNIGHT COUNTDOWN ---
   useEffect(() => {
     const updateCountdown = () => {
       const now = new Date();
       const midnight = new Date();
-      midnight.setHours(24, 0, 0, 0); // Set to 12:00 AM
-      
+      midnight.setHours(24, 0, 0, 0); 
       const diff = midnight - now;
       const hours = Math.floor(diff / (1000 * 60 * 60));
       const mins = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
       const secs = Math.floor((diff % (1000 * 60)) / 1000);
-      
       setTimeUntilMidnight(`${hours}h ${mins}m ${secs}s`);
     };
-
     const timer = setInterval(updateCountdown, 1000);
     updateCountdown();
     return () => clearInterval(timer);
   }, []);
 
-  // --- 3. ATOMIC LOAD + NEURAL EXPIRY ---
+  // --- 3. ATOMIC DATA LOAD ---
   const loadMockData = useCallback(async () => {
     setLoading(true);
     try {
@@ -101,7 +98,7 @@ export default function MockEngine({ user, onFinish }) {
     loadMockData();
   }, [loadMockData]);
 
-  // --- 4. START MOCK ---
+  // --- 4. ENGINE START ---
   const startMock = async (mock) => {
     if (mock.is_daily && completedMockIds.includes(mock.id)) {
       alert("Daily mock already secured.");
@@ -134,7 +131,7 @@ export default function MockEngine({ user, onFinish }) {
     return offset + qIdx;
   };
 
-  // --- 5. SUBMIT & PENALTY ---
+  // --- 5. SUBMISSION & PERMANENT GPA LOGIC ---
   const handleSubmit = async (isPenalty = false) => {
     if (isFinished) return;
     let scoreCount = 0;
@@ -146,11 +143,21 @@ export default function MockEngine({ user, onFinish }) {
     const percentage = isPenalty ? 0 : Math.round((scoreCount / questions.length) * 100);
 
     try {
+      // A. Log temporary score record
       await supabase.from('scores').insert([{
         user_id: user.id, mock_id: selectedMock.id, score: scoreCount, 
         percentage: percentage, mock_title: selectedMock.mock_title,
         is_daily: selectedMock.is_daily, status: isPenalty ? 'DISQUALIFIED' : 'COMPLETED'
       }]);
+
+      // 🔥 B. UPDATE CUMULATIVE GPA & PERMANENT COUNT 🔥
+      // This logic ensures results are permanent like a B.Tech Semester aggregate
+      await supabase.from('profiles')
+        .update({ 
+          total_exams_completed: (user.total_exams_completed || 0) + 1,
+          total_percentage_points: (user.total_percentage_points || 0) + percentage
+        })
+        .eq('id', user.id);
 
       if (selectedMock.is_daily) {
         await supabase.from('completed_daily_mocks').insert([{ user_id: user.id, mock_id: selectedMock.id }]);
@@ -164,8 +171,7 @@ export default function MockEngine({ user, onFinish }) {
       }
       setIsFinished(true);
       loadMockData(); 
-      if (isPenalty) alert("SECURITY BREACH: 0% recorded.");
-    } catch (err) { console.error(err); }
+    } catch (err) { console.error("Neural Error", err); }
   };
 
   const handleReturn = () => {
@@ -175,7 +181,7 @@ export default function MockEngine({ user, onFinish }) {
     onFinish(); 
   };
 
-  if (loading) return <div className="p-20 text-center font-black animate-pulse text-blue-600 uppercase">Syncing...</div>;
+  if (loading) return <div className="p-20 text-center font-black animate-pulse text-blue-600 uppercase">Connecting...</div>;
 
   // --- VIEW: LIBRARY ---
   if (!selectedMock) {
@@ -204,7 +210,6 @@ export default function MockEngine({ user, onFinish }) {
                   mock.is_daily ? (isDone ? 'bg-gray-100 opacity-60' : 'bg-gradient-to-br from-orange-500 to-red-600 text-white border-orange-700') : 'bg-white dark:bg-gray-800 dark:text-white border-blue-500'
                 }`}>
                 
-                {/* 🔥 EXPIRY BADGE ON DAILY CARD 🔥 */}
                 {mock.is_daily && !isDone && (
                   <div className="absolute -top-3 right-8 bg-black text-white px-4 py-1.5 rounded-full text-[9px] font-black uppercase flex items-center gap-2 shadow-2xl border border-white/20">
                     <Hourglass size={12} className="animate-spin" /> Expires: {timeUntilMidnight}
@@ -219,7 +224,7 @@ export default function MockEngine({ user, onFinish }) {
                   </span>
                 </div>
                 <h4 className="text-xl font-black uppercase mb-1 tracking-tight">{mock.mock_title}</h4>
-                <p className="text-[10px] opacity-70 font-black uppercase tracking-widest italic">{isDone ? 'STREAK SECURED' : (mock.is_strict ? 'STRICT MODE' : 'PRACTICE')}</p>
+                <p className="text-[10px] opacity-70 font-black uppercase tracking-widest">{isDone ? 'STREAK SECURED' : (mock.is_strict ? 'STRICT' : 'PRACTICE')}</p>
               </button>
             );
           })}
@@ -228,19 +233,19 @@ export default function MockEngine({ user, onFinish }) {
     );
   }
 
-  // --- RESULTS & REVIEW (REMAINS SAME AS PREVIOUS LOGIC) ---
+  // --- VIEW: RESULTS ---
   if (isFinished) {
     const finalScore = Math.round((questions.filter((q, i) => selectedOptions[i] === q.correct_option).length / questions.length) * 100);
     if (showReview) {
       return (
-        <div className="space-y-6 max-w-3xl mx-auto pb-20 animate-in fade-in slide-in-from-bottom-4 duration-500">
-          <button onClick={() => setShowReview(false)} className="bg-white dark:bg-gray-800 px-6 py-3 rounded-2xl shadow-sm border dark:border-gray-700 font-black uppercase text-xs flex items-center gap-2 dark:text-white transition-all hover:bg-gray-50"><ArrowLeft size={16} /> Back to Results</button>
+        <div className="space-y-6 max-w-3xl mx-auto pb-20">
+          <button onClick={() => setShowReview(false)} className="bg-white dark:bg-gray-800 px-6 py-3 rounded-2xl shadow-sm border dark:border-gray-700 font-black uppercase text-xs flex items-center gap-2 dark:text-white transition-all"><ArrowLeft size={16} /> Back</button>
           {questions.map((q, idx) => (
             <div key={idx} className={`p-8 rounded-[2.5rem] border-l-8 bg-white dark:bg-gray-800 shadow-xl ${selectedOptions[idx] === q.correct_option ? 'border-green-500' : 'border-red-500'}`}>
               <p className="font-bold text-lg dark:text-white mb-4 leading-tight">{idx + 1}. {q.question}</p>
               <div className="grid grid-cols-1 gap-3">
                 {q.options.map((opt, i) => (
-                  <div key={i} className={`p-4 rounded-2xl text-sm font-bold flex justify-between items-center ${i === q.correct_option ? 'bg-green-100 text-green-700 border border-green-200' : i === selectedOptions[idx] ? 'bg-red-100 text-red-700 border border-red-200' : 'bg-gray-50 dark:bg-gray-900 opacity-60'}`}>
+                  <div key={i} className={`p-4 rounded-2xl text-sm font-bold flex justify-between items-center ${i === q.correct_option ? 'bg-green-100 text-green-700' : i === selectedOptions[idx] ? 'bg-red-100 text-red-700' : 'bg-gray-50 dark:bg-gray-900 opacity-60'}`}>
                     <span>{opt}</span>{i === q.correct_option && <CheckCircle size={16} />}
                   </div>
                 ))}
@@ -253,28 +258,29 @@ export default function MockEngine({ user, onFinish }) {
     return (
       <div className="max-w-md mx-auto text-center p-12 bg-white dark:bg-gray-800 rounded-[40px] shadow-2xl border-t-8 border-green-500 relative overflow-hidden">
         {showStreakAnim && (
-          <div className="absolute inset-0 flex flex-col items-center justify-center bg-orange-600 z-50 animate-in fade-in zoom-in duration-500 text-white p-6 text-center">
+          <div className="absolute inset-0 flex flex-col items-center justify-center bg-orange-600 z-50 text-white p-6 text-center animate-in zoom-in duration-500">
             <div className="text-8xl animate-bounce mb-4">🔥</div>
-            <h2 className="text-5xl font-black uppercase italic tracking-tighter mb-2">STREAK +1</h2>
-            <button onClick={() => setShowStreakAnim(false)} className="mt-10 bg-white text-orange-600 px-12 py-4 rounded-[2rem] font-black uppercase text-xs tracking-widest shadow-2xl">Continue</button>
+            <h2 className="text-5xl font-black uppercase tracking-tighter mb-2">STREAK +1</h2>
+            <button onClick={() => setShowStreakAnim(false)} className="mt-10 bg-white text-orange-600 px-12 py-4 rounded-[2rem] font-black uppercase text-xs shadow-2xl">Continue</button>
           </div>
         )}
         <Award size={64} className="mx-auto text-green-500 mb-6" />
-        <h2 className="text-3xl font-black dark:text-white uppercase tracking-tighter">Mock Complete!</h2>
+        <h2 className="text-3xl font-black dark:text-white uppercase">Neural Record</h2>
         <div className="text-6xl font-black text-blue-600 my-6">{finalScore}%</div>
+        <p className="text-gray-400 font-bold text-[10px] uppercase mb-6 tracking-widest italic">Factored into lifetime Neural GPA</p>
         <div className="flex flex-col gap-4">
-            <button onClick={() => setShowReview(true)} className="flex items-center justify-center gap-2 w-full bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-white py-4 rounded-2xl font-black uppercase tracking-widest hover:bg-gray-200 transition-all shadow-sm"><Eye size={20} /> Review Answers</button>
-            <button onClick={handleReturn} className="w-full bg-blue-600 text-white py-4 rounded-2xl font-black uppercase tracking-widest hover:bg-blue-700 shadow-xl transition-all">Return to Hub</button>
+            <button onClick={() => setShowReview(true)} className="flex items-center justify-center gap-2 w-full bg-gray-100 dark:bg-gray-700 py-4 rounded-2xl font-black uppercase text-xs"><Eye size={20} /> Review</button>
+            <button onClick={handleReturn} className="w-full bg-blue-600 text-white py-4 rounded-2xl font-black uppercase text-xs shadow-xl">Return</button>
         </div>
       </div>
     );
   }
 
-  // --- VIEW: CBT INTERFACE ---
+  // --- VIEW: CBT ---
   const activeSubData = subjects.find(s => s.subject === activeSubject);
   return (
-    <div className="max-w-6xl mx-auto space-y-6 animate-in fade-in duration-500">
-      <div className="bg-white dark:bg-gray-800 p-4 rounded-[2rem] shadow-xl flex flex-wrap justify-between items-center gap-4 border dark:border-gray-700">
+    <div className="max-w-6xl mx-auto space-y-6">
+      <div className="bg-white dark:bg-gray-800 p-4 rounded-[2rem] shadow-xl flex flex-wrap justify-between items-center border dark:border-gray-700">
         <div className="flex gap-2">
           {subjects.map(s => (
             <button key={s.subject} onClick={() => {setActiveSubject(s.subject); setCurrentIdx(0);}} 
@@ -285,9 +291,7 @@ export default function MockEngine({ user, onFinish }) {
       </div>
       <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
         <div className="lg:col-span-3 bg-white dark:bg-gray-800 p-10 rounded-[3rem] shadow-2xl border dark:border-gray-700 relative">
-          {selectedMock.is_strict && (
-            <div className="absolute top-6 right-10 flex items-center gap-2 text-red-500 font-black text-[10px] uppercase"><ShieldAlert size={14} /> Strikes: {warnings}/3</div>
-          )}
+          {selectedMock.is_strict && <div className="absolute top-6 right-10 text-red-500 font-black text-[10px] uppercase flex items-center gap-2"><ShieldAlert size={14} /> Strikes: {warnings}/3</div>}
           <h4 className="text-blue-600 font-black uppercase text-[10px] mb-4 italic">{activeSubject} / Q{currentIdx + 1}</h4>
           <h3 className="text-2xl font-bold dark:text-white mb-10 leading-tight">{activeSubData.questions[currentIdx].question}</h3>
           <div className="grid grid-cols-1 gap-4">
@@ -306,8 +310,8 @@ export default function MockEngine({ user, onFinish }) {
             <button disabled={currentIdx === activeSubData.questions.length - 1} onClick={() => setCurrentIdx(prev => prev + 1)} className="px-10 py-4 bg-blue-600 text-white rounded-2xl font-black uppercase text-xs shadow-lg">Next</button>
           </div>
         </div>
-        <div className="bg-white dark:bg-gray-800 p-8 rounded-[3rem] shadow-xl border dark:border-gray-700">
-          <p className="text-[10px] font-black uppercase text-gray-400 mb-6 tracking-widest">Question Palette</p>
+        <div className="bg-white dark:bg-gray-800 p-8 rounded-[3rem] shadow-xl border dark:border-gray-700 text-center">
+          <p className="text-[10px] font-black uppercase text-gray-400 mb-6 tracking-widest">Questions Palette</p>
           <div className="grid grid-cols-4 gap-2 mb-8">
             {activeSubData.questions.map((_, i) => {
               const absIdx = getAbsIdx(activeSubject, i);
@@ -318,7 +322,7 @@ export default function MockEngine({ user, onFinish }) {
               )
             })}
           </div>
-          <button onClick={() => handleSubmit(false)} className="w-full bg-red-600 text-white py-4 rounded-2xl font-black uppercase text-xs shadow-xl active:scale-95 transition-all">End Test</button>
+          <button onClick={() => handleSubmit(false)} className="w-full bg-red-600 text-white py-4 rounded-2xl font-black uppercase text-xs shadow-xl active:scale-95 transition-all">Submit Test</button>
         </div>
       </div>
     </div>
