@@ -10,7 +10,8 @@ import QuickQuiz from './components/QuickQuiz';
 import GoalTracker from './components/GoalTracker';
 import StudyChat from './components/StudyChat';
 import InviteButton from './components/InviteButton';
-import { Lock, Megaphone, ShieldAlert, Key } from 'lucide-react';
+import StudyHub from './components/StudyHub'; // 🔥 NEW COMPONENT
+import { Lock, Megaphone, ShieldAlert, Key, Youtube } from 'lucide-react';
 
 export default function App() {
   const [user, setUser] = useState(null);
@@ -89,7 +90,7 @@ export default function App() {
       if (!error) {
         setUser(data);
         handleStreakCheck(data);
-        // The Brain Bypass: If your username matches your admin ID, auto-authorize
+        // The Brain Bypass: Auto-authorize if username matches
         if (username.toLowerCase() === 'thebrain') {
           setIsAuthorized(true);
         }
@@ -115,7 +116,7 @@ export default function App() {
   };
 
   const sendAdminRequest = async () => {
-    const msg = window.prompt("The Brain, what is your request? (Key for a friend, new feature, or mock request)");
+    const msg = window.prompt("The Brain, what is your request? (Key, Feature, or Mock)");
     if (!msg) return;
     await supabase.from('admin_requests').insert([{
       user_id: user.id,
@@ -187,7 +188,7 @@ export default function App() {
         <main className={`flex-1 p-10 transition-all duration-300 ${isSidebarOpen ? 'ml-64' : 'ml-20'}`}>
           <header className="mb-10 flex flex-wrap items-center gap-6">
             <h2 className="text-4xl font-black capitalize text-blue-600 dark:text-blue-400">
-              {activeTab === 'ranking' ? 'Leaderboard' : activeTab}
+              {activeTab === 'ranking' ? 'Leaderboard' : activeTab === 'study' ? 'Study Hub' : activeTab}
             </h2>
 
             <div className="flex-1 min-w-[300px]">
@@ -207,7 +208,7 @@ export default function App() {
             </div>
           </header>
 
-          <div className="max-w-6xl mx-auto space-y-8">
+          <div className="max-w-7xl mx-auto space-y-8">
             {activeTab === 'dashboard' && (
               <div className="space-y-8 animate-in fade-in duration-500">
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-8 items-start">
@@ -216,7 +217,9 @@ export default function App() {
                         <h3 className="text-2xl font-black uppercase tracking-tighter">Hi, {user.username}!</h3>
                         <InviteButton />
                     </div>
-                    <p className="text-gray-500 dark:text-gray-400 font-medium">Your study portal is live. Synchronize with the grid.</p>
+                    <p className="text-gray-500 dark:text-gray-400 font-medium">
+                      GPA: <span className="text-blue-600 font-black">{(user.total_percentage_points / (user.total_exams_completed || 1)).toFixed(1)}%</span>
+                    </p>
                   </div>
                   <GoalTracker user={user} />
                 </div>
@@ -227,6 +230,8 @@ export default function App() {
               </div>
             )}
 
+            {/* TAB ROUTING LOGIC */}
+            {activeTab === 'study' && <StudyHub user={user} />}
             {activeTab === 'subjects' && <SubjectNotes user={user} />}
             {activeTab === 'mocks' && <MockEngine user={user} onFinish={() => { setActiveTab('dashboard'); refreshUser(user.id); }} />}
             {activeTab === 'ranking' && <Leaderboard />}
