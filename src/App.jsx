@@ -10,8 +10,8 @@ import QuickQuiz from './components/QuickQuiz';
 import GoalTracker from './components/GoalTracker';
 import StudyChat from './components/StudyChat';
 import InviteButton from './components/InviteButton';
-import StudyHub from './components/StudyHub'; // 🔥 NEW COMPONENT
-import { Lock, Megaphone, ShieldAlert, Key, Youtube } from 'lucide-react';
+import StudyHub from './components/StudyHub'; 
+import { Lock, Megaphone, ShieldAlert, Key, Youtube, Layout } from 'lucide-react';
 
 export default function App() {
   const [user, setUser] = useState(null);
@@ -38,7 +38,6 @@ export default function App() {
 
   // --- 2. GLOBAL ANNOUNCEMENT & AUTH PERSISTENCE ---
   useEffect(() => {
-    // Check if key was previously authorized on this device
     const savedAuth = localStorage.getItem('brain_portal_auth');
     if (savedAuth === 'true') setIsAuthorized(true);
 
@@ -90,7 +89,6 @@ export default function App() {
       if (!error) {
         setUser(data);
         handleStreakCheck(data);
-        // The Brain Bypass: Auto-authorize if username matches
         if (username.toLowerCase() === 'thebrain') {
           setIsAuthorized(true);
         }
@@ -137,15 +135,8 @@ export default function App() {
           </div>
           <h1 className="text-4xl font-black mb-2 text-blue-600 italic tracking-tighter uppercase">Neural Portal</h1>
           <p className="text-gray-400 font-bold text-xs uppercase tracking-widest mb-8">Secure Access Only</p>
-          <input 
-            className="w-full p-5 rounded-2xl border-2 mb-4 dark:bg-gray-800 dark:border-gray-700 dark:text-white font-black outline-none focus:border-blue-500 transition-all text-center" 
-            placeholder="ENTER USERNAME" 
-            value={username} 
-            onChange={(e) => setUsername(e.target.value)} 
-          />
-          <button onClick={handleLogin} className="w-full bg-blue-600 text-white p-5 rounded-2xl font-black uppercase tracking-widest hover:bg-blue-700 shadow-xl transition-all active:scale-95">
-            Identify User
-          </button>
+          <input className="w-full p-5 rounded-2xl border-2 mb-4 dark:bg-gray-800 dark:border-gray-700 dark:text-white font-black outline-none focus:border-blue-500 transition-all text-center" placeholder="ENTER USERNAME" value={username} onChange={(e) => setUsername(e.target.value)} />
+          <button onClick={handleLogin} className="w-full bg-blue-600 text-white p-5 rounded-2xl font-black uppercase tracking-widest hover:bg-blue-700 shadow-xl transition-all active:scale-95">Identify User</button>
         </div>
       </div>
     );
@@ -159,15 +150,8 @@ export default function App() {
           <Key className="mx-auto mb-6 text-indigo-500" size={48} />
           <h2 className="text-2xl font-black dark:text-white uppercase tracking-tighter mb-2">Access Key Required</h2>
           <p className="text-gray-500 text-xs font-bold uppercase mb-8">Enter your BRAIN-XXXXXX key to proceed</p>
-          <input 
-            className="w-full p-5 rounded-2xl border-2 mb-4 dark:bg-gray-800 dark:border-gray-700 dark:text-white font-mono text-center text-xl tracking-[0.2em] outline-none focus:border-indigo-500 transition-all" 
-            placeholder="BRAIN-000000" 
-            value={accessKey} 
-            onChange={(e) => setAccessKey(e.target.value)} 
-          />
-          <button onClick={validateAccessKey} className="w-full bg-indigo-600 text-white p-5 rounded-2xl font-black uppercase tracking-widest hover:bg-indigo-700 shadow-xl transition-all mb-4">
-            Verify Identity
-          </button>
+          <input className="w-full p-5 rounded-2xl border-2 mb-4 dark:bg-gray-800 dark:border-gray-700 dark:text-white font-mono text-center text-xl tracking-[0.2em] outline-none focus:border-indigo-500 transition-all" placeholder="BRAIN-000000" value={accessKey} onChange={(e) => setAccessKey(e.target.value)} />
+          <button onClick={validateAccessKey} className="w-full bg-indigo-600 text-white p-5 rounded-2xl font-black uppercase tracking-widest hover:bg-indigo-700 shadow-xl transition-all mb-4">Verify Identity</button>
           {authError && <p className="text-red-500 font-black text-[10px] uppercase tracking-widest">{authError}</p>}
         </div>
       </div>
@@ -179,11 +163,7 @@ export default function App() {
     <div className={isDarkMode ? 'dark' : ''}>
       <div className={`flex min-h-screen transition-colors duration-300 ${isDarkMode ? 'bg-gray-950 text-white' : 'bg-blue-50 text-gray-800'}`}>
         
-        <Sidebar 
-          user={user} activeTab={activeTab} setActiveTab={setActiveTab} 
-          setIsDarkMode={setIsDarkMode} isDarkMode={isDarkMode}
-          isOpen={isSidebarOpen} setIsOpen={setIsSidebarOpen}
-        />
+        <Sidebar user={user} activeTab={activeTab} setActiveTab={setActiveTab} setIsDarkMode={setIsDarkMode} isDarkMode={isDarkMode} isOpen={isSidebarOpen} setIsOpen={setIsSidebarOpen} />
         
         <main className={`flex-1 p-10 transition-all duration-300 ${isSidebarOpen ? 'ml-64' : 'ml-20'}`}>
           <header className="mb-10 flex flex-wrap items-center gap-6">
@@ -210,27 +190,38 @@ export default function App() {
 
           <div className="max-w-7xl mx-auto space-y-8">
             {activeTab === 'dashboard' && (
-              <div className="space-y-8 animate-in fade-in duration-500">
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-8 items-start">
-                  <div className="bg-white dark:bg-gray-900 p-8 rounded-[2.5rem] shadow-xl border-b-8 border-blue-500">
-                    <div className="flex justify-between items-start mb-4">
-                        <h3 className="text-2xl font-black uppercase tracking-tighter">Hi, {user.username}!</h3>
+              <div className="space-y-8 animate-in fade-in zoom-in duration-500">
+                {/* ROW 1: USER STATUS & GOALS */}
+                <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 items-stretch">
+                  <div className="lg:col-span-2 bg-white dark:bg-gray-900 p-8 rounded-[2.5rem] shadow-xl border-b-8 border-blue-500 flex flex-col justify-between relative overflow-hidden group">
+                    <div className="absolute top-0 right-0 p-10 opacity-5 group-hover:rotate-12 transition-transform duration-700"><Layout size={160} /></div>
+                    <div className="relative z-10">
+                      <div className="flex justify-between items-start mb-6">
+                        <div>
+                          <h3 className="text-3xl font-black uppercase tracking-tighter dark:text-white">Hi, {user.username}!</h3>
+                          <p className="text-blue-600 font-black text-[10px] uppercase tracking-[0.3em] mt-1">Identity: {user.education || 'Neural Aspirant'}</p>
+                        </div>
                         <InviteButton />
+                      </div>
+                      <div className="bg-blue-50 dark:bg-blue-900/20 p-4 rounded-2xl border border-blue-100 dark:border-blue-800">
+                        <p className="text-sm font-bold text-gray-600 dark:text-gray-400">
+                          GPA: <span className="text-blue-600 font-black">{(user.total_percentage_points / (user.total_exams_completed || 1)).toFixed(1)}%</span>
+                        </p>
+                      </div>
                     </div>
-                    <p className="text-gray-500 dark:text-gray-400 font-medium">
-                      GPA: <span className="text-blue-600 font-black">{(user.total_percentage_points / (user.total_exams_completed || 1)).toFixed(1)}%</span>
-                    </p>
                   </div>
-                  <GoalTracker user={user} />
+                  <div className="lg:col-span-1 h-full"><GoalTracker user={user} /></div>
                 </div>
-                <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-                  <div className="lg:col-span-2"><QuickQuiz /></div>
-                  <div className="lg:col-span-1"><StudyChat user={user} /></div>
+
+                {/* ROW 2: INTERACTION TOOLS */}
+                <div className="grid grid-cols-1 lg:grid-cols-5 gap-8 items-start">
+                  <div className="lg:col-span-3 h-full"><QuickQuiz /></div>
+                  <div className="lg:col-span-2 h-full flex flex-col"><StudyChat user={user} /></div>
                 </div>
               </div>
             )}
 
-            {/* TAB ROUTING LOGIC */}
+            {/* TAB ROUTING */}
             {activeTab === 'study' && <StudyHub user={user} />}
             {activeTab === 'subjects' && <SubjectNotes user={user} />}
             {activeTab === 'mocks' && <MockEngine user={user} onFinish={() => { setActiveTab('dashboard'); refreshUser(user.id); }} />}
@@ -239,13 +230,9 @@ export default function App() {
             {activeTab === 'profile' && <Profile user={user} />}
           </div>
 
-          {/* 🔥 FLOATING REQUEST BUTTON (Hidden for Admin TheBrain) */}
+          {/* FLOATING REQUEST BUTTON */}
           {user.username.toLowerCase() !== 'thebrain' && (
-            <button 
-              onClick={sendAdminRequest}
-              className="fixed bottom-8 right-8 bg-blue-600/10 backdrop-blur-md text-blue-600 p-4 rounded-full border border-blue-600/20 hover:bg-blue-600 hover:text-white transition-all shadow-2xl group"
-              title="Request Admin"
-            >
+            <button onClick={sendAdminRequest} className="fixed bottom-8 right-8 bg-blue-600/10 backdrop-blur-md text-blue-600 p-4 rounded-full border border-blue-600/20 hover:bg-blue-600 hover:text-white transition-all shadow-2xl group" title="Request Admin">
               <Megaphone size={24} className="group-hover:animate-bounce" />
             </button>
           )}
