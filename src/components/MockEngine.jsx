@@ -22,24 +22,24 @@ export default function MockEngine({ user, onFinish, setIsExamLocked, setIsDarkM
   const [warnings, setWarnings] = useState(0); 
   const [timeUntilMidnight, setTimeUntilMidnight] = useState(""); 
 
-  // --- 1. NEURAL TIMER & PROCTORING (STRICT LOCKDOWN) ---
+  // --- 1. NEURAL TIMER & PROCTORING (FIXED AUTO-SUBMIT) ---
   useEffect(() => {
     let interval = null;
     
-    // 🔥 FIXED: Only start timer if a mock is active and has time
+    // 🔥 AUTO-SUBMIT TRIGGER: Fires immediately when timeLeft hits 0
+    if (selectedMock && !isFinished && timeLeft === 0) {
+      console.warn("Time limit exhausted. Auto-submitting neural record...");
+      handleSubmit(false); 
+      return;
+    }
+
     if (selectedMock && !isFinished && timeLeft > 0) {
       if (setIsExamLocked) setIsExamLocked(true);
       if (setIsDarkMode) setIsDarkMode(true);
 
       // Decoupled from dependencies to prevent jumping
       interval = setInterval(() => {
-        setTimeLeft((prev) => {
-          if (prev <= 1) {
-            clearInterval(interval);
-            return 0;
-          }
-          return prev - 1;
-        });
+        setTimeLeft((prev) => (prev <= 1 ? 0 : prev - 1));
       }, 1000);
 
       if (selectedMock.is_strict) {
@@ -48,22 +48,22 @@ export default function MockEngine({ user, onFinish, setIsExamLocked, setIsDarkM
           if (document.hidden) {
             setWarnings(prev => {
               const next = prev + 1;
-              if (next >= 2) { // Disqualify on 2nd breach
-                alert("STRICT MODE BREACH: Simulation Terminated. Results Disqualified.");
+              if (next >= 2) { // Immediate termination on 2nd attempt
+                alert("CRITICAL SECURITY BREACH: Simulation Terminated. Results Disqualified.");
                 handleSubmit(true); 
                 return next;
               }
-              alert(`STRICT MODE WARNING: Strike ${next}/2. Stay on this tab.`);
+              alert(`STRICT MODE WARNING: Strike ${next}/2. Exit attempt recorded.`);
               return next;
             });
           }
         };
 
-        // B. BLOCK NAVIGATION (LOCK USER IN)
+        // B. BLOCK BROWSER BACK/FORWARD
         window.history.pushState(null, null, window.location.href);
         const blockNavigation = () => {
           window.history.pushState(null, null, window.location.href);
-          alert("SECURITY LOCK: Navigation disabled during active simulation.");
+          alert("SECURITY LOCK: UI Navigation is disabled during active simulation.");
         };
 
         document.addEventListener("visibilitychange", handleVisibility);
@@ -75,15 +75,12 @@ export default function MockEngine({ user, onFinish, setIsExamLocked, setIsDarkM
           window.removeEventListener('popstate', blockNavigation);
         };
       }
-    } else if (timeLeft === 0 && selectedMock && !isFinished) {
-      handleSubmit(); // Auto-submit on time exhaustion
     }
 
     return () => {
       if (interval) clearInterval(interval);
     };
-    // 🧠 Dependencies anchored to prevent re-triggering the effect loop
-  }, [selectedMock?.id, isFinished]); 
+  }, [selectedMock?.id, isFinished, timeLeft === 0]); 
 
   // --- 2. MIDNIGHT COUNTDOWN ---
   useEffect(() => {
@@ -150,9 +147,8 @@ export default function MockEngine({ user, onFinish, setIsExamLocked, setIsDarkM
       }
       setSelectedMock(data);
       setWarnings(0);
-      // Ensure integer parsing for database values
-      const limit = parseInt(data.time_limit) || 10;
-      setTimeLeft(limit * 60); 
+      const limitInMinutes = parseInt(data.time_limit) || 10;
+      setTimeLeft(limitInMinutes * 60); 
     }
   };
 
@@ -215,7 +211,7 @@ export default function MockEngine({ user, onFinish, setIsExamLocked, setIsDarkM
     onFinish(); 
   };
 
-  if (loading) return <div className="p-20 text-center font-black animate-pulse text-blue-600 uppercase tracking-widest">Connecting...</div>;
+  if (loading) return <div className="p-20 text-center font-black animate-pulse text-blue-600 uppercase tracking-widest">Connecting Grid...</div>;
 
   // --- VIEW: LIBRARY ---
   if (!selectedMock) {
@@ -228,13 +224,11 @@ export default function MockEngine({ user, onFinish, setIsExamLocked, setIsDarkM
             <h3 className="text-2xl font-black text-gray-800 dark:text-white uppercase tracking-tighter">Exam Library</h3>
           </div>
         </div>
-
         {!dailyExists && (
           <div className="p-8 rounded-[32px] bg-gray-50 dark:bg-gray-900/50 border-2 border-dashed border-gray-200 dark:border-gray-700 text-center">
             <p className="text-gray-400 font-black uppercase text-[10px] tracking-widest">No daily mock active.</p>
           </div>
         )}
-
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
           {availableMocks.map((mock) => {
             const isDone = completedMockIds.includes(mock.id);
@@ -243,17 +237,14 @@ export default function MockEngine({ user, onFinish, setIsExamLocked, setIsDarkM
                 className={`p-8 rounded-[32px] text-left transition-all shadow-xl border-b-8 relative group ${
                   mock.is_daily ? (isDone ? 'bg-gray-100 opacity-60' : 'bg-gradient-to-br from-orange-500 to-red-600 text-white border-orange-700') : 'bg-white dark:bg-gray-800 dark:text-white border-blue-500'
                 }`}>
-                
                 {mock.is_daily && !isDone && (
                   <div className="absolute -top-3 right-8 bg-black text-white px-4 py-1.5 rounded-full text-[9px] font-black uppercase flex items-center gap-2 shadow-2xl border border-white/20">
                     <Hourglass size={12} className="animate-spin" /> Expires: {timeUntilMidnight}
                   </div>
                 )}
-
                 <div className="flex justify-between items-start mb-4">
                   <div className={`p-3 rounded-2xl ${mock.is_daily ? 'bg-white/20' : 'bg-blue-50 dark:bg-gray-700 text-blue-600'}`}>{isDone ? <Lock size={24} /> : <Zap size={24} />}</div>
                   <span className="flex items-center gap-1 bg-black/10 px-2 py-1 rounded-lg text-[10px] font-bold uppercase tracking-widest">
-                    {mock.is_strict && <ShieldAlert size={12} className="text-red-400 mr-1" />}
                     <Clock size={12} /> {mock.time_limit}m
                   </span>
                 </div>
@@ -267,20 +258,26 @@ export default function MockEngine({ user, onFinish, setIsExamLocked, setIsDarkM
     );
   }
 
-  // --- VIEW: RESULTS ---
+  // --- VIEW: RESULTS & REVIEW ---
   if (isFinished) {
     const finalScore = Math.round((questions.filter((q, i) => selectedOptions[i] === q.correct_option).length / questions.length) * 100);
+    
     if (showReview) {
       return (
-        <div className="space-y-6 max-w-3xl mx-auto pb-20">
-          <button onClick={() => setShowReview(false)} className="bg-white dark:bg-gray-800 px-6 py-3 rounded-2xl shadow-sm border dark:border-gray-700 font-black uppercase text-xs flex items-center gap-2 dark:text-white transition-all"><ArrowLeft size={16} /> Back</button>
+        <div className="space-y-6 max-w-3xl mx-auto pb-20 animate-in slide-in-from-bottom-4 duration-500">
+          <button onClick={() => setShowReview(false)} className="bg-white dark:bg-gray-800 px-6 py-3 rounded-2xl shadow-sm border dark:border-gray-700 font-black uppercase text-xs flex items-center gap-2 dark:text-white transition-all"><ArrowLeft size={16} /> Back to Result</button>
           {questions.map((q, idx) => (
-            <div key={idx} className={`p-8 rounded-[2.5rem] border-l-8 bg-white dark:bg-gray-800 shadow-xl ${selectedOptions[idx] === q.correct_option ? 'border-green-500' : 'border-red-500'}`}>
-              <p className="font-bold text-lg dark:text-white mb-4 leading-tight">{idx + 1}. {q.question}</p>
+            <div key={idx} className={`p-8 rounded-[2.5rem] border-l-8 bg-white dark:bg-gray-800 shadow-xl transition-all ${selectedOptions[idx] === q.correct_option ? 'border-green-500' : 'border-red-500'}`}>
+              <div className="flex justify-between items-start mb-4">
+                 <span className="text-[10px] font-black uppercase text-gray-400 tracking-widest">Question {idx + 1}</span>
+                 {selectedOptions[idx] === q.correct_option ? <CheckCircle className="text-green-500" size={20} /> : <ShieldAlert className="text-red-500" size={20} />}
+              </div>
+              <p className="font-bold text-lg dark:text-white mb-6 leading-tight">{q.question}</p>
               <div className="grid grid-cols-1 gap-3">
                 {q.options.map((opt, i) => (
-                  <div key={i} className={`p-4 rounded-2xl text-sm font-bold flex justify-between items-center ${i === q.correct_option ? 'bg-green-100 text-green-700' : i === selectedOptions[idx] ? 'bg-red-100 text-red-700' : 'bg-gray-50 dark:bg-gray-900 opacity-60'}`}>
-                    <span>{opt}</span>{i === q.correct_option && <CheckCircle size={16} />}
+                  <div key={i} className={`p-4 rounded-2xl text-sm font-bold flex justify-between items-center ${i === q.correct_option ? 'bg-green-100 text-green-700 dark:bg-green-900/20 dark:text-green-400' : i === selectedOptions[idx] ? 'bg-red-100 text-red-700 dark:bg-red-900/20 dark:text-red-400' : 'bg-gray-50 dark:bg-gray-900 opacity-60'}`}>
+                    <span>{opt}</span>
+                    {i === q.correct_option && <span className="text-[8px] font-black uppercase bg-green-500 text-white px-2 py-1 rounded-md ml-2">Correct</span>}
                   </div>
                 ))}
               </div>
@@ -289,6 +286,7 @@ export default function MockEngine({ user, onFinish, setIsExamLocked, setIsDarkM
         </div>
       );
     }
+
     return (
       <div className="max-w-md mx-auto text-center p-12 bg-white dark:bg-gray-800 rounded-[40px] shadow-2xl border-t-8 border-green-500 relative overflow-hidden">
         {showStreakAnim && (
@@ -299,12 +297,12 @@ export default function MockEngine({ user, onFinish, setIsExamLocked, setIsDarkM
           </div>
         )}
         <Award size={64} className="mx-auto text-green-500 mb-6" />
-        <h2 className="text-3xl font-black dark:text-white uppercase">Neural Record</h2>
+        <h2 className="text-3xl font-black dark:text-white uppercase tracking-tighter">Neural Record</h2>
         <div className="text-6xl font-black text-blue-600 my-6">{finalScore}%</div>
-        <p className="text-gray-400 font-bold text-[10px] uppercase mb-6 tracking-widest italic">Factored into lifetime Neural GPA</p>
+        <p className="text-gray-400 font-bold text-[10px] uppercase mb-6 tracking-widest italic">Factored into lifetime GPA</p>
         <div className="flex flex-col gap-4">
-            <button onClick={() => setShowReview(true)} className="flex items-center justify-center gap-2 w-full bg-gray-100 dark:bg-gray-700 py-4 rounded-2xl font-black uppercase text-xs"><Eye size={20} /> Review</button>
-            <button onClick={handleReturn} className="w-full bg-blue-600 text-white py-4 rounded-2xl font-black uppercase text-xs shadow-xl">Return</button>
+            <button onClick={() => setShowReview(true)} className="flex items-center justify-center gap-2 w-full bg-gray-100 dark:bg-gray-700 py-4 rounded-2xl font-black uppercase text-xs"><Eye size={20} /> Review Answers</button>
+            <button onClick={handleReturn} className="w-full bg-blue-600 text-white py-4 rounded-2xl font-black uppercase text-xs shadow-xl">Return to Portal</button>
         </div>
       </div>
     );
@@ -312,7 +310,7 @@ export default function MockEngine({ user, onFinish, setIsExamLocked, setIsDarkM
 
   // --- VIEW: CBT ---
   const activeSubData = subjects.find(s => s.subject === activeSubject);
-  const isFinalMinute = timeLeft <= 60; // 🔥 WARNING TRIGGER
+  const isFinalMinute = timeLeft <= 60; 
 
   return (
     <div className="max-w-6xl mx-auto space-y-6">
@@ -323,18 +321,18 @@ export default function MockEngine({ user, onFinish, setIsExamLocked, setIsDarkM
               className={`px-6 py-2 rounded-xl font-black text-[10px] uppercase transition-all ${activeSubject === s.subject ? 'bg-blue-600 text-white shadow-lg' : 'bg-gray-100 dark:bg-gray-900 text-gray-400'}`}>{s.subject}</button>
           ))}
         </div>
-        
-        {/* 🔥 TIMER UI WITH PULSING ALARM */}
         <div className={`flex items-center gap-3 font-mono text-xl font-bold px-6 py-2 rounded-xl transition-all duration-300 ${isFinalMinute ? 'bg-red-600 text-white animate-pulse' : 'bg-black text-white'}`}>
           <Timer size={18} className={isFinalMinute ? 'animate-spin' : ''} /> 
           {Math.max(0, Math.floor(timeLeft / 60))}:{String(Math.max(0, timeLeft % 60)).padStart(2, '0')}
         </div>
       </div>
+
       <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
         <div className="lg:col-span-3 bg-white dark:bg-gray-800 p-10 rounded-[3rem] shadow-2xl border dark:border-gray-700 relative">
           {selectedMock.is_strict && <div className="absolute top-6 right-10 text-red-500 font-black text-[10px] uppercase flex items-center gap-2"><ShieldAlert size={14} /> Strikes: {warnings}/2</div>}
           <h4 className="text-blue-600 font-black uppercase text-[10px] mb-4 italic">{activeSubject} / Q{currentIdx + 1}</h4>
           <h3 className="text-2xl font-bold dark:text-white mb-10 leading-tight">{activeSubData.questions[currentIdx].question}</h3>
+          
           <div className="grid grid-cols-1 gap-4">
             {activeSubData.questions[currentIdx].options.map((opt, i) => {
               const absIdx = getAbsIdx(activeSubject, currentIdx);
@@ -346,14 +344,16 @@ export default function MockEngine({ user, onFinish, setIsExamLocked, setIsDarkM
               )
             })}
           </div>
+
           <div className="mt-12 flex justify-between pt-8 border-t dark:border-gray-700">
             <button disabled={currentIdx === 0} onClick={() => setCurrentIdx(prev => prev - 1)} className="px-6 py-2 text-gray-400 font-bold uppercase text-xs disabled:opacity-30">Previous</button>
-            <button disabled={currentIdx === activeSubData.questions.length - 1} onClick={() => setCurrentIdx(prev => prev + 1)} className="px-10 py-4 bg-blue-600 text-white rounded-2xl font-black uppercase text-xs shadow-lg disabled:opacity-30">Next</button>
+            <button disabled={currentIdx === activeSubData.questions.length - 1} onClick={() => setCurrentIdx(prev => prev + 1)} className="px-10 py-4 bg-blue-600 text-white rounded-2xl font-black uppercase text-xs shadow-lg disabled:opacity-30 hover:scale-105 active:scale-95 transition-all">Next Question</button>
           </div>
         </div>
+
         <div className="bg-white dark:bg-gray-800 p-8 rounded-[3rem] shadow-xl border dark:border-gray-700 text-center">
-          <p className="text-[10px] font-black uppercase text-gray-400 mb-6 tracking-widest">Questions Palette</p>
-          <div className="grid grid-cols-4 gap-2 mb-8">
+          <p className="text-[10px] font-black uppercase text-gray-400 mb-6 tracking-widest">Question Palette</p>
+          <div className="grid grid-cols-4 gap-2 mb-8 max-h-[300px] overflow-y-auto pr-2 custom-scrollbar">
             {activeSubData.questions.map((_, i) => {
               const absIdx = getAbsIdx(activeSubject, i);
               const isDone = selectedOptions[absIdx] !== undefined;
@@ -363,7 +363,7 @@ export default function MockEngine({ user, onFinish, setIsExamLocked, setIsDarkM
               )
             })}
           </div>
-          <button onClick={() => { if(window.confirm("Submit transmission and end simulation?")) handleSubmit(false); }} className="w-full bg-red-600 text-white py-4 rounded-2xl font-black uppercase text-xs shadow-xl active:scale-95 transition-all">Submit Test</button>
+          <button onClick={() => { if(window.confirm("Submit final neural transmission?")) handleSubmit(false); }} className="w-full bg-red-600 text-white py-4 rounded-2xl font-black uppercase text-xs shadow-xl active:scale-95 transition-all">Submit Test</button>
         </div>
       </div>
     </div>
