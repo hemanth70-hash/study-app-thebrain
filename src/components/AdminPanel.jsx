@@ -15,7 +15,7 @@ export default function AdminPanel() {
   const [isDailyQuickMock, setIsDailyQuickMock] = useState(false);
   const [isStrict, setIsStrict] = useState(false); 
   const [status, setStatus] = useState('');
-  const [allMocks, setAllMocks] = useState([]); // 🔥 For Management & Deletion
+  const [allMocks, setAllMocks] = useState([]); // 🔥 For Grid Management
 
   // --- 2. ACCESS KEY & ROSTER STATE ---
   const [assignedName, setAssignedName] = useState('');
@@ -45,7 +45,7 @@ export default function AdminPanel() {
         supabase.from('authorized_users').select('*').order('created_at', { ascending: false }),
         supabase.from('admin_requests').select('*').order('created_at', { ascending: false }),
         supabase.from('profiles').select('*').order('total_exams_completed', { ascending: false }),
-        supabase.from('daily_mocks').select('*').order('created_at', { ascending: false }) // 🔥 Load all mocks
+        supabase.from('daily_mocks').select('*').order('created_at', { ascending: false })
       ]);
 
       if (logs.data) setHistory(logs.data);
@@ -80,7 +80,7 @@ export default function AdminPanel() {
     if (!error) { setAssignedName(''); fetchAdminData(); alert(`Key Primed: ${newKey}`); }
   };
 
-  // 🔥 REFINED UPLOAD: Fixes 409 Conflicts & Supports Subject Variance
+  // 🔥 REFINED UPLOAD: Supports Subject Variance & Logic Reset
   const handleBulkUpload = async () => {
     if (!mockTitle || !bulkData) return setStatus('❌ Fields Required.');
     setStatus('⏳ Publishing to Grid...');
@@ -88,7 +88,7 @@ export default function AdminPanel() {
       const parsedQuestions = JSON.parse(bulkData);
       const today = new Date().toISOString().split('T')[0];
 
-      // If Daily Mock, we MUST clear existing ones to prevent 409 Conflict
+      // Reset System: If Daily, clear conflicts
       if (isDailyQuickMock) {
         const { data: old } = await supabase.from('daily_mocks').select('id').eq('is_daily', true).eq('mock_date', today);
         if (old?.length > 0) {
@@ -99,25 +99,23 @@ export default function AdminPanel() {
         }
       }
 
-      // Insert Logic: Regular mocks get a unique REG- timestamp to avoid ID conflicts
       const { error } = await supabase.from('daily_mocks').insert([{ 
         mock_title: mockTitle, 
-        questions: parsedQuestions, 
+        questions: parsedQuestions, // Subject Variance Nested JSON
         is_daily: isDailyQuickMock, 
         is_strict: isStrict, 
         time_limit: parseInt(timeLimit), 
-        mock_date: isDailyQuickMock ? today : `REG-${Date.now()}` 
+        mock_date: today // Keep valid date format for DB compatibility
       }]);
 
       if (error) throw error;
-      
       setStatus(`🎉 ${isDailyQuickMock ? 'Daily' : 'Regular'} Published!`);
       setBulkData(''); setMockTitle(''); fetchAdminData();
     } catch (err) { setStatus(`❌ Error: ${err.message}`); }
   };
 
   const deleteMock = async (id) => {
-    if (!window.confirm("Permanent Deletion? This will wipe all linked scores.")) return;
+    if (!window.confirm("Terminate Simulation Data?")) return;
     await supabase.from('scores').delete().eq('mock_id', id);
     await supabase.from('completed_daily_mocks').delete().eq('mock_id', id);
     await supabase.from('daily_mocks').delete().eq('id', id);
@@ -125,7 +123,7 @@ export default function AdminPanel() {
   };
 
   const uploadResource = async () => {
-    if (!bookTitle || !bookUrl) return alert("Library data missing.");
+    if (!bookTitle || !bookUrl) return alert("Knowledge data missing.");
     const { error } = await supabase.from('study_resources').insert([{ title: bookTitle, file_url: bookUrl, category: bookCategory }]);
     if (!error) { setBookTitle(''); setBookUrl(''); alert("Knowledge Synced."); }
   };
@@ -166,14 +164,14 @@ export default function AdminPanel() {
         {showRoster && (
           <div className="overflow-x-auto animate-in slide-in-from-top-4 duration-500 mt-8">
             <table className="w-full text-left border-separate border-spacing-y-3">
-              <thead><tr className="text-[10px] font-black uppercase text-gray-400 tracking-[0.2em]"><th className="px-6 pb-2">Node</th><th className="px-6 pb-2">Role & Focus</th><th className="px-6 pb-2 text-center">Neural GPA</th><th className="px-6 pb-2 text-right">Stats</th></tr></thead>
+              <thead><tr className="text-[10px] font-black uppercase text-gray-400 tracking-[0.2em]"><th className="px-6 pb-2">Node Identity</th><th className="px-6 pb-2">Role & Focus</th><th className="px-6 pb-2 text-center">Neural GPA</th><th className="px-6 pb-2 text-right">Activity</th></tr></thead>
               <tbody>
                 {allUsers.map((u) => {
                   const r = getNeuralRank(u.total_percentage_points, u.total_exams_completed);
                   return (
                     <tr key={u.id} className="bg-gray-50 dark:bg-gray-900/50 rounded-2xl group transition-all hover:scale-[1.01]">
                       <td className="px-6 py-4 rounded-l-2xl border-l-4 border-transparent group-hover:border-blue-500">
-                        <div className="flex items-center gap-3"><img src={`https://api.dicebear.com/7.x/${u.gender === 'neutral' ? 'bottts' : 'avataaars'}/svg?seed=${u.avatar_seed || u.username}`} className="w-10 h-10 rounded-xl bg-white p-1" /><div className="flex flex-col"><span className="font-black dark:text-white uppercase text-sm">{u.username}</span><span className={`text-[8px] font-black uppercase tracking-widest ${r.color}`}>{r.label}</span></div></div>
+                        <div className="flex items-center gap-3"><img src={`https://api.dicebear.com/7.x/${u.gender === 'neutral' ? 'bottts' : 'avataaars'}/svg?seed=${u.username}`} className="w-10 h-10 rounded-xl bg-white p-1" /><div className="flex flex-col"><span className="font-black dark:text-white uppercase text-sm">{u.username}</span><span className={`text-[8px] font-black uppercase tracking-widest ${r.color}`}>{r.label}</span></div></div>
                       </td>
                       <td className="px-6 py-4 text-[10px] font-bold text-gray-500 uppercase tracking-tighter">
                         <div className="flex items-center gap-2"><GraduationCap size={14} className="text-blue-500"/> {u.education || 'Aspirant'}</div>
@@ -194,32 +192,41 @@ export default function AdminPanel() {
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-10">
         
-        {/* 3. MOCK CREATOR (Toggles restore the circles you drew) */}
+        {/* 3. MOCK CREATOR */}
         <div className="bg-white dark:bg-gray-800 p-8 rounded-[32px] shadow-xl border dark:border-gray-700">
           <div className="flex items-center gap-3 mb-6 text-blue-600"><UploadCloud size={32} /><h2 className="text-2xl font-black uppercase dark:text-white">Mock Creator</h2></div>
           <div className="space-y-4">
             <input type="text" placeholder="Mock Title" className="w-full p-4 rounded-2xl border dark:bg-gray-900 dark:text-white font-bold outline-none" value={mockTitle} onChange={(e) => setMockTitle(e.target.value)} />
-            <div className="grid grid-cols-2 gap-4">
-              <button type="button" onClick={() => setIsDailyQuickMock(!isDailyQuickMock)} className={`p-4 rounded-2xl font-black uppercase text-[10px] flex items-center justify-center gap-2 transition-all ${isDailyQuickMock ? 'bg-orange-500 text-white shadow-lg' : 'bg-gray-100 dark:bg-gray-700 text-gray-400'}`}><Zap size={14} /> {isDailyQuickMock ? 'Daily' : 'Regular'}</button>
-              <button type="button" onClick={() => setIsStrict(!isStrict)} className={`p-4 rounded-2xl font-black uppercase text-[10px] flex items-center justify-center gap-2 transition-all ${isStrict ? 'bg-red-600 text-white shadow-lg' : 'bg-gray-100 dark:bg-gray-700 text-gray-400'}`}><ShieldAlert size={14} /> Strict: {isStrict ? 'ON' : 'OFF'}</button>
+            
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+               {/* TIMER */}
+               <div className="relative">
+                 <input type="number" className="w-full p-4 rounded-2xl border dark:bg-gray-900 dark:text-white font-black outline-none" value={timeLimit} onChange={(e) => setTimeLimit(e.target.value)} />
+                 <Clock size={16} className="absolute right-4 top-5 text-gray-400" />
+               </div>
+               {/* TYPE SWITCH */}
+               <button type="button" onClick={() => setIsDailyQuickMock(!isDailyQuickMock)} className={`p-4 rounded-2xl font-black uppercase text-[10px] flex items-center justify-center gap-2 transition-all ${isDailyQuickMock ? 'bg-orange-500 text-white shadow-lg' : 'bg-gray-100 dark:bg-gray-700 text-gray-400'}`}><Zap size={14} /> {isDailyQuickMock ? 'Daily' : 'Regular'}</button>
+               {/* STRICT SWITCH */}
+               <button type="button" onClick={() => setIsStrict(!isStrict)} className={`p-4 rounded-2xl font-black uppercase text-[10px] flex items-center justify-center gap-2 transition-all ${isStrict ? 'bg-red-600 text-white shadow-lg' : 'bg-gray-100 dark:bg-gray-700 text-gray-400'}`}><ShieldAlert size={14} /> Strict: {isStrict ? 'ON' : 'OFF'}</button>
             </div>
-            <textarea className="w-full h-40 p-4 font-mono text-[10px] border dark:bg-gray-900 dark:text-white rounded-2xl outline-none" placeholder='Paste JSON array (Subject-First for variance)...' value={bulkData} onChange={(e) => setBulkData(e.target.value)} />
-            <button type="button" onClick={handleBulkUpload} className="w-full bg-blue-600 text-white py-4 rounded-2xl font-black uppercase tracking-widest shadow-xl active:scale-95">Publish Mock</button>
+
+            <textarea className="w-full h-40 p-4 font-mono text-[10px] border dark:bg-gray-900 dark:text-white rounded-2xl outline-none" placeholder='Paste Subject-Variance JSON array...' value={bulkData} onChange={(e) => setBulkData(e.target.value)} />
+            <button type="button" onClick={handleBulkUpload} className="w-full bg-blue-600 text-white py-4 rounded-2xl font-black uppercase tracking-widest shadow-xl active:scale-95 transition-all">Publish Mock</button>
             {status && <p className="text-center font-black uppercase text-xs text-green-500 mt-2">{status}</p>}
           </div>
         </div>
 
-        {/* 4. MOCK MANAGEMENT (DELETION HUB) */}
+        {/* 4. MOCK MANAGEMENT (DELETION) */}
         <div className="bg-white dark:bg-gray-800 p-8 rounded-[32px] shadow-xl border dark:border-gray-700">
-          <div className="flex items-center gap-3 mb-6 text-red-500"><ListFilter size={32} /><h2 className="text-2xl font-black uppercase dark:text-white">Mock Grid Manager</h2></div>
+          <div className="flex items-center gap-3 mb-6 text-red-500"><ListFilter size={32} /><h2 className="text-2xl font-black uppercase dark:text-white">Grid Management</h2></div>
           <div className="space-y-3 max-h-[400px] overflow-y-auto pr-2 custom-scrollbar">
             {allMocks.map(m => (
               <div key={m.id} className="p-4 bg-gray-50 dark:bg-gray-900 rounded-2xl border dark:border-gray-800 flex justify-between items-center group transition-all">
                 <div>
                   <p className="font-black dark:text-white text-xs uppercase">{m.mock_title}</p>
-                  <p className="text-[8px] font-bold text-gray-400 uppercase tracking-widest">{m.is_daily ? 'Daily Slot' : 'Practice Library'} • {m.is_strict ? 'Strict' : 'Standard'}</p>
+                  <p className="text-[8px] font-bold text-gray-400 uppercase tracking-widest">{m.is_daily ? 'Daily Slot' : 'Practice Library'} • {m.is_strict ? 'Strict' : 'Casual'}</p>
                 </div>
-                <button onClick={() => deleteMock(m.id)} className="text-gray-400 hover:text-red-500"><Trash2 size={18} /></button>
+                <button onClick={() => deleteMock(m.id)} className="text-gray-400 hover:text-red-500 transition-colors"><Trash2 size={18} /></button>
               </div>
             ))}
           </div>
@@ -227,26 +234,26 @@ export default function AdminPanel() {
 
         {/* 5. LIBRARY MANAGER */}
         <div className="bg-white dark:bg-gray-800 p-8 rounded-[32px] shadow-xl border dark:border-gray-700">
-          <div className="flex items-center gap-3 mb-6 text-orange-500"><BookOpen size={32} /><h2 className="text-2xl font-black uppercase dark:text-white">Knowledge Base</h2></div>
+          <div className="flex items-center gap-3 mb-6 text-orange-500"><BookOpen size={32} /><h2 className="text-2xl font-black uppercase dark:text-white">Library Manager</h2></div>
           <div className="space-y-4">
             <input className="w-full p-4 rounded-2xl border dark:bg-gray-900 dark:text-white outline-none" placeholder="Resource Title" value={bookTitle} onChange={e => setBookTitle(e.target.value)} />
-            <input className="w-full p-4 rounded-2xl border dark:bg-gray-900 dark:text-white outline-none" placeholder="PDF/Cloudinary URL" value={bookUrl} onChange={e => setBookUrl(e.target.value)} />
+            <input className="w-full p-4 rounded-2xl border dark:bg-gray-900 dark:text-white outline-none" placeholder="PDF URL" value={bookUrl} onChange={e => setBookUrl(e.target.value)} />
             <select className="w-full p-4 rounded-2xl border dark:bg-gray-900 dark:text-white outline-none font-bold" value={bookCategory} onChange={e => setBookCategory(e.target.value)}>
               {['Physics', 'Chemistry', 'Biology', 'Maths', 'General'].map(s => <option key={s} value={s}>{s}</option>)}
             </select>
-            <button onClick={uploadResource} className="w-full bg-orange-500 text-white py-4 rounded-2xl font-black uppercase shadow-lg active:scale-95 transition-all">Sync Resource</button>
+            <button onClick={uploadResource} className="w-full bg-orange-500 text-white py-4 rounded-2xl font-black uppercase shadow-lg">Upload Resource</button>
           </div>
         </div>
 
         {/* 6. ACCESS KEYS */}
         <div className="bg-white dark:bg-gray-800 p-8 rounded-[32px] shadow-xl border dark:border-gray-700">
-          <div className="flex items-center gap-3 mb-6 text-indigo-600"><Key size={32} /><h2 className="text-2xl font-black uppercase dark:text-white">Node Authorization</h2></div>
-          <div className="flex gap-2 mb-6"><input type="text" placeholder="Identity Name" className="flex-1 p-4 rounded-2xl border dark:bg-gray-900 dark:text-white outline-none" value={assignedName} onChange={(e) => setAssignedName(e.target.value)} /><button onClick={generateKey} className="bg-indigo-600 text-white p-4 rounded-2xl hover:bg-indigo-700"><UserPlus size={24} /></button></div>
+          <div className="flex items-center gap-3 mb-6 text-indigo-600"><Key size={32} /><h2 className="text-2xl font-black uppercase dark:text-white">Access Keys</h2></div>
+          <div className="flex gap-2 mb-6"><input type="text" placeholder="Recipient Name" className="flex-1 p-4 rounded-2xl border dark:bg-gray-900 dark:text-white outline-none" value={assignedName} onChange={(e) => setAssignedName(e.target.value)} /><button onClick={generateKey} className="bg-indigo-600 text-white p-4 rounded-2xl hover:bg-indigo-700"><UserPlus size={24} /></button></div>
           <div className="space-y-2 max-h-64 overflow-y-auto pr-2 custom-scrollbar">
             {activeKeys.map(k => (
-              <div key={k.id} className="p-4 bg-gray-50 dark:bg-gray-900 rounded-2xl border dark:border-gray-800 flex justify-between items-center">
-                <div><p className="font-black text-indigo-600 text-xs tracking-widest">{k.access_key}</p><p className="text-[10px] font-bold text-gray-400 uppercase">Linked: {k.assigned_to}</p></div>
-                <button onClick={async () => { await supabase.from('authorized_users').delete().eq('id', k.id); fetchAdminData(); }} className="text-gray-300 hover:text-red-500 transition-all"><Trash2 size={16} /></button>
+              <div key={k.id} className="p-4 bg-gray-50 dark:bg-gray-900 rounded-2xl border dark:border-gray-800 flex justify-between items-center transition-all">
+                <div><p className="font-black text-indigo-600 text-xs tracking-widest">{k.access_key}</p><p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Node: {k.assigned_to}</p></div>
+                <button onClick={async () => { await supabase.from('authorized_users').delete().eq('id', k.id); fetchAdminData(); }} className="text-gray-300 hover:text-red-500 transition-colors"><Trash2 size={16} /></button>
               </div>
             ))}
           </div>
@@ -275,8 +282,8 @@ export default function AdminPanel() {
            <h3 className="text-xl font-black mb-6 flex items-center gap-3 text-blue-600 uppercase tracking-tighter"><History size={24} /> Dev Logs</h3>
            <div className="space-y-3 mb-6">
             <input className="w-full bg-gray-50 dark:bg-gray-900 p-4 rounded-2xl text-sm border dark:border-gray-700 outline-none" placeholder="Version Name" value={verName} onChange={e => setVerName(e.target.value)} />
-            <textarea className="w-full bg-gray-50 dark:bg-gray-900 p-4 rounded-2xl text-sm border dark:border-gray-700 outline-none h-20 resize-none" placeholder="Details..." value={verDesc} onChange={e => setVerDesc(e.target.value)} />
-            <button onClick={saveLog} className="w-full bg-indigo-600 text-white py-4 rounded-2xl font-black uppercase text-xs shadow-lg hover:bg-indigo-700 active:scale-95 transition-all">Commit Log</button>
+            <textarea className="w-full bg-gray-50 dark:bg-gray-900 p-4 rounded-2xl text-sm border dark:border-gray-700 outline-none h-20 resize-none" placeholder="Commit details..." value={verDesc} onChange={e => setVerDesc(e.target.value)} />
+            <button onClick={saveLog} className="w-full bg-indigo-600 text-white py-4 rounded-2xl font-black uppercase text-xs shadow-lg hover:bg-indigo-700 active:scale-95 transition-all">Commit Update</button>
           </div>
           <div className="space-y-4 max-h-60 overflow-y-auto pr-2 custom-scrollbar">
             {history.map(log => (
