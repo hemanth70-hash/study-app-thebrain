@@ -45,7 +45,7 @@ export default function AdminPanel() {
         supabase.from('authorized_users').select('*').order('created_at', { ascending: false }),
         supabase.from('admin_requests').select('*').order('created_at', { ascending: false }),
         supabase.from('profiles').select('*').order('total_exams_completed', { ascending: false }),
-        supabase.from('daily_mocks').select('*').order('created_at', { ascending: false })
+        supabase.from('daily_mocks').select('*').order('created_at', { ascending: false }) 
       ]);
 
       if (logs.data) setHistory(logs.data);
@@ -80,7 +80,6 @@ export default function AdminPanel() {
     if (!error) { setAssignedName(''); fetchAdminData(); alert(`Key Primed: ${newKey}`); }
   };
 
-  // 🔥 REFINED UPLOAD: Supports Subject Variance & Logic Reset
   const handleBulkUpload = async () => {
     if (!mockTitle || !bulkData) return setStatus('❌ Fields Required.');
     setStatus('⏳ Publishing to Grid...');
@@ -88,7 +87,6 @@ export default function AdminPanel() {
       const parsedQuestions = JSON.parse(bulkData);
       const today = new Date().toISOString().split('T')[0];
 
-      // Reset System: If Daily, clear conflicts
       if (isDailyQuickMock) {
         const { data: old } = await supabase.from('daily_mocks').select('id').eq('is_daily', true).eq('mock_date', today);
         if (old?.length > 0) {
@@ -101,29 +99,38 @@ export default function AdminPanel() {
 
       const { error } = await supabase.from('daily_mocks').insert([{ 
         mock_title: mockTitle, 
-        questions: parsedQuestions, // Subject Variance Nested JSON
+        questions: parsedQuestions, 
         is_daily: isDailyQuickMock, 
         is_strict: isStrict, 
         time_limit: parseInt(timeLimit), 
-        mock_date: today // Keep valid date format for DB compatibility
+        mock_date: today 
       }]);
 
       if (error) throw error;
-      setStatus(`🎉 ${isDailyQuickMock ? 'Daily' : 'Regular'} Published!`);
+      setStatus(`🎉 Published Successfully!`);
       setBulkData(''); setMockTitle(''); fetchAdminData();
-    } catch (err) { setStatus(`❌ Error: ${err.message}`); }
+    } catch (err) { 
+      console.error("Upload Error:", err);
+      setStatus(`❌ Error: ${err.message}`); 
+    }
   };
 
+  // 🔥 NEW HANDLER: Recursive Deletion (Fixes your delete issue)
   const deleteMock = async (id) => {
-    if (!window.confirm("Terminate Simulation Data?")) return;
-    await supabase.from('scores').delete().eq('mock_id', id);
-    await supabase.from('completed_daily_mocks').delete().eq('mock_id', id);
-    await supabase.from('daily_mocks').delete().eq('id', id);
-    fetchAdminData();
+    if (!window.confirm("PERMANENT TERMINATION: Wipe mock and all student scores?")) return;
+    setStatus('⏳ Purging Grid Node...');
+    try {
+        await supabase.from('scores').delete().eq('mock_id', id);
+        await supabase.from('completed_daily_mocks').delete().eq('mock_id', id);
+        const { error } = await supabase.from('daily_mocks').delete().eq('id', id);
+        if (error) throw error;
+        setStatus('✅ Node Purged.');
+        fetchAdminData();
+    } catch (err) { setStatus(`❌ Terminate Failed: ${err.message}`); }
   };
 
   const uploadResource = async () => {
-    if (!bookTitle || !bookUrl) return alert("Knowledge data missing.");
+    if (!bookTitle || !bookUrl) return alert("Fill Library metadata.");
     const { error } = await supabase.from('study_resources').insert([{ title: bookTitle, file_url: bookUrl, category: bookCategory }]);
     if (!error) { setBookTitle(''); setBookUrl(''); alert("Knowledge Synced."); }
   };
@@ -151,7 +158,7 @@ export default function AdminPanel() {
         <div className="flex items-center gap-3 mb-6"><Megaphone size={32} className="animate-bounce" /><h2 className="text-2xl font-black uppercase tracking-tighter">Global Broadcast</h2></div>
         <div className="flex flex-col md:flex-row gap-4">
           <input className="flex-1 p-4 rounded-2xl text-gray-900 font-bold border-none outline-none focus:ring-4 focus:ring-blue-400" placeholder="Type transmission..." value={announcement} onChange={(e) => setAnnouncement(e.target.value)} />
-          <button onClick={postAnnouncement} className="bg-white text-blue-600 px-10 py-4 rounded-2xl font-black uppercase tracking-widest hover:bg-blue-50 transition-all shadow-lg active:scale-95">Broadcast</button>
+          <button onClick={postAnnouncement} className="bg-white text-blue-600 px-10 py-4 rounded-2xl font-black uppercase tracking-widest hover:bg-blue-50 active:scale-95 shadow-lg transition-all">Broadcast</button>
         </div>
       </div>
 
@@ -164,7 +171,7 @@ export default function AdminPanel() {
         {showRoster && (
           <div className="overflow-x-auto animate-in slide-in-from-top-4 duration-500 mt-8">
             <table className="w-full text-left border-separate border-spacing-y-3">
-              <thead><tr className="text-[10px] font-black uppercase text-gray-400 tracking-[0.2em]"><th className="px-6 pb-2">Node Identity</th><th className="px-6 pb-2">Role & Focus</th><th className="px-6 pb-2 text-center">Neural GPA</th><th className="px-6 pb-2 text-right">Activity</th></tr></thead>
+              <thead><tr className="text-[10px] font-black uppercase text-gray-400 tracking-[0.2em]"><th className="px-6 pb-2">Node</th><th className="px-6 pb-2">Role & Focus</th><th className="px-6 pb-2 text-center">Neural GPA</th><th className="px-6 pb-2 text-right">Stats</th></tr></thead>
               <tbody>
                 {allUsers.map((u) => {
                   const r = getNeuralRank(u.total_percentage_points, u.total_exams_completed);
@@ -197,7 +204,6 @@ export default function AdminPanel() {
           <div className="flex items-center gap-3 mb-6 text-blue-600"><UploadCloud size={32} /><h2 className="text-2xl font-black uppercase dark:text-white">Mock Creator</h2></div>
           <div className="space-y-4">
             <input type="text" placeholder="Mock Title" className="w-full p-4 rounded-2xl border dark:bg-gray-900 dark:text-white font-bold outline-none" value={mockTitle} onChange={(e) => setMockTitle(e.target.value)} />
-            
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                {/* TIMER */}
                <div className="relative">
@@ -209,22 +215,21 @@ export default function AdminPanel() {
                {/* STRICT SWITCH */}
                <button type="button" onClick={() => setIsStrict(!isStrict)} className={`p-4 rounded-2xl font-black uppercase text-[10px] flex items-center justify-center gap-2 transition-all ${isStrict ? 'bg-red-600 text-white shadow-lg' : 'bg-gray-100 dark:bg-gray-700 text-gray-400'}`}><ShieldAlert size={14} /> Strict: {isStrict ? 'ON' : 'OFF'}</button>
             </div>
-
-            <textarea className="w-full h-40 p-4 font-mono text-[10px] border dark:bg-gray-900 dark:text-white rounded-2xl outline-none" placeholder='Paste Subject-Variance JSON array...' value={bulkData} onChange={(e) => setBulkData(e.target.value)} />
+            <textarea className="w-full h-40 p-4 font-mono text-[10px] border dark:bg-gray-900 dark:text-white rounded-2xl outline-none" placeholder='Paste JSON array...' value={bulkData} onChange={(e) => setBulkData(e.target.value)} />
             <button type="button" onClick={handleBulkUpload} className="w-full bg-blue-600 text-white py-4 rounded-2xl font-black uppercase tracking-widest shadow-xl active:scale-95 transition-all">Publish Mock</button>
             {status && <p className="text-center font-black uppercase text-xs text-green-500 mt-2">{status}</p>}
           </div>
         </div>
 
-        {/* 4. MOCK MANAGEMENT (DELETION) */}
+        {/* 4. MOCK MANAGEMENT (GRID MANAGER) */}
         <div className="bg-white dark:bg-gray-800 p-8 rounded-[32px] shadow-xl border dark:border-gray-700">
           <div className="flex items-center gap-3 mb-6 text-red-500"><ListFilter size={32} /><h2 className="text-2xl font-black uppercase dark:text-white">Grid Management</h2></div>
           <div className="space-y-3 max-h-[400px] overflow-y-auto pr-2 custom-scrollbar">
-            {allMocks.map(m => (
+            {allMocks.length === 0 ? <p className="text-gray-400 text-center py-10 uppercase text-xs font-black opacity-40 tracking-widest">No Active Nodes</p> : allMocks.map(m => (
               <div key={m.id} className="p-4 bg-gray-50 dark:bg-gray-900 rounded-2xl border dark:border-gray-800 flex justify-between items-center group transition-all">
                 <div>
                   <p className="font-black dark:text-white text-xs uppercase">{m.mock_title}</p>
-                  <p className="text-[8px] font-bold text-gray-400 uppercase tracking-widest">{m.is_daily ? 'Daily Slot' : 'Practice Library'} • {m.is_strict ? 'Strict' : 'Casual'}</p>
+                  <p className="text-[8px] font-bold text-gray-400 uppercase tracking-widest">{m.is_daily ? 'Daily' : 'Regular'} • {m.is_strict ? 'Strict' : 'Casual'}</p>
                 </div>
                 <button onClick={() => deleteMock(m.id)} className="text-gray-400 hover:text-red-500 transition-colors"><Trash2 size={18} /></button>
               </div>
@@ -241,19 +246,19 @@ export default function AdminPanel() {
             <select className="w-full p-4 rounded-2xl border dark:bg-gray-900 dark:text-white outline-none font-bold" value={bookCategory} onChange={e => setBookCategory(e.target.value)}>
               {['Physics', 'Chemistry', 'Biology', 'Maths', 'General'].map(s => <option key={s} value={s}>{s}</option>)}
             </select>
-            <button onClick={uploadResource} className="w-full bg-orange-500 text-white py-4 rounded-2xl font-black uppercase shadow-lg">Upload Resource</button>
+            <button type="button" onClick={uploadResource} className="w-full bg-orange-500 text-white py-4 rounded-2xl font-black uppercase shadow-lg active:scale-95 transition-all">Upload Resource</button>
           </div>
         </div>
 
         {/* 6. ACCESS KEYS */}
         <div className="bg-white dark:bg-gray-800 p-8 rounded-[32px] shadow-xl border dark:border-gray-700">
           <div className="flex items-center gap-3 mb-6 text-indigo-600"><Key size={32} /><h2 className="text-2xl font-black uppercase dark:text-white">Access Keys</h2></div>
-          <div className="flex gap-2 mb-6"><input type="text" placeholder="Recipient Name" className="flex-1 p-4 rounded-2xl border dark:bg-gray-900 dark:text-white outline-none" value={assignedName} onChange={(e) => setAssignedName(e.target.value)} /><button onClick={generateKey} className="bg-indigo-600 text-white p-4 rounded-2xl hover:bg-indigo-700"><UserPlus size={24} /></button></div>
+          <div className="flex gap-2 mb-6"><input type="text" placeholder="Recipient Name" className="flex-1 p-4 rounded-2xl border dark:bg-gray-900 dark:text-white outline-none" value={assignedName} onChange={(e) => setAssignedName(e.target.value)} /><button type="button" onClick={generateKey} className="bg-indigo-600 text-white p-4 rounded-2xl hover:bg-indigo-700"><UserPlus size={24} /></button></div>
           <div className="space-y-2 max-h-64 overflow-y-auto pr-2 custom-scrollbar">
             {activeKeys.map(k => (
               <div key={k.id} className="p-4 bg-gray-50 dark:bg-gray-900 rounded-2xl border dark:border-gray-800 flex justify-between items-center transition-all">
                 <div><p className="font-black text-indigo-600 text-xs tracking-widest">{k.access_key}</p><p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Node: {k.assigned_to}</p></div>
-                <button onClick={async () => { await supabase.from('authorized_users').delete().eq('id', k.id); fetchAdminData(); }} className="text-gray-300 hover:text-red-500 transition-colors"><Trash2 size={16} /></button>
+                <button type="button" onClick={async () => { await supabase.from('authorized_users').delete().eq('id', k.id); fetchAdminData(); }} className="text-gray-300 hover:text-red-500 transition-colors"><Trash2 size={16} /></button>
               </div>
             ))}
           </div>
@@ -263,14 +268,14 @@ export default function AdminPanel() {
         <div className="bg-gray-900 text-white p-8 rounded-[32px] shadow-2xl border border-white/5 lg:col-span-1">
           <div className="flex items-center gap-3 mb-6 text-orange-400"><MessageSquare size={28} /><h2 className="text-xl font-black uppercase tracking-tight">Portal Signals</h2></div>
           <div className="space-y-4 max-h-[400px] overflow-y-auto pr-4 custom-scrollbar">
-            {userRequests.length === 0 ? <p className="text-gray-500 text-center py-10 font-bold uppercase opacity-50 text-xs">No signals...</p> : userRequests.map(req => (
+            {userRequests.length === 0 ? <p className="text-gray-500 text-center py-10 font-bold uppercase opacity-50 text-xs tracking-widest">No Signals...</p> : userRequests.map(req => (
               <div key={req.id} className="p-4 bg-white/5 rounded-2xl border border-white/10 hover:border-orange-500/50 transition-all relative group">
                 <div className="flex justify-between items-start mb-2"><span className="bg-orange-500/20 text-orange-400 px-2 py-0.5 rounded text-[8px] font-black uppercase tracking-widest">{req.request_type}</span><span className="text-[8px] text-gray-500 font-bold">{new Date(req.created_at).toLocaleDateString()}</span></div>
                 <p className="text-xs font-black text-gray-300 uppercase tracking-tighter">{req.user_name}</p>
                 <p className="text-[10px] text-gray-500 italic mt-1 mb-4">"{req.message}"</p>
                 <div className="flex gap-2">
-                  <button onClick={async () => { await supabase.from('admin_requests').delete().eq('id', req.id); fetchAdminData(); }} className="flex-1 bg-green-600/20 text-green-400 py-2 rounded-xl font-black text-[10px] hover:bg-green-600/40">RESOLVE</button>
-                  <button onClick={async () => { await supabase.from('admin_requests').delete().eq('id', req.id); fetchAdminData(); }} className="p-2 bg-red-600/20 text-red-400 rounded-xl hover:bg-red-600/40 transition-all"><X size={14} /></button>
+                  <button type="button" onClick={async () => { await supabase.from('admin_requests').delete().eq('id', req.id); fetchAdminData(); }} className="flex-1 bg-green-600/20 text-green-400 py-2 rounded-xl font-black text-[10px] hover:bg-green-600/40">RESOLVE</button>
+                  <button type="button" onClick={async () => { await supabase.from('admin_requests').delete().eq('id', req.id); fetchAdminData(); }} className="p-2 bg-red-600/20 text-red-400 rounded-xl hover:bg-red-600/40 transition-all"><X size={14} /></button>
                 </div>
               </div>
             ))}
@@ -283,7 +288,7 @@ export default function AdminPanel() {
            <div className="space-y-3 mb-6">
             <input className="w-full bg-gray-50 dark:bg-gray-900 p-4 rounded-2xl text-sm border dark:border-gray-700 outline-none" placeholder="Version Name" value={verName} onChange={e => setVerName(e.target.value)} />
             <textarea className="w-full bg-gray-50 dark:bg-gray-900 p-4 rounded-2xl text-sm border dark:border-gray-700 outline-none h-20 resize-none" placeholder="Commit details..." value={verDesc} onChange={e => setVerDesc(e.target.value)} />
-            <button onClick={saveLog} className="w-full bg-indigo-600 text-white py-4 rounded-2xl font-black uppercase text-xs shadow-lg hover:bg-indigo-700 active:scale-95 transition-all">Commit Update</button>
+            <button type="button" onClick={saveLog} className="w-full bg-indigo-600 text-white py-4 rounded-2xl font-black uppercase text-xs shadow-lg hover:bg-indigo-700 active:scale-95 transition-all">Commit Update</button>
           </div>
           <div className="space-y-4 max-h-60 overflow-y-auto pr-2 custom-scrollbar">
             {history.map(log => (

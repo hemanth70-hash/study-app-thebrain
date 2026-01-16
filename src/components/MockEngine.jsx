@@ -5,7 +5,7 @@ import {
   Clock, ArrowLeft, Eye, Lock, ShieldAlert, AlertTriangle, Hourglass
 } from 'lucide-react';
 
-export default function MockEngine({ user, onFinish }) {
+export default function MockEngine({ user, onFinish, setIsExamLocked, setIsDarkMode }) {
   const [availableMocks, setAvailableMocks] = useState([]);
   const [selectedMock, setSelectedMock] = useState(null);
   const [questions, setQuestions] = useState([]); 
@@ -22,36 +22,59 @@ export default function MockEngine({ user, onFinish }) {
   const [warnings, setWarnings] = useState(0); 
   const [timeUntilMidnight, setTimeUntilMidnight] = useState(""); 
 
-  // --- 1. NEURAL TIMER & PROCTORING ---
+  // --- 1. NEURAL TIMER & PROCTORING (STRICT LOCKDOWN) ---
   useEffect(() => {
     let interval = null;
     if (selectedMock && !isFinished && timeLeft > 0) {
+      // Signaling App.jsx to lock Sidebar/Navigation and Force Dark Mode
+      if (setIsExamLocked) setIsExamLocked(true);
+      if (setIsDarkMode) setIsDarkMode(true);
+
       interval = setInterval(() => {
         setTimeLeft((prev) => prev - 1);
       }, 1000);
 
       if (selectedMock.is_strict) {
+        // A. TERMINATE ON TAB/WINDOW SWITCH
         const handleVisibility = () => {
           if (document.hidden) {
             setWarnings(prev => {
               const next = prev + 1;
-              if (next >= 3) {
+              if (next >= 2) { // Immediate termination on 2nd attempt
+                alert("CRITICAL SECURITY BREACH: Simulation Terminated. Results Disqualified.");
                 handleSubmit(true); 
                 return next;
               }
-              alert(`STRICT MODE WARNING: Strike ${next}/3.`);
+              alert(`STRICT MODE WARNING: Strike ${next}/2. Exit attempt recorded.`);
               return next;
             });
           }
         };
+
+        // B. BLOCK BROWSER BACK/FORWARD (LOCKS USER IN PORTAL)
+        window.history.pushState(null, null, window.location.href);
+        const blockNavigation = () => {
+          window.history.pushState(null, null, window.location.href);
+          alert("SECURITY LOCK: UI Navigation is disabled during active simulation.");
+        };
+
         document.addEventListener("visibilitychange", handleVisibility);
-        return () => document.removeEventListener("visibilitychange", handleVisibility);
+        window.addEventListener('popstate', blockNavigation);
+
+        return () => {
+          document.removeEventListener("visibilitychange", handleVisibility);
+          window.removeEventListener('popstate', blockNavigation);
+        };
       }
     } else if (timeLeft === 0 && selectedMock && !isFinished) {
       handleSubmit(); 
     }
-    return () => clearInterval(interval);
-  }, [selectedMock, isFinished, timeLeft]);
+    // Clean up lock when component unmounts or finishes
+    return () => {
+      clearInterval(interval);
+      if (setIsExamLocked) setIsExamLocked(false);
+    };
+  }, [selectedMock, isFinished, timeLeft, setIsExamLocked, setIsDarkMode]);
 
   // --- 2. MIDNIGHT COUNTDOWN ---
   useEffect(() => {
@@ -134,6 +157,8 @@ export default function MockEngine({ user, onFinish }) {
   // --- 5. SUBMISSION & PERMANENT GPA LOGIC ---
   const handleSubmit = async (isPenalty = false) => {
     if (isFinished) return;
+    if (setIsExamLocked) setIsExamLocked(false); // Release Navigation UI
+
     let scoreCount = 0;
     if (!isPenalty) {
       questions.forEach((q, idx) => {
@@ -143,14 +168,12 @@ export default function MockEngine({ user, onFinish }) {
     const percentage = isPenalty ? 0 : Math.round((scoreCount / questions.length) * 100);
 
     try {
-      // A. Log temporary score record
       await supabase.from('scores').insert([{
         user_id: user.id, mock_id: selectedMock.id, score: scoreCount, 
         percentage: percentage, mock_title: selectedMock.mock_title,
         is_daily: selectedMock.is_daily, status: isPenalty ? 'DISQUALIFIED' : 'COMPLETED'
       }]);
 
-      // 🔥 B. UPDATE CUMULATIVE GPA & PERMANENT COUNT 🔥
       await supabase.from('profiles')
         .update({ 
           total_exams_completed: (user.total_exams_completed || 0) + 1,
@@ -177,6 +200,7 @@ export default function MockEngine({ user, onFinish }) {
     setSelectedMock(null); setQuestions([]); setSubjects([]); 
     setActiveSubject(""); setCurrentIdx(0); setSelectedOptions({});
     setIsFinished(false); setShowReview(false); setShowStreakAnim(false);
+    if (setIsExamLocked) setIsExamLocked(false);
     onFinish(); 
   };
 
@@ -290,7 +314,7 @@ export default function MockEngine({ user, onFinish }) {
       </div>
       <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
         <div className="lg:col-span-3 bg-white dark:bg-gray-800 p-10 rounded-[3rem] shadow-2xl border dark:border-gray-700 relative">
-          {selectedMock.is_strict && <div className="absolute top-6 right-10 text-red-500 font-black text-[10px] uppercase flex items-center gap-2"><ShieldAlert size={14} /> Strikes: {warnings}/3</div>}
+          {selectedMock.is_strict && <div className="absolute top-6 right-10 text-red-500 font-black text-[10px] uppercase flex items-center gap-2"><ShieldAlert size={14} /> Strikes: {warnings}/2</div>}
           <h4 className="text-blue-600 font-black uppercase text-[10px] mb-4 italic">{activeSubject} / Q{currentIdx + 1}</h4>
           <h3 className="text-2xl font-bold dark:text-white mb-10 leading-tight">{activeSubData.questions[currentIdx].question}</h3>
           <div className="grid grid-cols-1 gap-4">
@@ -321,7 +345,7 @@ export default function MockEngine({ user, onFinish }) {
               )
             })}
           </div>
-          <button onClick={() => handleSubmit(false)} className="w-full bg-red-600 text-white py-4 rounded-2xl font-black uppercase text-xs shadow-xl active:scale-95 transition-all">Submit Test</button>
+          <button onClick={() => { if(window.confirm("Submit transmission and end simulation?")) handleSubmit(false); }} className="w-full bg-red-600 text-white py-4 rounded-2xl font-black uppercase text-xs shadow-xl active:scale-95 transition-all">Submit Test</button>
         </div>
       </div>
     </div>

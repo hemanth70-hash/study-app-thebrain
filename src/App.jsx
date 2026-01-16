@@ -20,6 +20,7 @@ export default function App() {
   const [isDarkMode, setIsDarkMode] = useState(false);
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
   const [globalMsg, setGlobalMsg] = useState(null);
+  const [isExamLocked, setIsExamLocked] = useState(false); // 🔥 Active Exam Lockdown State
 
   // --- ACCESS KEY STATES ---
   const [accessKey, setAccessKey] = useState('');
@@ -50,13 +51,12 @@ export default function App() {
     fetchAnnouncement();
   }, [user]);
 
-  // --- 3. REFINED STREAK LOGIC (Strict Collapse) ---
+  // --- 3. REFINED STREAK LOGIC (Strict Point Protection) ---
   const handleStreakCheck = async (profile) => {
     const today = new Date();
     today.setHours(0, 0, 0, 0);
     const todayStr = today.toISOString().split('T')[0];
 
-    // If already engaged today, no check needed
     if (profile.last_mock_date === todayStr) return;
 
     const lastDate = profile.last_mock_date ? new Date(profile.last_mock_date) : null;
@@ -66,19 +66,18 @@ export default function App() {
       const yesterday = new Date(today);
       yesterday.setDate(yesterday.getDate() - 1);
 
-      // 🔥 GAP DETECTION: If last activity was before yesterday, streak is broken
       if (lastDate.getTime() < yesterday.getTime()) {
-        if (profile.freeze_points > 0) {
-          // PROTECT: Consume freeze point and move date to yesterday to "patch" the gap
+        if (profile.streak_points > 0) {
+          // PROTECT: Consume streak point (Freeze)
           await supabase.from('profiles').update({ 
-            freeze_points: profile.freeze_points - 1,
+            streak_points: profile.streak_points - 1,
             last_mock_date: yesterday.toISOString().split('T')[0] 
           }).eq('id', profile.id);
           
-          alert("🔥 Streak Protected by Freeze Point!");
+          alert("🔥 STREAK PROTECTED: 1 Streak Point consumed.");
           refreshUser(profile.id);
         } else {
-          // 💀 COLLAPSE: Reset streak to 0 in DB
+          // COLLAPSE: Reset to 0
           await supabase.from('profiles').update({ streak_count: 0 }).eq('id', profile.id);
           refreshUser(profile.id);
         }
@@ -86,7 +85,7 @@ export default function App() {
     }
   };
 
-  // --- 4. LOGIN LOGIC (Identity-Based) ---
+  // --- 4. LOGIN LOGIC ---
   const handleLogin = async () => {
     if (!username) return;
     try {
@@ -102,9 +101,9 @@ export default function App() {
     } catch (err) { console.error("Login Error", err); }
   };
 
-  // --- 5. IDENTITY VERIFICATION (Permanent DB Link) ---
+  // --- 5. IDENTITY VERIFICATION ---
   const validateAccessKey = async () => {
-    setAuthError('⏳ Validating Node...');
+    setAuthError('⏳ Validating Identity...');
     const { data: keyData, error: keyError } = await supabase
       .from('authorized_users')
       .select('*')
@@ -122,17 +121,17 @@ export default function App() {
         setAuthError('');
       }
     } else {
-      setAuthError('❌ Invalid Access Key. Access Denied.');
+      setAuthError('❌ Invalid Access Key. Verification Failed.');
     }
   };
 
   const sendAdminRequest = async () => {
-    const msg = window.prompt("Submit Signal to The Brain:");
+    const msg = window.prompt("The Brain, what is your request?");
     if (!msg) return;
     await supabase.from('admin_requests').insert([{
       user_id: user.id, user_name: user.username, message: msg, request_type: 'USER_REQUEST'
     }]);
-    alert("Request Transmitted.");
+    alert("Request transmitted to The Brain.");
   };
 
   // --- VIEW: LOGIN SCREEN ---
@@ -144,23 +143,23 @@ export default function App() {
              <ShieldAlert className="text-white" size={40} />
           </div>
           <h1 className="text-4xl font-black mb-2 text-blue-600 italic tracking-tighter uppercase">Neural Portal</h1>
-          <p className="text-gray-400 font-bold text-xs uppercase tracking-widest mb-8">Secure Access Only</p>
+          <p className="text-gray-400 font-bold text-xs uppercase tracking-widest mb-8">Identify Node</p>
           <input className="w-full p-5 rounded-2xl border-2 mb-4 dark:bg-gray-800 dark:border-gray-700 dark:text-white font-black outline-none focus:border-blue-500 transition-all text-center" placeholder="ENTER USERNAME" value={username} onChange={(e) => setUsername(e.target.value)} />
-          <button onClick={handleLogin} className="w-full bg-blue-600 text-white p-5 rounded-2xl font-black uppercase tracking-widest hover:bg-blue-700 shadow-xl transition-all active:scale-95">Identify Node</button>
+          <button onClick={handleLogin} className="w-full bg-blue-600 text-white p-5 rounded-2xl font-black uppercase tracking-widest hover:bg-blue-700 shadow-xl transition-all active:scale-95">Verify Identity</button>
         </div>
       </div>
     );
   }
 
-  // --- VIEW: IDENTITY LOCK ---
+  // --- VIEW: IDENTITY AUTHORIZATION LOCK ---
   const isAdmin = user.username.toLowerCase() === 'thebrain';
   if (!isAdmin && !user.is_verified) {
     return (
       <div className={`flex items-center justify-center min-h-screen ${isDarkMode ? 'bg-gray-950' : 'bg-blue-50'}`}>
         <div className="bg-white dark:bg-gray-900 p-10 rounded-[3rem] shadow-2xl border-2 border-indigo-500/20 w-full max-w-md text-center">
           <Key className="mx-auto mb-6 text-indigo-500" size={48} />
-          <h2 className="text-2xl font-black dark:text-white uppercase mb-2">Identity Blocked</h2>
-          <p className="text-gray-500 text-xs font-bold uppercase mb-8">Verification required for node: {user.username}</p>
+          <h2 className="text-2xl font-black dark:text-white uppercase tracking-tighter mb-2">Access Locked</h2>
+          <p className="text-gray-500 text-xs font-bold uppercase mb-8">Node "{user.username}" requires verification key.</p>
           <input className="w-full p-5 rounded-2xl border-2 mb-4 dark:bg-gray-800 dark:border-gray-700 dark:text-white font-mono text-center text-xl tracking-[0.2em] outline-none focus:border-indigo-500 transition-all" placeholder="BRAIN-XXXXXX" value={accessKey} onChange={(e) => setAccessKey(e.target.value)} />
           <button onClick={validateAccessKey} className="w-full bg-indigo-600 text-white p-5 rounded-2xl font-black uppercase tracking-widest hover:bg-indigo-700 shadow-xl transition-all mb-4">Authorize Identity</button>
           {authError && <p className="text-red-500 font-black text-[10px] uppercase tracking-widest">{authError}</p>}
@@ -173,9 +172,14 @@ export default function App() {
   return (
     <div className={isDarkMode ? 'dark' : ''}>
       <div className={`flex min-h-screen transition-colors duration-300 ${isDarkMode ? 'bg-gray-950 text-white' : 'bg-blue-50 text-gray-800'}`}>
-        <Sidebar user={user} activeTab={activeTab} setActiveTab={setActiveTab} setIsDarkMode={setIsDarkMode} isDarkMode={isDarkMode} isOpen={isSidebarOpen} setIsOpen={setIsSidebarOpen} />
+        
+        {/* 🔥 SIDEBAR LOCKDOWN: Blocks navigation clicks and blurs UI during tests */}
+        <div className={`${isExamLocked ? 'pointer-events-none opacity-40 blur-[3px] grayscale select-none' : ''} transition-all duration-700 z-40`}>
+          <Sidebar user={user} activeTab={activeTab} setActiveTab={setActiveTab} setIsDarkMode={setIsDarkMode} isDarkMode={isDarkMode} isOpen={isSidebarOpen} setIsOpen={setIsSidebarOpen} />
+        </div>
+        
         <main className={`flex-1 p-6 md:p-10 transition-all duration-300 ${isSidebarOpen ? 'ml-64' : 'ml-20'}`}>
-          <header className="mb-10 flex flex-wrap items-center gap-6">
+          <header className={`mb-10 flex flex-wrap items-center gap-6 transition-all duration-700 ${isExamLocked ? 'opacity-20 pointer-events-none select-none translate-y-[-10px]' : ''}`}>
             <h2 className="text-4xl font-black capitalize text-blue-600 dark:text-blue-400">
               {activeTab === 'ranking' ? 'Leaderboard' : activeTab === 'study' ? 'Study Hub' : activeTab}
             </h2>
@@ -222,15 +226,31 @@ export default function App() {
                 </div>
               </div>
             )}
+            
             {activeTab === 'study' && <StudyHub user={user} />}
             {activeTab === 'subjects' && <SubjectNotes user={user} />}
-            {activeTab === 'mocks' && <MockEngine user={user} onFinish={() => { setActiveTab('dashboard'); refreshUser(user.id); }} />}
+            
+            {/* 🔥 MOCK ENGINE: Integrated with Sidebar Lockdown & Forced Dark Mode */}
+            {activeTab === 'mocks' && (
+              <MockEngine 
+                user={user} 
+                setIsExamLocked={setIsExamLocked} 
+                setIsDarkMode={setIsDarkMode} 
+                onFinish={() => { 
+                  setActiveTab('dashboard'); 
+                  setIsExamLocked(false); 
+                  refreshUser(user.id); 
+                }} 
+              />
+            )}
+
             {activeTab === 'ranking' && <Leaderboard />}
             {activeTab === 'admin' && <AdminPanel />}
             {activeTab === 'profile' && <Profile user={user} />}
           </div>
 
-          {user.username.toLowerCase() !== 'thebrain' && (
+          {/* 🔥 HIDE ADMIN REQUESTS & SIGNALS DURING EXAM */}
+          {!isExamLocked && user.username.toLowerCase() !== 'thebrain' && (
             <button onClick={sendAdminRequest} className="fixed bottom-8 right-8 bg-blue-600/10 backdrop-blur-md text-blue-600 p-4 rounded-full border border-blue-600/20 hover:bg-blue-600 hover:text-white transition-all shadow-2xl group" title="Request Admin">
               <Megaphone size={24} className="group-hover:animate-bounce" />
             </button>
