@@ -35,7 +35,7 @@ export default function App() {
     if (data && !error) setUser(data);
   }, []);
 
-  // --- 2. GLOBAL ANNOUNCEMENT (Auth persistence removed to favor Identity check) ---
+  // --- 2. GLOBAL ANNOUNCEMENT ---
   useEffect(() => {
     const fetchAnnouncement = async () => {
       const { data } = await supabase
@@ -50,30 +50,43 @@ export default function App() {
     fetchAnnouncement();
   }, [user]);
 
-  // --- 3. STREAK LOGIC ---
+  // --- 3. REFINED STREAK LOGIC (Strict Collapse) ---
   const handleStreakCheck = async (profile) => {
-    const today = new Date().toISOString().split('T')[0];
-    if (profile.last_mock_date === today) return;
-    const yesterday = new Date();
-    yesterday.setDate(yesterday.getDate() - 1);
-    const yesterdayStr = yesterday.toISOString().split('T')[0];
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const todayStr = today.toISOString().split('T')[0];
 
-    if (profile.last_mock_date !== yesterdayStr && profile.last_mock_date !== null) {
-      if (profile.freeze_points > 0) {
-        await supabase.from('profiles').update({ 
-          freeze_points: profile.freeze_points - 1,
-          last_mock_date: yesterdayStr 
-        }).eq('id', profile.id);
-        alert("🔥 Streak Protected by Freeze Point!");
-        refreshUser(profile.id);
-      } else {
-        await supabase.from('profiles').update({ streak_count: 0 }).eq('id', profile.id);
-        refreshUser(profile.id);
+    // If already engaged today, no check needed
+    if (profile.last_mock_date === todayStr) return;
+
+    const lastDate = profile.last_mock_date ? new Date(profile.last_mock_date) : null;
+    
+    if (lastDate) {
+      lastDate.setHours(0, 0, 0, 0);
+      const yesterday = new Date(today);
+      yesterday.setDate(yesterday.getDate() - 1);
+
+      // 🔥 GAP DETECTION: If last activity was before yesterday, streak is broken
+      if (lastDate.getTime() < yesterday.getTime()) {
+        if (profile.freeze_points > 0) {
+          // PROTECT: Consume freeze point and move date to yesterday to "patch" the gap
+          await supabase.from('profiles').update({ 
+            freeze_points: profile.freeze_points - 1,
+            last_mock_date: yesterday.toISOString().split('T')[0] 
+          }).eq('id', profile.id);
+          
+          alert("🔥 Streak Protected by Freeze Point!");
+          refreshUser(profile.id);
+        } else {
+          // 💀 COLLAPSE: Reset streak to 0 in DB
+          await supabase.from('profiles').update({ streak_count: 0 }).eq('id', profile.id);
+          refreshUser(profile.id);
+        }
       }
     }
   };
 
-  // --- 4. LOGIN LOGIC ---
+  // --- 4. LOGIN LOGIC (Identity-Based) ---
   const handleLogin = async () => {
     if (!username) return;
     try {
@@ -89,11 +102,9 @@ export default function App() {
     } catch (err) { console.error("Login Error", err); }
   };
 
-  // --- 5. IDENTITY-LEVEL VERIFICATION (Updates DB) ---
+  // --- 5. IDENTITY VERIFICATION (Permanent DB Link) ---
   const validateAccessKey = async () => {
-    setAuthError('⏳ Validating Identity...');
-    
-    // Check key validity
+    setAuthError('⏳ Validating Node...');
     const { data: keyData, error: keyError } = await supabase
       .from('authorized_users')
       .select('*')
@@ -101,28 +112,27 @@ export default function App() {
       .single();
 
     if (keyData && !keyError) {
-      // 🔥 Update the USER profile in the DB (Permanent verification)
       const { error: updateError } = await supabase
         .from('profiles')
         .update({ is_verified: true })
         .eq('id', user.id);
 
       if (!updateError) {
-        await refreshUser(user.id); // Unlocks portal for this identity
+        await refreshUser(user.id);
         setAuthError('');
       }
     } else {
-      setAuthError('❌ Invalid Access Key. Verification Failed.');
+      setAuthError('❌ Invalid Access Key. Access Denied.');
     }
   };
 
   const sendAdminRequest = async () => {
-    const msg = window.prompt("The Brain, what is your request?");
+    const msg = window.prompt("Submit Signal to The Brain:");
     if (!msg) return;
     await supabase.from('admin_requests').insert([{
       user_id: user.id, user_name: user.username, message: msg, request_type: 'USER_REQUEST'
     }]);
-    alert("Request transmitted to The Brain.");
+    alert("Request Transmitted.");
   };
 
   // --- VIEW: LOGIN SCREEN ---
@@ -134,23 +144,23 @@ export default function App() {
              <ShieldAlert className="text-white" size={40} />
           </div>
           <h1 className="text-4xl font-black mb-2 text-blue-600 italic tracking-tighter uppercase">Neural Portal</h1>
-          <p className="text-gray-400 font-bold text-xs uppercase tracking-widest mb-8">Identify Node</p>
+          <p className="text-gray-400 font-bold text-xs uppercase tracking-widest mb-8">Secure Access Only</p>
           <input className="w-full p-5 rounded-2xl border-2 mb-4 dark:bg-gray-800 dark:border-gray-700 dark:text-white font-black outline-none focus:border-blue-500 transition-all text-center" placeholder="ENTER USERNAME" value={username} onChange={(e) => setUsername(e.target.value)} />
-          <button onClick={handleLogin} className="w-full bg-blue-600 text-white p-5 rounded-2xl font-black uppercase tracking-widest hover:bg-blue-700 shadow-xl transition-all active:scale-95">Verify Identity</button>
+          <button onClick={handleLogin} className="w-full bg-blue-600 text-white p-5 rounded-2xl font-black uppercase tracking-widest hover:bg-blue-700 shadow-xl transition-all active:scale-95">Identify Node</button>
         </div>
       </div>
     );
   }
 
-  // --- VIEW: IDENTITY AUTHORIZATION LOCK (DB-Based) ---
+  // --- VIEW: IDENTITY LOCK ---
   const isAdmin = user.username.toLowerCase() === 'thebrain';
   if (!isAdmin && !user.is_verified) {
     return (
       <div className={`flex items-center justify-center min-h-screen ${isDarkMode ? 'bg-gray-950' : 'bg-blue-50'}`}>
         <div className="bg-white dark:bg-gray-900 p-10 rounded-[3rem] shadow-2xl border-2 border-indigo-500/20 w-full max-w-md text-center">
           <Key className="mx-auto mb-6 text-indigo-500" size={48} />
-          <h2 className="text-2xl font-black dark:text-white uppercase tracking-tighter mb-2">Access Locked</h2>
-          <p className="text-gray-500 text-xs font-bold uppercase mb-8">Node "{user.username}" requires verification key.</p>
+          <h2 className="text-2xl font-black dark:text-white uppercase mb-2">Identity Blocked</h2>
+          <p className="text-gray-500 text-xs font-bold uppercase mb-8">Verification required for node: {user.username}</p>
           <input className="w-full p-5 rounded-2xl border-2 mb-4 dark:bg-gray-800 dark:border-gray-700 dark:text-white font-mono text-center text-xl tracking-[0.2em] outline-none focus:border-indigo-500 transition-all" placeholder="BRAIN-XXXXXX" value={accessKey} onChange={(e) => setAccessKey(e.target.value)} />
           <button onClick={validateAccessKey} className="w-full bg-indigo-600 text-white p-5 rounded-2xl font-black uppercase tracking-widest hover:bg-indigo-700 shadow-xl transition-all mb-4">Authorize Identity</button>
           {authError && <p className="text-red-500 font-black text-[10px] uppercase tracking-widest">{authError}</p>}
@@ -163,15 +173,12 @@ export default function App() {
   return (
     <div className={isDarkMode ? 'dark' : ''}>
       <div className={`flex min-h-screen transition-colors duration-300 ${isDarkMode ? 'bg-gray-950 text-white' : 'bg-blue-50 text-gray-800'}`}>
-        
         <Sidebar user={user} activeTab={activeTab} setActiveTab={setActiveTab} setIsDarkMode={setIsDarkMode} isDarkMode={isDarkMode} isOpen={isSidebarOpen} setIsOpen={setIsSidebarOpen} />
-        
         <main className={`flex-1 p-6 md:p-10 transition-all duration-300 ${isSidebarOpen ? 'ml-64' : 'ml-20'}`}>
           <header className="mb-10 flex flex-wrap items-center gap-6">
             <h2 className="text-4xl font-black capitalize text-blue-600 dark:text-blue-400">
               {activeTab === 'ranking' ? 'Leaderboard' : activeTab === 'study' ? 'Study Hub' : activeTab}
             </h2>
-
             <div className="flex-1 min-w-[300px]">
               {globalMsg && (
                 <div className="bg-gradient-to-r from-blue-600 to-indigo-700 text-white px-6 py-3 rounded-3xl shadow-lg flex items-center border border-white/20 overflow-hidden relative">
@@ -180,7 +187,6 @@ export default function App() {
                 </div>
               )}
             </div>
-            
             <div className="flex items-center gap-3 bg-white dark:bg-gray-800 px-6 py-2 rounded-2xl shadow-sm border-2 border-orange-50 dark:border-gray-700">
               <span className="text-2xl">🔥</span>
               <span className="font-black text-xl text-orange-500">{user.streak_count || 0}</span>
@@ -203,22 +209,19 @@ export default function App() {
                       </div>
                       <div className="bg-blue-50 dark:bg-blue-900/20 p-5 rounded-2xl border border-blue-100 dark:border-blue-800">
                         <p className="text-sm font-bold text-gray-600 dark:text-gray-400">
-                          GPA: <span className="text-blue-600 font-black">{(user.total_percentage_points / (user.total_exams_completed || 1)).toFixed(1)}%</span>
+                          Synchronization level: Omega. Lifetime GPA: <span className="text-blue-600 font-black">{(user.total_percentage_points / (user.total_exams_completed || 1)).toFixed(1)}%</span>
                         </p>
                       </div>
                     </div>
                   </div>
                   <div className="lg:col-span-1 h-full min-h-[250px]"><GoalTracker user={user} /></div>
                 </div>
-
                 <div className="grid grid-cols-1 lg:grid-cols-5 gap-8 items-start">
                   <div className="lg:col-span-3 h-full"><QuickQuiz /></div>
                   <div className="lg:col-span-2 h-full flex flex-col min-h-[400px]"><StudyChat user={user} /></div>
                 </div>
               </div>
             )}
-
-            {/* PERSISTENT TAB ROUTING */}
             {activeTab === 'study' && <StudyHub user={user} />}
             {activeTab === 'subjects' && <SubjectNotes user={user} />}
             {activeTab === 'mocks' && <MockEngine user={user} onFinish={() => { setActiveTab('dashboard'); refreshUser(user.id); }} />}

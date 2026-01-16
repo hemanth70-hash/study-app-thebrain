@@ -151,7 +151,6 @@ export default function MockEngine({ user, onFinish }) {
       }]);
 
       // 🔥 B. UPDATE CUMULATIVE GPA & PERMANENT COUNT 🔥
-      // This logic ensures results are permanent like a B.Tech Semester aggregate
       await supabase.from('profiles')
         .update({ 
           total_exams_completed: (user.total_exams_completed || 0) + 1,
