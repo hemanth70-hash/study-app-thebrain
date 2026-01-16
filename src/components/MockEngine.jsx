@@ -41,7 +41,7 @@ export default function MockEngine({ user, onFinish, setIsExamLocked, setIsDarkM
             setWarnings(prev => {
               const next = prev + 1;
               if (next >= 2) { // Immediate termination on 2nd attempt
-                alert("CRITICAL SECURITY BREACH: Simulation Terminated. Results Disqualified.");
+                alert("STRICT MODE BREACH: Simulation Terminated. Results Disqualified.");
                 handleSubmit(true); 
                 return next;
               }
@@ -310,7 +310,7 @@ export default function MockEngine({ user, onFinish, setIsExamLocked, setIsDarkM
               className={`px-6 py-2 rounded-xl font-black text-[10px] uppercase transition-all ${activeSubject === s.subject ? 'bg-blue-600 text-white shadow-lg' : 'bg-gray-100 dark:bg-gray-900 text-gray-400'}`}>{s.subject}</button>
           ))}
         </div>
-        <div className={`flex items-center gap-3 font-mono text-xl font-bold px-6 py-2 rounded-xl bg-black text-white`}><Timer size={18} /> {Math.floor(timeLeft/60)}:{String(timeLeft%60).padStart(2,'0')}</div>
+        <div className={`flex items-center gap-3 font-mono text-xl font-bold px-6 py-2 rounded-xl bg-black text-white`}><Timer size={18} /> {Math.max(0, Math.floor(timeLeft/60))}:{String(Math.max(0, timeLeft%60)).padStart(2,'0')}</div>
       </div>
       <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
         <div className="lg:col-span-3 bg-white dark:bg-gray-800 p-10 rounded-[3rem] shadow-2xl border dark:border-gray-700 relative">
@@ -329,8 +329,8 @@ export default function MockEngine({ user, onFinish, setIsExamLocked, setIsDarkM
             })}
           </div>
           <div className="mt-12 flex justify-between pt-8 border-t dark:border-gray-700">
-            <button disabled={currentIdx === 0} onClick={() => setCurrentIdx(prev => prev - 1)} className="px-6 py-2 text-gray-400 font-bold uppercase text-xs">Previous</button>
-            <button disabled={currentIdx === activeSubData.questions.length - 1} onClick={() => setCurrentIdx(prev => prev + 1)} className="px-10 py-4 bg-blue-600 text-white rounded-2xl font-black uppercase text-xs shadow-lg">Next</button>
+            <button disabled={currentIdx === 0} onClick={() => setCurrentIdx(prev => prev - 1)} className="px-6 py-2 text-gray-400 font-bold uppercase text-xs disabled:opacity-30">Previous</button>
+            <button disabled={currentIdx === activeSubData.questions.length - 1} onClick={() => setCurrentIdx(prev => prev + 1)} className="px-10 py-4 bg-blue-600 text-white rounded-2xl font-black uppercase text-xs shadow-lg disabled:opacity-30">Next</button>
           </div>
         </div>
         <div className="bg-white dark:bg-gray-800 p-8 rounded-[3rem] shadow-xl border dark:border-gray-700 text-center">
