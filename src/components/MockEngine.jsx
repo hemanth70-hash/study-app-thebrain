@@ -25,13 +25,21 @@ export default function MockEngine({ user, onFinish, setIsExamLocked, setIsDarkM
   // --- 1. NEURAL TIMER & PROCTORING (STRICT LOCKDOWN) ---
   useEffect(() => {
     let interval = null;
+    
+    // 🔥 FIXED: Only start timer if a mock is active and has time
     if (selectedMock && !isFinished && timeLeft > 0) {
-      // Signaling App.jsx to lock Sidebar/Navigation and Force Dark Mode
       if (setIsExamLocked) setIsExamLocked(true);
       if (setIsDarkMode) setIsDarkMode(true);
 
+      // Decoupled from dependencies to prevent jumping
       interval = setInterval(() => {
-        setTimeLeft((prev) => prev - 1);
+        setTimeLeft((prev) => {
+          if (prev <= 1) {
+            clearInterval(interval);
+            return 0;
+          }
+          return prev - 1;
+        });
       }, 1000);
 
       if (selectedMock.is_strict) {
@@ -40,41 +48,42 @@ export default function MockEngine({ user, onFinish, setIsExamLocked, setIsDarkM
           if (document.hidden) {
             setWarnings(prev => {
               const next = prev + 1;
-              if (next >= 2) { // Immediate termination on 2nd attempt
+              if (next >= 2) { // Disqualify on 2nd breach
                 alert("STRICT MODE BREACH: Simulation Terminated. Results Disqualified.");
                 handleSubmit(true); 
                 return next;
               }
-              alert(`STRICT MODE WARNING: Strike ${next}/2. Exit attempt recorded.`);
+              alert(`STRICT MODE WARNING: Strike ${next}/2. Stay on this tab.`);
               return next;
             });
           }
         };
 
-        // B. BLOCK BROWSER BACK/FORWARD (LOCKS USER IN PORTAL)
+        // B. BLOCK NAVIGATION (LOCK USER IN)
         window.history.pushState(null, null, window.location.href);
         const blockNavigation = () => {
           window.history.pushState(null, null, window.location.href);
-          alert("SECURITY LOCK: UI Navigation is disabled during active simulation.");
+          alert("SECURITY LOCK: Navigation disabled during active simulation.");
         };
 
         document.addEventListener("visibilitychange", handleVisibility);
         window.addEventListener('popstate', blockNavigation);
 
         return () => {
+          clearInterval(interval);
           document.removeEventListener("visibilitychange", handleVisibility);
           window.removeEventListener('popstate', blockNavigation);
         };
       }
     } else if (timeLeft === 0 && selectedMock && !isFinished) {
-      handleSubmit(); 
+      handleSubmit(); // Auto-submit on time exhaustion
     }
-    // Clean up lock when component unmounts or finishes
+
     return () => {
-      clearInterval(interval);
-      if (setIsExamLocked) setIsExamLocked(false);
+      if (interval) clearInterval(interval);
     };
-  }, [selectedMock, isFinished, timeLeft, setIsExamLocked, setIsDarkMode]);
+    // 🧠 Dependencies anchored to prevent re-triggering the effect loop
+  }, [selectedMock?.id, isFinished]); 
 
   // --- 2. MIDNIGHT COUNTDOWN ---
   useEffect(() => {
@@ -141,7 +150,9 @@ export default function MockEngine({ user, onFinish, setIsExamLocked, setIsDarkM
       }
       setSelectedMock(data);
       setWarnings(0);
-      setTimeLeft((data.time_limit || 10) * 60); 
+      // Ensure integer parsing for database values
+      const limit = parseInt(data.time_limit) || 10;
+      setTimeLeft(limit * 60); 
     }
   };
 
@@ -157,7 +168,7 @@ export default function MockEngine({ user, onFinish, setIsExamLocked, setIsDarkM
   // --- 5. SUBMISSION & PERMANENT GPA LOGIC ---
   const handleSubmit = async (isPenalty = false) => {
     if (isFinished) return;
-    if (setIsExamLocked) setIsExamLocked(false); // Release Navigation UI
+    if (setIsExamLocked) setIsExamLocked(false); 
 
     let scoreCount = 0;
     if (!isPenalty) {
@@ -204,7 +215,7 @@ export default function MockEngine({ user, onFinish, setIsExamLocked, setIsDarkM
     onFinish(); 
   };
 
-  if (loading) return <div className="p-20 text-center font-black animate-pulse text-blue-600 uppercase">Connecting...</div>;
+  if (loading) return <div className="p-20 text-center font-black animate-pulse text-blue-600 uppercase tracking-widest">Connecting...</div>;
 
   // --- VIEW: LIBRARY ---
   if (!selectedMock) {
@@ -301,6 +312,8 @@ export default function MockEngine({ user, onFinish, setIsExamLocked, setIsDarkM
 
   // --- VIEW: CBT ---
   const activeSubData = subjects.find(s => s.subject === activeSubject);
+  const isFinalMinute = timeLeft <= 60; // 🔥 WARNING TRIGGER
+
   return (
     <div className="max-w-6xl mx-auto space-y-6">
       <div className="bg-white dark:bg-gray-800 p-4 rounded-[2rem] shadow-xl flex flex-wrap justify-between items-center border dark:border-gray-700">
@@ -310,7 +323,12 @@ export default function MockEngine({ user, onFinish, setIsExamLocked, setIsDarkM
               className={`px-6 py-2 rounded-xl font-black text-[10px] uppercase transition-all ${activeSubject === s.subject ? 'bg-blue-600 text-white shadow-lg' : 'bg-gray-100 dark:bg-gray-900 text-gray-400'}`}>{s.subject}</button>
           ))}
         </div>
-        <div className={`flex items-center gap-3 font-mono text-xl font-bold px-6 py-2 rounded-xl bg-black text-white`}><Timer size={18} /> {Math.max(0, Math.floor(timeLeft/60))}:{String(Math.max(0, timeLeft%60)).padStart(2,'0')}</div>
+        
+        {/* 🔥 TIMER UI WITH PULSING ALARM */}
+        <div className={`flex items-center gap-3 font-mono text-xl font-bold px-6 py-2 rounded-xl transition-all duration-300 ${isFinalMinute ? 'bg-red-600 text-white animate-pulse' : 'bg-black text-white'}`}>
+          <Timer size={18} className={isFinalMinute ? 'animate-spin' : ''} /> 
+          {Math.max(0, Math.floor(timeLeft / 60))}:{String(Math.max(0, timeLeft % 60)).padStart(2, '0')}
+        </div>
       </div>
       <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
         <div className="lg:col-span-3 bg-white dark:bg-gray-800 p-10 rounded-[3rem] shadow-2xl border dark:border-gray-700 relative">
