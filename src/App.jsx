@@ -166,7 +166,7 @@ export default function App() {
           <h2 className="text-2xl font-black dark:text-white uppercase tracking-tighter mb-2">Node Locked</h2>
           <p className="text-gray-500 text-xs font-bold uppercase mb-8">Authorise Node "{user.username}"</p>
           <input className="w-full p-5 rounded-2xl border-2 mb-4 dark:bg-gray-800 dark:border-gray-700 dark:text-white font-mono text-center text-xl tracking-[0.2em] outline-none" placeholder="BRAIN-XXXXXX" value={accessKey} onChange={(e) => setAccessKey(e.target.value)} />
-          <button onClick={validateAccessKey} className="w-full bg-indigo-600 text-white p-5 rounded-2xl font-black uppercase tracking-widest hover:bg-indigo-700 shadow-xl transition-all mb-4">Activate Identity</button>
+          <button onClick={validateAccessKey} className="w-full bg-indigo-600 text-white p-5 rounded-2xl font-black uppercase tracking-widest hover:bg-indigo-700 transition-all mb-4 shadow-xl">Activate Identity</button>
           {authError && <p className="text-red-500 font-black text-[10px] uppercase tracking-widest">{authError}</p>}
         </div>
       </div>
@@ -183,6 +183,7 @@ export default function App() {
         </div>
         
         <main className={`flex-1 p-6 md:p-10 transition-all duration-300 ${isSidebarOpen ? 'ml-64' : 'ml-20'}`}>
+          {/* HEADER SECTION */}
           <header className={`mb-10 flex flex-wrap items-center gap-6 transition-all duration-700 ${isExamLocked ? 'opacity-20 pointer-events-none select-none -translate-y-4' : ''}`}>
             <h2 className="text-4xl font-black capitalize text-blue-600 dark:text-blue-400">
               {activeTab === 'ranking' ? 'Leaderboard' : activeTab === 'study' ? 'Study Hub' : activeTab}
@@ -211,13 +212,13 @@ export default function App() {
                       <div className="flex justify-between items-start mb-6">
                         <div>
                           <h3 className="text-4xl font-black uppercase tracking-tighter dark:text-white">Welcome, {user.username}</h3>
-                          <p className="text-blue-600 font-black text-[10px] uppercase tracking-[0.3em] mt-2 italic">Rank: Neural Architect</p>
+                          <p className="text-blue-600 font-black text-[10px] uppercase tracking-[0.3em] mt-2 italic">Identity: {user.education || 'Neural Aspirant'}</p>
                         </div>
                         <InviteButton />
                       </div>
                       <div className="bg-blue-50 dark:bg-blue-900/20 p-6 rounded-3xl border border-blue-100 dark:border-blue-800 backdrop-blur-sm">
                         <p className="text-sm font-bold text-gray-600 dark:text-gray-400">
-                          System Sync: Active. Global Index: <span className="text-blue-600 font-black">{(user.total_percentage_points / (user.total_exams_completed || 1)).toFixed(1)}%</span>
+                          Synchronization Active. Global Performance Index: <span className="text-blue-600 font-black">{(user.total_percentage_points / (user.total_exams_completed || 1)).toFixed(1)}%</span>
                         </p>
                       </div>
                     </div>
