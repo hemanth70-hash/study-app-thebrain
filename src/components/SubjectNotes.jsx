@@ -1,74 +1,86 @@
 import React, { useState, useEffect } from 'react';
 import { supabase } from '../supabaseClient';
 import { 
-  Lightbulb, Save, Edit3, Loader2, BookOpen, 
-  Clock, Download, FileText, Trash2, PlusCircle, 
-  ExternalLink, Zap, Database, Search
+  Save, Edit3, Loader2, BookOpen, Clock, Download, 
+  FileText, Zap, Database, ExternalLink 
 } from 'lucide-react';
 import { jsPDF } from "jspdf";
 
 export default function SubjectNotes({ user }) {
-  // --- 1. CONFIGURATION & STATE ---
-  // 🔥 EXPANDED: Includes your new RRB/CSE subjects
-  const coreSubjects = ["Computer Science", "Reasoning", "Aptitude", "General Awareness", "Maths", "Physics", "Chemistry", "English"];
+  // --- 1. CONFIGURATION ---
+  const coreSubjects = [
+    "Computer Science", "Reasoning", "Aptitude", 
+    "General Awareness", "Maths", "Physics", 
+    "Chemistry", "English"
+  ];
   
   const [selectedSubject, setSelectedSubject] = useState(coreSubjects[0]);
   const [personalNote, setPersonalNote] = useState('');
   const [isSaving, setIsSaving] = useState(false);
   const [lastSaved, setLastSaved] = useState(null);
-  const [allNotes, setAllNotes] = useState([]);
-  const [libraryResources, setLibraryResources] = useState([]); // 🔥 NEW: PDF State
+  const [libraryResources, setLibraryResources] = useState([]); 
+  const [allNotes, setAllNotes] = useState([]); 
   const [loading, setLoading] = useState(true);
 
   // --- 2. DATA SYNCHRONIZATION ---
+  
+  // A. Initial Load (Library + Note History)
   useEffect(() => {
-    fetchAllData();
+    fetchLibraryAndHistory();
   }, [user.id]);
 
+  // B. Subject Switcher (The "Instant Swap" Logic)
   useEffect(() => {
-    if (selectedSubject) fetchPersonalNote();
+    fetchNoteForSubject(selectedSubject);
   }, [selectedSubject, user.id]);
 
-  const fetchAllData = async () => {
+  const fetchLibraryAndHistory = async () => {
     setLoading(true);
-    // Fetch Notes
-    const { data: notesData } = await supabase
+    // Fetch History List
+    const { data: notes } = await supabase
       .from('subject_notes')
-      .select('*')
+      .select('id, subject, updated_at')
       .eq('user_id', user.id)
       .order('updated_at', { ascending: false });
-    
-    // 🔥 NEW: Fetch PDFs from Library
-    const { data: pdfData } = await supabase
+      
+    // Fetch PDFs
+    const { data: pdfs } = await supabase
       .from('study_materials')
       .select('*')
       .order('created_at', { ascending: false });
 
-    if (notesData) setAllNotes(notesData);
-    if (pdfData) setLibraryResources(pdfData);
+    if (notes) setAllNotes(notes);
+    if (pdfs) setLibraryResources(pdfs);
     setLoading(false);
   };
 
-  const fetchPersonalNote = async () => {
+  const fetchNoteForSubject = async (subject) => {
+    // 1. Clear editor immediately to prevent "ghost text"
+    setPersonalNote('');
+    setLastSaved(null);
+
+    // 2. Fetch specific note
     const { data } = await supabase
       .from('subject_notes')
       .select('content, updated_at')
       .eq('user_id', user.id)
-      .eq('subject', selectedSubject)
+      .eq('subject', subject)
       .maybeSingle(); 
     
-    setPersonalNote(data?.content || '');
-    if (data?.updated_at) {
-        setLastSaved(new Date(data.updated_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }));
-    } else {
-        setLastSaved(null);
+    // 3. Populate if exists
+    if (data) {
+      setPersonalNote(data.content);
+      setLastSaved(new Date(data.updated_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }));
     }
   };
 
-  // --- 3. ACTIONS (SAVE, DELETE, EXPORT) ---
+  // --- 3. ACTIONS ---
+
   const handleSaveNote = async () => {
     if (!personalNote.trim()) return;
     setIsSaving(true);
+
+    // 🔥 UPSERT: This replaces the old note for this subject
     const { error } = await supabase
       .from('subject_notes')
       .upsert({ 
@@ -76,41 +88,23 @@ export default function SubjectNotes({ user }) {
         subject: selectedSubject, 
         content: personalNote,
         updated_at: new Date()
-      }, { onConflict: 'user_id,subject' });
+      }, { onConflict: 'user_id,subject' }); // <--- CRITICAL: Ensures overwrite
     
     if (!error) {
-        setLastSaved(new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }));
-        fetchAllData(); // Refresh list
+        const now = new Date();
+        setLastSaved(now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }));
+        fetchLibraryAndHistory(); // Update sidebar list
     }
-    setTimeout(() => setIsSaving(false), 600);
+    setTimeout(() => setIsSaving(false), 500);
   };
 
-  const handleDeleteNote = async (id) => {
-    if (!window.confirm("The Brain, delete this note permanently?")) return;
-
-    const { error } = await supabase
-      .from('subject_notes')
-      .delete()
-      .eq('id', id);
-
-    if (!error) {
-      const remainingNotes = allNotes.filter(n => n.id !== id);
-      setAllNotes(remainingNotes);
-      // Clear editor if the deleted note was the currently selected one
-      if (allNotes.find(n => n.id === id)?.subject === selectedSubject) {
-        setPersonalNote('');
-        setLastSaved(null);
-      }
-    }
-  };
-
-  const downloadAsPDF = (noteContent, subject) => {
-    if (!noteContent) return;
+  const downloadAsPDF = () => {
+    if (!personalNote) return;
     const doc = new jsPDF();
     doc.setFont("helvetica", "bold");
-    doc.setFontSize(22);
     doc.setTextColor(37, 99, 235);
-    doc.text(`${subject} // Neural Transcript`, 20, 20);
+    doc.setFontSize(22);
+    doc.text(`${selectedSubject} // Neural Transcript`, 20, 20);
     
     doc.setFontSize(10);
     doc.setFont("helvetica", "normal");
@@ -120,13 +114,13 @@ export default function SubjectNotes({ user }) {
     
     doc.setFontSize(12);
     doc.setTextColor(0);
-    const splitText = doc.splitTextToSize(noteContent, 170);
+    const splitText = doc.splitTextToSize(personalNote, 170);
     doc.text(splitText, 20, 45);
     
-    doc.save(`${subject}_Neural_Note.pdf`);
+    doc.save(`${selectedSubject}_Notes.pdf`);
   };
 
-  // Filter PDFs based on selected subject
+  // Filter PDFs for current view
   const relevantPDFs = libraryResources.filter(res => 
     res.subject === selectedSubject || res.subject === 'General'
   );
@@ -153,7 +147,7 @@ export default function SubjectNotes({ user }) {
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 items-start">
         
-        {/* 2. EDITOR (Takes up 2 columns) */}
+        {/* 2. MAIN EDITOR */}
         <div className="lg:col-span-2 space-y-6">
           <div className="bg-white dark:bg-gray-800 p-8 rounded-[2.5rem] shadow-xl border dark:border-gray-700 relative overflow-hidden">
             <div className="absolute top-0 right-0 p-10 opacity-5 pointer-events-none">
@@ -176,7 +170,7 @@ export default function SubjectNotes({ user }) {
                 </div>
                 
                 <div className="flex gap-2">
-                  <button onClick={() => downloadAsPDF(personalNote, selectedSubject)} className="p-3 bg-gray-100 dark:bg-gray-700 rounded-xl text-gray-500 hover:text-blue-600 transition-colors" title="Export PDF">
+                  <button onClick={downloadAsPDF} className="p-3 bg-gray-100 dark:bg-gray-700 rounded-xl text-gray-500 hover:text-blue-600 transition-colors" title="Export PDF">
                     <Download size={20} />
                   </button>
                   <button 
@@ -200,10 +194,10 @@ export default function SubjectNotes({ user }) {
           </div>
         </div>
 
-        {/* 3. CONTEXT SIDEBAR (PDFs + History) */}
+        {/* 3. CONTEXT SIDEBAR */}
         <div className="space-y-6">
           
-          {/* A. RELEVANT LIBRARY RESOURCES (PDFs) */}
+          {/* A. LIBRARY RESOURCES (PDFs) */}
           <div className="bg-white dark:bg-gray-800 p-6 rounded-[2.5rem] shadow-xl border dark:border-gray-700">
             <div className="flex items-center gap-3 mb-6 pb-4 border-b dark:border-gray-700">
               <Database size={20} className="text-orange-500" />
@@ -236,12 +230,12 @@ export default function SubjectNotes({ user }) {
               <div className="text-center py-10 opacity-50">
                 <BookOpen size={32} className="mx-auto text-gray-300 mb-2" />
                 <p className="text-[10px] font-black uppercase text-gray-400">No PDFs Indexed</p>
-                <p className="text-[8px] text-gray-300 mt-1">Upload via Admin Panel</p>
+                <p className="text-[8px] text-gray-300 mt-1">Check other nodes</p>
               </div>
             )}
           </div>
 
-          {/* B. NOTE HISTORY */}
+          {/* B. RECENT EDITS */}
           <div className="bg-white dark:bg-gray-800 p-6 rounded-[2.5rem] shadow-xl border dark:border-gray-700">
             <div className="flex items-center gap-3 mb-6 pb-4 border-b dark:border-gray-700">
               <Clock size={20} className="text-blue-600" />
@@ -251,7 +245,11 @@ export default function SubjectNotes({ user }) {
             <div className="space-y-3 max-h-[250px] overflow-y-auto custom-scrollbar pr-2">
               {allNotes.length > 0 ? (
                 allNotes.map((note) => (
-                  <div key={note.id} className="group flex items-center justify-between p-3 rounded-xl hover:bg-blue-50 dark:hover:bg-blue-900/20 transition-all cursor-pointer" onClick={() => { setSelectedSubject(note.subject); setPersonalNote(note.content); }}>
+                  <button 
+                    key={note.id} 
+                    onClick={() => setSelectedSubject(note.subject)}
+                    className="w-full group flex items-center justify-between p-3 rounded-xl hover:bg-blue-50 dark:hover:bg-blue-900/20 transition-all text-left"
+                  >
                     <div className="flex items-center gap-3 overflow-hidden">
                       <div className={`w-1.5 h-8 rounded-full ${note.subject === selectedSubject ? 'bg-blue-600' : 'bg-gray-200'}`}></div>
                       <div>
@@ -259,16 +257,10 @@ export default function SubjectNotes({ user }) {
                         <p className="text-[8px] text-gray-400 font-bold">{new Date(note.updated_at).toLocaleDateString()}</p>
                       </div>
                     </div>
-                    <button 
-                      onClick={(e) => { e.stopPropagation(); handleDeleteNote(note.id); }}
-                      className="text-gray-300 hover:text-red-500 p-2 opacity-0 group-hover:opacity-100 transition-all"
-                    >
-                      <Trash2 size={14} />
-                    </button>
-                  </div>
+                  </button>
                 ))
               ) : (
-                <p className="text-center text-[10px] font-bold text-gray-400 py-4">No active nodes.</p>
+                <p className="text-center text-[10px] font-bold text-gray-400 py-4">No active notes.</p>
               )}
             </div>
           </div>
