@@ -29,10 +29,17 @@ export default function AdminPanel() {
   const [showRoster, setShowRoster] = useState(false); 
   const [loading, setLoading] = useState(true);
 
-  // --- 3. LIBRARY MANAGER STATE ---
+  // --- 3. LIBRARY MANAGER STATE (ENHANCED) ---
   const [bookTitle, setBookTitle] = useState('');
   const [bookUrl, setBookUrl] = useState('');
-  const [bookCategory, setBookCategory] = useState('Physics');
+  const [bookCategory, setBookCategory] = useState('Computer Science'); 
+
+  // 🔥 EXPANDED SUBJECT LIST
+  const librarySubjects = [
+    "Computer Science", "Reasoning", "Aptitude", 
+    "General Awareness", "Maths", "Physics", 
+    "Chemistry", "English"
+  ];
 
   // --- 4. DEV LOGS & BROADCAST ---
   const [verName, setVerName] = useState('');
@@ -90,7 +97,6 @@ export default function AdminPanel() {
       const targetTable = isDailyQuickMock ? 'daily_mocks' : 'mocks';
       const today = new Date().toISOString().split('T')[0];
 
-      // Payload Construction
       const payload = {
         mock_title: mockTitle,
         questions: parsedQuestions,
@@ -119,13 +125,10 @@ export default function AdminPanel() {
   const deleteMock = async (id, table) => {
     if (!window.confirm(`PERMANENT TERMINATION: Purge from ${table}?`)) return;
     try {
-      // 1. Delete associated scores (Foreign Key)
       await supabase.from('scores').delete().eq('mock_id', id);
-      // 2. If daily, delete completion locks
       if (table === 'daily_mocks') {
         await supabase.from('completed_daily_mocks').delete().eq('mock_id', id);
       }
-      // 3. Delete Mock independently
       const { error } = await supabase.from(table).delete().eq('id', id);
       if (error) throw error;
       fetchAdminData();
@@ -137,19 +140,26 @@ export default function AdminPanel() {
   const generateKey = async () => {
     if (!assignedName) return alert("Enter recipient.");
     const newKey = `BRAIN-${Math.random().toString(36).substring(2, 8).toUpperCase()}`;
-    await supabase.from('authorized_users').insert([{ access_key: newKey, assigned_to: assignedName }]);
+    await supabase.from('authorized_users').insert([{ access_key: newKey, recipient_name: assignedName }]); 
     setAssignedName(''); fetchAdminData();
   };
 
   const uploadResource = async () => {
     if (!bookTitle || !bookUrl) return alert("Data missing.");
-    await supabase.from('study_resources').insert([{ title: bookTitle, file_url: bookUrl, category: bookCategory }]);
-    setBookTitle(''); setBookUrl(''); alert("Knowledge Synced.");
+    const { error } = await supabase.from('study_materials').insert([
+      { title: bookTitle, url: bookUrl, subject: bookCategory, type: 'pdf' }
+    ]);
+    
+    if (error) alert(`Upload Error: ${error.message}`);
+    else {
+      setBookTitle(''); setBookUrl(''); 
+      alert("Knowledge Synced to Library.");
+    }
   };
 
   const postAnnouncement = async () => {
     if (!announcement) return;
-    await supabase.from('announcements').update({ active: false }).eq('active', true);
+    await supabase.from('announcements').update({ active: false }).neq('id', 0); 
     await supabase.from('announcements').insert([{ message: announcement, active: true }]);
     setAnnouncement(''); fetchAdminData(); alert("Broadcast Live.");
   };
@@ -200,7 +210,7 @@ export default function AdminPanel() {
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-10">
         
-        {/* 3. MOCK CREATOR + INDEPENDENT LISTS */}
+        {/* 3. MOCK CREATOR */}
         <div className="bg-white dark:bg-gray-800 p-8 rounded-[32px] shadow-xl border dark:border-gray-700">
           <div className="flex items-center gap-3 mb-6 text-blue-600"><UploadCloud size={32} /><h2 className="text-2xl font-black uppercase dark:text-white">Mock Creator</h2></div>
           <div className="space-y-4">
@@ -216,35 +226,35 @@ export default function AdminPanel() {
             </button>
             {status && <p className="text-center font-black uppercase text-[10px] text-blue-500 mt-2">{status}</p>}
 
-            {/* 🔥 COMPACT LIST UNDER CREATOR (INDIVIDUAL DELETE NODES) */}
+            {/* DELETE NODES */}
             <div className="mt-8 pt-8 border-t dark:border-gray-700 grid grid-cols-1 md:grid-cols-2 gap-4">
                <div>
                  <p className="text-[10px] font-black uppercase text-blue-400 mb-2 flex items-center gap-2"><ListFilter size={14}/> Normal Mocks</p>
                  <div className="space-y-2 max-h-48 overflow-y-auto pr-2 custom-scrollbar">
-                    {regularMocks.map(m => (
-                      <div key={m.id} className="p-3 bg-gray-50 dark:bg-gray-900 rounded-xl flex justify-between items-center group transition-all border border-transparent hover:border-red-500/30">
-                        <div><p className="font-bold text-[10px] dark:text-white uppercase truncate w-24">{m.mock_title}</p><p className="text-[8px] font-bold text-gray-400 uppercase">{m.time_limit}m</p></div>
-                        <button onClick={() => deleteMock(m.id, 'mocks')} className="p-1.5 text-gray-400 hover:text-red-500"><Trash2 size={14}/></button>
-                      </div>
-                    ))}
+                   {regularMocks.map(m => (
+                     <div key={m.id} className="p-3 bg-gray-50 dark:bg-gray-900 rounded-xl flex justify-between items-center group transition-all border border-transparent hover:border-red-500/30">
+                       <div><p className="font-bold text-[10px] dark:text-white uppercase truncate w-24">{m.mock_title}</p><p className="text-[8px] font-bold text-gray-400 uppercase">{m.time_limit}m</p></div>
+                       <button onClick={() => deleteMock(m.id, 'mocks')} className="p-1.5 text-gray-400 hover:text-red-500"><Trash2 size={14}/></button>
+                     </div>
+                   ))}
                  </div>
                </div>
                <div>
                  <p className="text-[10px] font-black uppercase text-orange-400 mb-2 flex items-center gap-2"><Zap size={14}/> Daily Mocks</p>
                  <div className="space-y-2 max-h-48 overflow-y-auto pr-2 custom-scrollbar">
-                    {dailyMocks.map(m => (
-                      <div key={m.id} className="p-3 bg-orange-50 dark:bg-orange-900/20 rounded-xl flex justify-between items-center group transition-all border border-transparent hover:border-red-500/30">
-                        <div><p className="font-bold text-[10px] dark:text-white uppercase truncate w-24">{m.mock_title}</p><p className="text-[8px] font-bold text-gray-400 uppercase">{m.time_limit}m</p></div>
-                        <button onClick={() => deleteMock(m.id, 'daily_mocks')} className="p-1.5 text-gray-400 hover:text-red-500"><Trash2 size={14}/></button>
-                      </div>
-                    ))}
+                   {dailyMocks.map(m => (
+                     <div key={m.id} className="p-3 bg-orange-50 dark:bg-orange-900/20 rounded-xl flex justify-between items-center group transition-all border border-transparent hover:border-red-500/30">
+                       <div><p className="font-bold text-[10px] dark:text-white uppercase truncate w-24">{m.mock_title}</p><p className="text-[8px] font-bold text-gray-400 uppercase">{m.time_limit}m</p></div>
+                       <button onClick={() => deleteMock(m.id, 'daily_mocks')} className="p-1.5 text-gray-400 hover:text-red-500"><Trash2 size={14}/></button>
+                     </div>
+                   ))}
                  </div>
                </div>
             </div>
           </div>
         </div>
 
-        {/* 4. NEURAL ROSTER (Cumulative) */}
+        {/* 4. NEURAL ROSTER */}
         <div className="bg-white dark:bg-gray-800 p-8 rounded-[32px] shadow-xl border dark:border-gray-700">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-3 text-blue-600"><Users size={32} /><h2 className="text-2xl font-black uppercase dark:text-white tracking-tighter">Neural Roster</h2></div>
@@ -274,14 +284,14 @@ export default function AdminPanel() {
           )}
         </div>
 
-        {/* 5. LIBRARY MANAGER */}
+        {/* 5. LIBRARY MANAGER (ENHANCED) */}
         <div className="bg-white dark:bg-gray-800 p-8 rounded-[32px] shadow-xl border dark:border-gray-700">
           <div className="flex items-center gap-3 mb-6 text-orange-500"><BookOpen size={32} /><h2 className="text-2xl font-black uppercase dark:text-white">Library</h2></div>
           <div className="space-y-4">
             <input className="w-full p-4 rounded-2xl border dark:bg-gray-900 dark:text-white outline-none" placeholder="Resource Title" value={bookTitle} onChange={e => setBookTitle(e.target.value)} />
             <input className="w-full p-4 rounded-2xl border dark:bg-gray-900 dark:text-white outline-none" placeholder="PDF URL" value={bookUrl} onChange={e => setBookUrl(e.target.value)} />
-            <select className="w-full p-4 rounded-2xl border dark:bg-gray-900 dark:text-white outline-none font-bold" value={bookCategory} onChange={e => setBookCategory(e.target.value)}>
-              {['Physics', 'Chemistry', 'Biology', 'Maths', 'General'].map(s => <option key={s} value={s}>{s}</option>)}
+            <select className="w-full p-4 rounded-2xl border dark:bg-gray-900 dark:text-white outline-none font-bold cursor-pointer" value={bookCategory} onChange={e => setBookCategory(e.target.value)}>
+              {librarySubjects.map(s => <option key={s} value={s}>{s}</option>)}
             </select>
             <button onClick={uploadResource} className="w-full bg-orange-500 text-white py-4 rounded-2xl font-black uppercase shadow-lg transition-all active:scale-95">Upload Resource</button>
           </div>
@@ -294,7 +304,7 @@ export default function AdminPanel() {
           <div className="space-y-2 max-h-40 overflow-y-auto pr-2 custom-scrollbar">
             {activeKeys.map(k => (
               <div key={k.id} className="p-4 bg-gray-50 dark:bg-gray-900 rounded-xl flex justify-between items-center transition-all border border-transparent hover:border-red-500/30">
-                <div><p className="font-black text-indigo-600 text-xs tracking-widest">{k.access_key}</p><p className="text-[10px] font-bold text-gray-400 uppercase">Node: {k.assigned_to}</p></div>
+                <div><p className="font-black text-indigo-600 text-xs tracking-widest">{k.access_key}</p><p className="text-[10px] font-bold text-gray-400 uppercase">Node: {k.recipient_name}</p></div>
                 <button onClick={async () => { await supabase.from('authorized_users').delete().eq('id', k.id); fetchAdminData(); }} className="text-gray-300 hover:text-red-500"><Trash2 size={16} /></button>
               </div>
             ))}
@@ -321,8 +331,8 @@ export default function AdminPanel() {
 
         {/* 8. DEV LOGS */}
         <div className="bg-white dark:bg-gray-800 p-8 rounded-[32px] shadow-xl border dark:border-gray-700">
-           <h3 className="text-xl font-black mb-6 flex items-center gap-3 text-blue-600 uppercase tracking-tighter"><History size={24} /> Dev Logs</h3>
-           <div className="space-y-3 mb-6">
+            <h3 className="text-xl font-black mb-6 flex items-center gap-3 text-blue-600 uppercase tracking-tighter"><History size={24} /> Dev Logs</h3>
+            <div className="space-y-3 mb-6">
             <input className="w-full bg-gray-50 dark:bg-gray-900 p-4 rounded-2xl text-sm border dark:border-gray-700 outline-none" placeholder="Version Name" value={verName} onChange={e => setVerName(e.target.value)} />
             <textarea className="w-full bg-gray-50 dark:bg-gray-900 p-4 rounded-2xl text-sm border dark:border-gray-700 outline-none h-20 resize-none" placeholder="Commit details..." value={verDesc} onChange={e => setVerDesc(e.target.value)} />
             <button onClick={saveLog} className="w-full bg-indigo-600 text-white py-4 rounded-2xl font-black uppercase text-xs shadow-lg hover:bg-indigo-700 transition-all">Commit Update</button>
@@ -330,6 +340,7 @@ export default function AdminPanel() {
           <div className="space-y-4 max-h-40 overflow-y-auto pr-2 custom-scrollbar">
             {history.map(log => (
               <div key={log.id} className="border-l-4 border-blue-600 pl-4 py-1 hover:bg-blue-50 dark:hover:bg-gray-900/50 transition-all">
+                {/* 🔥 FIXED: Added closing span tag here */}
                 <p className="text-blue-600 font-black text-xs uppercase">{log.version_name} • <span className="text-gray-400 text-[10px]">{new Date(log.created_at).toLocaleDateString()}</span></p>
                 <p className="text-gray-500 text-[10px] leading-relaxed mt-1">{log.description}</p>
               </div>
