@@ -1,9 +1,11 @@
 import React, { useEffect, useState, useCallback } from 'react';
 import { supabase } from '../supabaseClient';
+import jsPDF from 'jspdf';
+import autoTable from 'jspdf-autotable';
 import { 
   Award, BookOpen, Clock, Zap, Trash2, ShieldAlert, 
   Loader2, TrendingUp, Save, RefreshCw, Dice5, 
-  ChevronDown, ChevronUp, GraduationCap, Target, Edit3, Activity, ShieldCheck
+  ChevronDown, ChevronUp, GraduationCap, Target, Edit3, Activity, ShieldCheck, FileText, Download
 } from 'lucide-react';
 
 export default function Profile({ user }) {
@@ -19,7 +21,7 @@ export default function Profile({ user }) {
   const [education, setEducation] = useState(user.education || '');
   const [preparingFor, setPreparingFor] = useState(user.preparing_for || '');
 
-  // --- 1. NEURAL GPA & RANK LOGIC (LIFETIME AGGREGATE) ---
+  // --- 1. NEURAL GPA & RANK LOGIC ---
   const lifetimeGPA = user.total_exams_completed > 0 
     ? (user.total_percentage_points / user.total_exams_completed).toFixed(1) 
     : 0;
@@ -34,7 +36,7 @@ export default function Profile({ user }) {
 
   const rank = getNeuralRank(parseFloat(lifetimeGPA));
 
-  // --- 2. AVATAR LOGIC (ANTI-BEARD PROTECTION) ---
+  // --- 2. AVATAR LOGIC ---
   const getAvatarUrl = (seed, g) => {
     const style = g === 'neutral' ? 'bottts' : 'avataaars';
     const params = g === 'female' ? '&topProbability=100&facialHairProbability=0' : '';
@@ -46,7 +48,40 @@ export default function Profile({ user }) {
     setCurrentSeed(newSeed);
   };
 
-  // --- 3. ATOMIC FETCH: SYNC WITH NEURAL GRID ---
+  // --- 3. PDF GENERATION LOGIC (NEW) ---
+  const downloadPDF = () => {
+    if (!user.last_regular_result) return;
+    const doc = new jsPDF();
+    const result = user.last_regular_result;
+
+    // Header
+    doc.setFontSize(18);
+    doc.text(`NEURAL PORTAL REPORT: ${user.username.toUpperCase()}`, 14, 20);
+    doc.setFontSize(10);
+    doc.text(`Mock: ${result.title} | Score: ${result.score}/${result.total} | ${new Date(result.timestamp).toLocaleDateString()}`, 14, 28);
+
+    // Data Table
+    const tableData = result.breakdown.map((item, index) => [
+      index + 1,
+      item.question.substring(0, 50) + "...",
+      item.selected,
+      item.actual,
+      item.status
+    ]);
+
+    autoTable(doc, {
+      startY: 35,
+      head: [['#', 'Question', 'Your Answer', 'Correct Answer', 'Status']],
+      body: tableData,
+      theme: 'grid',
+      headStyles: { fillColor: [41, 128, 185], fontStyle: 'bold' },
+      styles: { fontSize: 8 },
+    });
+
+    doc.save(`Neural_Report_${user.username}_${Date.now()}.pdf`);
+  };
+
+  // --- 4. DATA SYNC ---
   const fetchUserStats = useCallback(async () => {
     if (!user?.id) return;
     setLoading(true);
@@ -70,7 +105,6 @@ export default function Profile({ user }) {
     fetchUserStats();
   }, [fetchUserStats]);
 
-  // --- 4. IDENTITY UPDATE (SAVES ALL FIELDS) ---
   const handleUpdate = async () => {
     setIsSaving(true);
     try {
@@ -94,10 +128,12 @@ export default function Profile({ user }) {
     }
   };
 
-  // --- 5. SECURITY: WIPE RECORDS ---
   const clearHistory = async () => {
-    if (window.confirm("The Brain, wipe your neural records permanently? This cannot be undone.")) {
+    if (window.confirm("Wipe all neural records permanently? This cannot be undone.")) {
       const { error } = await supabase.from('scores').delete().eq('user_id', user.id);
+      // Also clear the last result slot
+      await supabase.from('profiles').update({ last_regular_result: null }).eq('id', user.id);
+      
       if (!error) { 
         fetchUserStats(); 
         alert("Grid Purged."); 
@@ -108,11 +144,9 @@ export default function Profile({ user }) {
   return (
     <div className="space-y-10 pb-20 animate-in fade-in duration-700">
       
-      {/* --- IDENTITY HUB (CLEAN MINIMALIST) --- */}
+      {/* --- IDENTITY HUB --- */}
       <div className="bg-white dark:bg-gray-800 p-10 rounded-[3rem] shadow-2xl border-b-8 border-blue-600 relative overflow-hidden">
         <div className="flex flex-col md:flex-row items-center gap-10 relative z-10">
-          
-          {/* Avatar with Shuffle Toggle */}
           <div className="relative group">
             <div className="w-44 h-44 rounded-[2.5rem] bg-gray-100 dark:bg-gray-900 flex items-center justify-center border-4 border-white dark:border-gray-700 shadow-xl overflow-hidden">
               <img src={getAvatarUrl(currentSeed, gender)} alt="Avatar" className="w-36 h-36" />
@@ -128,14 +162,10 @@ export default function Profile({ user }) {
           <div className="text-center md:text-left flex-1 space-y-4">
             <div className="flex flex-wrap items-center justify-center md:justify-start gap-4">
               <h2 className="text-5xl font-black uppercase tracking-tighter dark:text-white">{user.username}</h2>
-              
-              {/* NEURAL RANK BADGE */}
               <div className={`flex items-center gap-2 px-4 py-1.5 rounded-full border-2 font-black text-[10px] uppercase tracking-widest shadow-sm transition-all ${rank.color}`}>
                 <ShieldCheck size={14} />
                 {rank.label}
               </div>
-
-              {/* DROP BUTTON (THE ARROW) */}
               <button 
                 onClick={() => setShowTools(!showTools)}
                 className="p-2 bg-blue-50 dark:bg-gray-700 rounded-full text-blue-600 hover:scale-110 transition-all"
@@ -144,7 +174,6 @@ export default function Profile({ user }) {
               </button>
             </div>
             
-            {/* EDUCATION & PREPARATION INPUT CARDS */}
             <div className="space-y-4 max-w-sm mx-auto md:mx-0">
               <div className="flex items-center gap-3 p-3 bg-gray-50 dark:bg-gray-900/50 rounded-2xl border border-transparent focus-within:border-blue-500/50 transition-all">
                 <GraduationCap size={20} className="text-blue-500" />
@@ -175,7 +204,6 @@ export default function Profile({ user }) {
               </div>
             </div>
 
-            {/* HIDDEN IDENTITY TOOLS */}
             {showTools && (
               <div className="flex flex-wrap gap-2 mt-6 justify-center md:justify-start animate-in slide-in-from-top-4 duration-300">
                 {['male', 'female', 'neutral'].map((g) => (
@@ -203,7 +231,49 @@ export default function Profile({ user }) {
         </div>
       </div>
 
-      {/* --- NEURAL ANALYTICS GRID (LIFETIME STATS) --- */}
+      {/* --- 🔥 NEW: LATEST MOCK ANALYSIS (The Memory Efficient Block) --- */}
+      {user.last_regular_result && (
+        <div className="bg-gradient-to-br from-indigo-900 to-blue-900 p-8 rounded-[32px] shadow-2xl text-white relative overflow-hidden animate-in slide-in-from-bottom-8">
+          <div className="absolute top-0 right-0 p-32 bg-blue-500/20 rounded-full blur-3xl -translate-y-10 translate-x-10"></div>
+          
+          <div className="flex justify-between items-start mb-8 relative z-10">
+            <div className="flex items-center gap-4">
+              <div className="p-4 bg-white/10 rounded-2xl backdrop-blur-md border border-white/10">
+                <FileText size={32} className="text-blue-300" />
+              </div>
+              <div>
+                <p className="text-[10px] font-black uppercase text-blue-300 tracking-widest">Latest Regular Mock</p>
+                <h3 className="text-2xl font-black uppercase tracking-tight">{user.last_regular_result.title}</h3>
+                <p className="text-[10px] font-bold opacity-60">{new Date(user.last_regular_result.timestamp).toLocaleString()}</p>
+              </div>
+            </div>
+            
+            <button 
+              onClick={downloadPDF}
+              className="flex items-center gap-2 bg-white text-blue-900 px-6 py-3 rounded-2xl font-black uppercase text-xs hover:scale-105 transition-all shadow-xl"
+            >
+              <Download size={16} /> Save PDF Report
+            </button>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 relative z-10">
+            <div className="p-6 bg-black/20 rounded-3xl border border-white/5 backdrop-blur-sm">
+              <p className="text-[10px] font-black uppercase text-blue-300 mb-2">Final Score</p>
+              <p className="text-4xl font-black">{user.last_regular_result.score} <span className="text-lg opacity-50">/ {user.last_regular_result.total}</span></p>
+            </div>
+            <div className="p-6 bg-black/20 rounded-3xl border border-white/5 backdrop-blur-sm">
+              <p className="text-[10px] font-black uppercase text-green-300 mb-2">Accuracy Rate</p>
+              <p className="text-4xl font-black text-green-400">{user.last_regular_result.percentage}%</p>
+            </div>
+            <div className="p-6 bg-black/20 rounded-3xl border border-white/5 backdrop-blur-sm">
+              <p className="text-[10px] font-black uppercase text-orange-300 mb-2">Status</p>
+              <p className="text-4xl font-black text-orange-400">ANALYZED</p>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* --- NEURAL ANALYTICS GRID --- */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
         <div className="bg-white dark:bg-gray-800 p-8 rounded-[2.5rem] shadow-xl border-b-8 border-blue-500 flex items-center gap-6 group transition-all hover:scale-105">
           <div className="p-4 bg-blue-100 dark:bg-blue-900/30 rounded-2xl text-blue-600 transition-transform group-hover:rotate-12">
