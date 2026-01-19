@@ -24,7 +24,7 @@ export default function MockEngine({ user, onFinish, setIsExamLocked, setIsDarkM
   const [timeUntilMidnight, setTimeUntilMidnight] = useState(""); 
 
   // --- 2. EFFECT: AUTO-SUBMIT WATCHDOG (High Priority) ---
-  // This effect runs on every render to check if time has hit EXACTLY zero
+  // This separate effect ensures submission happens exactly when time hits 0
   useEffect(() => {
     if (selectedMock && !isFinished && timeLeft === 0) {
       console.warn("⏳ TIME EXHAUSTED: Initiating Forced Neural Submission...");
@@ -93,7 +93,7 @@ export default function MockEngine({ user, onFinish, setIsExamLocked, setIsDarkM
     return () => {
       if (interval) clearInterval(interval);
     };
-  }, [selectedMock?.id, isFinished]); // Dependent only on Mock ID to prevent re-renders
+  }, [selectedMock?.id, isFinished]); 
 
   // --- 4. EFFECT: MIDNIGHT COUNTDOWN ---
   useEffect(() => {
@@ -212,6 +212,7 @@ export default function MockEngine({ user, onFinish, setIsExamLocked, setIsDarkM
         total_percentage_points: (user.total_percentage_points || 0) + percentage
       };
 
+      // Only save detailed results for regular mocks to save space
       if (!selectedMock.is_daily) {
         updatePayload.last_regular_result = {
           title: selectedMock.mock_title,
@@ -305,13 +306,14 @@ export default function MockEngine({ user, onFinish, setIsExamLocked, setIsDarkM
   if (isFinished) {
     const finalScore = Math.round((questions.filter((q, i) => selectedOptions[i] === q.correct_option).length / questions.length) * 100);
     
+    // Detailed Review Screen
     if (showReview) {
       return (
         <div className="space-y-6 max-w-3xl mx-auto pb-20 animate-in slide-in-from-bottom-4 duration-500">
           <button onClick={() => setShowReview(false)} className="bg-white dark:bg-gray-800 px-6 py-3 rounded-2xl shadow-sm border dark:border-gray-700 font-black uppercase text-xs flex items-center gap-2 dark:text-white transition-all hover:scale-105"><ArrowLeft size={16} /> Back to Result</button>
           
           {questions.map((q, idx) => (
-            <div key={idx} className={`p-8 rounded-[2.5rem] border-l-8 bg-white dark:bg-gray-800 shadow-xl transition-all ${selectedOptions[idx] === q.correct_option ? 'border-green-500' : 'border-red-500'}`}>
+            <div key={idx} className={`p-8 rounded-[2.5rem] border-l-8 bg-white dark:bg-gray-800 shadow-xl transition-all hover:shadow-2xl ${selectedOptions[idx] === q.correct_option ? 'border-green-500' : 'border-red-500'}`}>
               <div className="flex justify-between items-start mb-4">
                  <span className="text-[10px] font-black uppercase text-gray-400 tracking-widest">Question {idx + 1}</span>
                  {selectedOptions[idx] === q.correct_option ? 
@@ -341,6 +343,7 @@ export default function MockEngine({ user, onFinish, setIsExamLocked, setIsDarkM
       );
     }
 
+    // Score Summary Screen
     return (
       <div className="max-w-md mx-auto text-center p-12 bg-white dark:bg-gray-800 rounded-[40px] shadow-2xl border-t-8 border-green-500 relative overflow-hidden">
         {showStreakAnim && (

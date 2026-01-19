@@ -41,7 +41,13 @@ export default function MockEngine({ user, onFinish, setIsExamLocked, setIsDarkM
 
       // Smooth Timer Interval (Decoupled to prevent jumping)
       interval = setInterval(() => {
-        setTimeLeft((prev) => (prev <= 1 ? 0 : prev - 1));
+        setTimeLeft((prev) => {
+          if (prev <= 1) {
+            clearInterval(interval);
+            return 0;
+          }
+          return prev - 1;
+        });
       }, 1000);
 
       // Strict Mode Surveillance
@@ -179,8 +185,8 @@ export default function MockEngine({ user, onFinish, setIsExamLocked, setIsDarkM
       
       return {
         question: q.question,
-        selected_option: selected !== undefined ? q.options[selected] : "Not Attempted",
-        correct_answer: q.options[q.correct_option],
+        selected: selected !== undefined ? q.options[selected] : "Not Attempted",
+        actual: q.options[q.correct_option],
         status: isPenalty ? "DISQUALIFIED" : (isCorrect ? "CORRECT" : "WRONG"),
         options: q.options
       };
