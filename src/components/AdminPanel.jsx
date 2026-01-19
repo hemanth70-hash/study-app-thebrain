@@ -1,430 +1,458 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { supabase } from '../supabaseClient';
 import { 
-  Timer, CheckCircle, Play, Layout, Zap, Award, 
-  Clock, ArrowLeft, Eye, Lock, ShieldAlert, AlertTriangle, Hourglass
+  UploadCloud, Database, History, Megaphone, Trash2, 
+  Zap, Loader2, ShieldAlert, Key, UserPlus, 
+  Clock, MessageSquare, X, Users, Flame, Target, 
+  GraduationCap, ChevronDown, BookOpen, ListFilter, Award
 } from 'lucide-react';
 
-export default function MockEngine({ user, onFinish, setIsExamLocked, setIsDarkMode }) {
-  // --- 1. STATE INITIALIZATION ---
-  const [availableMocks, setAvailableMocks] = useState([]);
-  const [selectedMock, setSelectedMock] = useState(null);
-  const [questions, setQuestions] = useState([]); 
-  const [subjects, setSubjects] = useState([]); 
-  const [activeSubject, setActiveSubject] = useState(""); 
-  const [currentIdx, setCurrentIdx] = useState(0); 
-  const [selectedOptions, setSelectedOptions] = useState({});
-  const [timeLeft, setTimeLeft] = useState(0); 
-  const [isFinished, setIsFinished] = useState(false);
+export default function AdminPanel() {
+  // --- 1. MOCK UPLOAD STATE ---
+  const [bulkData, setBulkData] = useState('');
+  const [mockTitle, setMockTitle] = useState('');
+  const [timeLimit, setTimeLimit] = useState(10); 
+  const [isDailyQuickMock, setIsDailyQuickMock] = useState(false);
+  const [isStrict, setIsStrict] = useState(false); 
+  const [status, setStatus] = useState('');
+  const [allMocks, setAllMocks] = useState([]); // 🔥 Fixes "Grid Management" blank screen
+
+  // --- 2. ACCESS KEY & ROSTER STATE ---
+  const [assignedName, setAssignedName] = useState('');
+  const [activeKeys, setActiveKeys] = useState([]);
+  const [userRequests, setUserRequests] = useState([]);
+  const [allUsers, setAllUsers] = useState([]); 
+  const [showRoster, setShowRoster] = useState(false); 
+
+  // --- 3. LIBRARY MANAGER STATE ---
+  const [bookTitle, setBookTitle] = useState('');
+  const [bookUrl, setBookUrl] = useState('');
+  const [bookCategory, setBookCategory] = useState('Physics');
+
+  // --- 4. SYSTEM STATES ---
+  const [verName, setVerName] = useState('');
+  const [verDesc, setVerDesc] = useState('');
+  const [history, setHistory] = useState([]); 
+  const [announcement, setAnnouncement] = useState('');
   const [loading, setLoading] = useState(true);
-  const [showReview, setShowReview] = useState(false);
-  const [completedMockIds, setCompletedMockIds] = useState([]); 
-  const [showStreakAnim, setShowStreakAnim] = useState(false);
-  const [warnings, setWarnings] = useState(0); 
-  const [timeUntilMidnight, setTimeUntilMidnight] = useState(""); 
 
-  // --- 2. EFFECT: AUTO-SUBMIT WATCHDOG (High Priority) ---
-  // This separate effect ensures submission happens exactly when time hits 0
-  useEffect(() => {
-    if (selectedMock && !isFinished && timeLeft === 0) {
-      console.warn("⏳ TIME EXHAUSTED: Initiating Forced Neural Submission...");
-      handleSubmit(false); 
-    }
-  }, [timeLeft, selectedMock, isFinished]);
-
-  // --- 3. EFFECT: NEURAL TIMER & PROCTORING ---
-  useEffect(() => {
-    let interval = null;
-
-    if (selectedMock && !isFinished && timeLeft > 0) {
-      // 🔒 LOCKDOWN UI
-      if (setIsExamLocked) setIsExamLocked(true);
-      if (setIsDarkMode) setIsDarkMode(true);
-
-      // ⏱️ SMOOTH INTERVAL (No Jumping)
-      interval = setInterval(() => {
-        setTimeLeft((prev) => {
-          if (prev <= 1) {
-            clearInterval(interval);
-            return 0;
-          }
-          return prev - 1;
-        });
-      }, 1000);
-
-      // 🛡️ STRICT MODE SURVEILLANCE
-      if (selectedMock.is_strict) {
-        const handleVisibility = () => {
-          if (document.hidden) {
-            setWarnings(prev => {
-              const next = prev + 1;
-              // STRIKE 2: TERMINATION
-              if (next >= 2) { 
-                alert("CRITICAL SECURITY BREACH: Simulation Terminated. Results Disqualified.");
-                handleSubmit(true); // true = isPenalty
-                return next;
-              }
-              // STRIKE 1: WARNING
-              alert(`STRICT MODE WARNING: Strike ${next}/2. Exit attempt recorded.`);
-              return next;
-            });
-          }
-        };
-
-        // NAVIGATION TRAP
-        window.history.pushState(null, null, window.location.href);
-        const blockNavigation = () => {
-          window.history.pushState(null, null, window.location.href);
-          alert("SECURITY LOCK: UI Navigation is disabled during active simulation.");
-        };
-
-        document.addEventListener("visibilitychange", handleVisibility);
-        window.addEventListener('popstate', blockNavigation);
-
-        // CLEANUP LISTENERS
-        return () => {
-          clearInterval(interval);
-          document.removeEventListener("visibilitychange", handleVisibility);
-          window.removeEventListener('popstate', blockNavigation);
-        };
-      }
-    }
-
-    return () => {
-      if (interval) clearInterval(interval);
-    };
-  }, [selectedMock?.id, isFinished]); 
-
-  // --- 4. EFFECT: MIDNIGHT COUNTDOWN ---
-  useEffect(() => {
-    const updateCountdown = () => {
-      const now = new Date();
-      const midnight = new Date();
-      midnight.setHours(24, 0, 0, 0); 
-      const diff = midnight - now;
-      const hours = Math.floor(diff / (1000 * 60 * 60));
-      const mins = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
-      const secs = Math.floor((diff % (1000 * 60)) / 1000);
-      setTimeUntilMidnight(`${hours}h ${mins}m ${secs}s`);
-    };
-    const timer = setInterval(updateCountdown, 1000);
-    updateCountdown();
-    return () => clearInterval(timer);
-  }, []);
-
-  // --- 5. DATA LOADING ---
-  const loadMockData = useCallback(async () => {
+  // --- 5. ATOMIC DATA FETCH (CRASH PROOF) ---
+  const fetchAdminData = useCallback(async () => {
     setLoading(true);
     try {
-      const today = new Date().toISOString().split('T')[0];
-      const { data: mockData } = await supabase.from('daily_mocks').select('*');
-      const { data: completionData } = await supabase.from('completed_daily_mocks').select('mock_id').eq('user_id', user.id);
+      // Fetch all critical tables in parallel
+      const [logs, keys, reqs, profiles, mocks] = await Promise.all([
+        supabase.from('dev_logs').select('*').order('created_at', { ascending: false }),
+        supabase.from('authorized_users').select('*').order('created_at', { ascending: false }),
+        supabase.from('admin_requests').select('*').order('created_at', { ascending: false }),
+        supabase.from('profiles').select('*').order('total_exams_completed', { ascending: false }),
+        supabase.from('daily_mocks').select('*').order('created_at', { ascending: false }) 
+      ]);
 
-      if (completionData) setCompletedMockIds(completionData.map(c => c.mock_id));
+      // Safe Fallbacks to prevent .map() errors on null
+      setHistory(logs.data || []);
+      setActiveKeys(keys.data || []);
+      setUserRequests(reqs.data || []);
+      setAllUsers(profiles.data || []);
+      setAllMocks(mocks.data || []); // 🔥 Critical fix for Grid Management
       
-      if (mockData) {
-        const activeMocks = mockData.filter(mock => {
-          if (!mock.is_daily) return true;
-          return mock.mock_date === today; 
-        });
-        setAvailableMocks(activeMocks.sort((a, b) => (b.is_daily ? 1 : -1)));
-      }
     } catch (err) {
       console.error("Neural Sync Error:", err);
     } finally {
       setLoading(false);
     }
-  }, [user.id]);
+  }, []);
 
+  // Initial Load
   useEffect(() => {
-    loadMockData();
-  }, [loadMockData]);
+    fetchAdminData();
+  }, [fetchAdminData]);
 
-  // --- 6. START SIMULATION ---
-  const startMock = async (mock) => {
-    if (mock.is_daily && completedMockIds.includes(mock.id)) {
-      alert("Daily mock already secured.");
-      return;
-    }
-    const { data } = await supabase.from('daily_mocks').select('*').eq('id', mock.id).single();
-    if (data && data.questions) {
-      const raw = data.questions;
-      // SUBJECT PARSING
-      if (raw[0]?.subject) {
-        setSubjects(raw);
-        setQuestions(raw.flatMap(s => s.questions));
-        setActiveSubject(raw[0].subject);
-      } else {
-        setSubjects([{ subject: "General", questions: raw }]);
-        setQuestions(raw);
-        setActiveSubject("General");
-      }
-      setSelectedMock(data);
-      setWarnings(0);
-      const limitInMinutes = parseInt(data.time_limit) || 10;
-      setTimeLeft(limitInMinutes * 60); 
+  // --- 6. HELPER FUNCTIONS ---
+  const getNeuralRank = (points, exams) => {
+    const gpa = exams > 0 ? (points / exams) : 0;
+    if (gpa >= 95) return { label: 'Architect', color: 'text-purple-500' };
+    if (gpa >= 85) return { label: 'Genius', color: 'text-blue-500' };
+    if (gpa >= 70) return { label: 'Specialist', color: 'text-green-500' };
+    if (gpa >= 50) return { label: 'Scholar', color: 'text-orange-500' };
+    return { label: 'Aspirant', color: 'text-gray-400' };
+  };
+
+  // --- 7. ACTION HANDLERS ---
+
+  // A. Generate Access Key
+  const generateKey = async () => {
+    if (!assignedName) return alert("Enter recipient name.");
+    const newKey = `BRAIN-${Math.random().toString(36).substring(2, 8).toUpperCase()}`;
+    const { error } = await supabase.from('authorized_users').insert([{ access_key: newKey, assigned_to: assignedName }]);
+    if (!error) { 
+      setAssignedName(''); 
+      fetchAdminData(); 
+      alert(`Key Primed: ${newKey}`); 
     }
   };
 
-  const getAbsIdx = (subName, qIdx) => {
-    let offset = 0;
-    for (let s of subjects) {
-      if (s.subject === subName) break;
-      offset += s.questions.length;
-    }
-    return offset + qIdx;
-  };
-
-  // --- 7. SUBMISSION LOGIC (WITH DETAILED BREAKDOWN) ---
-  const handleSubmit = async (isPenalty = false) => {
-    if (isFinished) return;
-    if (setIsExamLocked) setIsExamLocked(false); 
-
-    let scoreCount = 0;
-    
-    // 🧠 GENERATE DETAILED REPORT FOR PROFILE & ADMIN
-    const breakdown = questions.map((q, idx) => {
-      const selected = selectedOptions[idx];
-      const isCorrect = selected === q.correct_option;
-      if (isCorrect && !isPenalty) scoreCount++;
-      
-      return {
-        question: q.question,
-        selected: selected !== undefined ? q.options[selected] : "Not Attempted",
-        actual: q.options[q.correct_option],
-        status: isPenalty ? "DISQUALIFIED" : (isCorrect ? "CORRECT" : "WRONG")
-      };
-    });
-
-    const percentage = isPenalty ? 0 : Math.round((scoreCount / questions.length) * 100);
-
+  // B. Publish New Mock (Bulk Upload)
+  const handleBulkUpload = async () => {
+    if (!mockTitle || !bulkData) return setStatus('❌ Fields Required.');
+    setStatus('⏳ Publishing to Grid...');
     try {
-      // A. PERMANENT LOG (History)
-      await supabase.from('scores').insert([{
-        user_id: user.id, mock_id: selectedMock.id, score: scoreCount, 
-        percentage: percentage, mock_title: selectedMock.mock_title,
-        status: isPenalty ? 'DISQUALIFIED' : 'COMPLETED'
-      }]);
+      const parsedQuestions = JSON.parse(bulkData);
+      const today = new Date().toISOString().split('T')[0];
 
-      // B. PROFILE OVERWRITE (Latest Result Slot)
-      const updatePayload = { 
-        total_exams_completed: (user.total_exams_completed || 0) + 1,
-        total_percentage_points: (user.total_percentage_points || 0) + percentage
-      };
-
-      // Only save detailed results for regular mocks to save space
-      if (!selectedMock.is_daily) {
-        updatePayload.last_regular_result = {
-          title: selectedMock.mock_title,
-          score: scoreCount,
-          total: questions.length,
-          percentage: percentage,
-          timestamp: new Date().toISOString(),
-          breakdown: breakdown // <-- Full Detailed JSON
-        };
-      }
-
-      await supabase.from('profiles').update(updatePayload).eq('id', user.id);
-
-      // C. DAILY STREAK LOGIC
-      if (selectedMock.is_daily) {
-        await supabase.from('completed_daily_mocks').insert([{ user_id: user.id, mock_id: selectedMock.id }]);
-        if (!isPenalty) {
-          const today = new Date().toISOString().split('T')[0];
-          await supabase.from('profiles').update({ 
-            streak_count: (user.streak_count || 0) + 1, last_mock_date: today 
-          }).eq('id', user.id);
-          setShowStreakAnim(true);
+      // If Daily, remove old daily mock for today
+      if (isDailyQuickMock) {
+        const { data: old } = await supabase.from('daily_mocks').select('id').eq('is_daily', true).eq('mock_date', today);
+        if (old?.length > 0) {
+          const ids = old.map(m => m.id);
+          // Recursive cleanup
+          await supabase.from('scores').delete().in('mock_id', ids);
+          await supabase.from('completed_daily_mocks').delete().in('mock_id', ids);
+          await supabase.from('daily_mocks').delete().in('id', ids);
         }
       }
-      setIsFinished(true);
-      loadMockData(); 
-    } catch (err) { console.error("Neural Error", err); }
-  };
 
-  const handleReturn = () => {
-    setSelectedMock(null); setQuestions([]); setSubjects([]); 
-    setActiveSubject(""); setCurrentIdx(0); setSelectedOptions({});
-    setIsFinished(false); setShowReview(false); setShowStreakAnim(false);
-    if (setIsExamLocked) setIsExamLocked(false);
-    onFinish(); 
-  };
+      const { error } = await supabase.from('daily_mocks').insert([{ 
+        mock_title: mockTitle, 
+        questions: parsedQuestions, 
+        is_daily: isDailyQuickMock, 
+        is_strict: isStrict, 
+        time_limit: parseInt(timeLimit) || 10, 
+        mock_date: today 
+      }]);
 
-  if (loading) return <div className="p-20 text-center font-black animate-pulse text-blue-600 uppercase tracking-widest">Connecting Grid...</div>;
-
-  // --- VIEW: LIBRARY SELECTION ---
-  if (!selectedMock) {
-    const dailyExists = availableMocks.some(m => m.is_daily);
-    return (
-      <div className="space-y-6">
-        <div className="flex items-center justify-between mb-2">
-          <div className="flex items-center gap-3">
-            <Play className="text-blue-600" fill="currentColor" />
-            <h3 className="text-2xl font-black text-gray-800 dark:text-white uppercase tracking-tighter">Exam Library</h3>
-          </div>
-        </div>
-
-        {!dailyExists && (
-          <div className="p-8 rounded-[32px] bg-gray-50 dark:bg-gray-900/50 border-2 border-dashed border-gray-200 dark:border-gray-700 text-center">
-            <p className="text-gray-400 font-black uppercase text-[10px] tracking-widest">No daily mock active.</p>
-          </div>
-        )}
-
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-          {availableMocks.map((mock) => {
-            const isDone = completedMockIds.includes(mock.id);
-            return (
-              <button key={mock.id} disabled={mock.is_daily && isDone} onClick={() => startMock(mock)} 
-                className={`p-8 rounded-[32px] text-left transition-all shadow-xl border-b-8 relative group ${
-                  mock.is_daily ? (isDone ? 'bg-gray-100 opacity-60' : 'bg-gradient-to-br from-orange-500 to-red-600 text-white border-orange-700') : 'bg-white dark:bg-gray-800 dark:text-white border-blue-500'
-                }`}>
-                
-                {mock.is_daily && !isDone && (
-                  <div className="absolute -top-3 right-8 bg-black text-white px-4 py-1.5 rounded-full text-[9px] font-black uppercase flex items-center gap-2 shadow-2xl border border-white/20">
-                    <Hourglass size={12} className="animate-spin" /> Expires: {timeUntilMidnight}
-                  </div>
-                )}
-
-                <div className="flex justify-between items-start mb-4">
-                  <div className={`p-3 rounded-2xl ${mock.is_daily ? 'bg-white/20' : 'bg-blue-50 dark:bg-gray-700 text-blue-600'}`}>{isDone ? <Lock size={24} /> : <Zap size={24} />}</div>
-                  <span className="flex items-center gap-1 bg-black/10 px-2 py-1 rounded-lg text-[10px] font-bold uppercase tracking-widest">
-                    {mock.is_strict && <ShieldAlert size={12} className="text-red-400 mr-1" />}
-                    <Clock size={12} /> {mock.time_limit}m
-                  </span>
-                </div>
-                <h4 className="text-xl font-black uppercase mb-1 tracking-tight">{mock.mock_title}</h4>
-                <p className="text-[10px] opacity-70 font-black uppercase tracking-widest">{isDone ? 'STREAK SECURED' : (mock.is_strict ? 'STRICT' : 'PRACTICE')}</p>
-              </button>
-            );
-          })}
-        </div>
-      </div>
-    );
-  }
-
-  // --- VIEW: RESULTS & DETAILED REVIEW ---
-  if (isFinished) {
-    const finalScore = Math.round((questions.filter((q, i) => selectedOptions[i] === q.correct_option).length / questions.length) * 100);
-    
-    // Detailed Review Screen
-    if (showReview) {
-      return (
-        <div className="space-y-6 max-w-3xl mx-auto pb-20 animate-in slide-in-from-bottom-4 duration-500">
-          <button onClick={() => setShowReview(false)} className="bg-white dark:bg-gray-800 px-6 py-3 rounded-2xl shadow-sm border dark:border-gray-700 font-black uppercase text-xs flex items-center gap-2 dark:text-white transition-all hover:scale-105"><ArrowLeft size={16} /> Back to Result</button>
-          
-          {questions.map((q, idx) => (
-            <div key={idx} className={`p-8 rounded-[2.5rem] border-l-8 bg-white dark:bg-gray-800 shadow-xl transition-all hover:shadow-2xl ${selectedOptions[idx] === q.correct_option ? 'border-green-500' : 'border-red-500'}`}>
-              <div className="flex justify-between items-start mb-4">
-                 <span className="text-[10px] font-black uppercase text-gray-400 tracking-widest">Question {idx + 1}</span>
-                 {selectedOptions[idx] === q.correct_option ? 
-                   <div className="flex items-center gap-1 text-green-500 font-black text-[10px] uppercase"><CheckCircle size={16} /> Correct</div> : 
-                   <div className="flex items-center gap-1 text-red-500 font-black text-[10px] uppercase"><ShieldAlert size={16} /> Incorrect</div>
-                 }
-              </div>
-              
-              <p className="font-bold text-lg dark:text-white mb-6 leading-tight">{q.question}</p>
-              
-              <div className="grid grid-cols-1 gap-3">
-                {q.options.map((opt, i) => (
-                  <div key={i} className={`p-4 rounded-2xl text-sm font-bold flex justify-between items-center transition-all ${
-                    i === q.correct_option ? 'bg-green-100 text-green-700 dark:bg-green-900/20 dark:text-green-400 ring-2 ring-green-500/20' : 
-                    i === selectedOptions[idx] ? 'bg-red-100 text-red-700 dark:bg-red-900/20 dark:text-red-400' : 
-                    'bg-gray-50 dark:bg-gray-900 opacity-60'
-                  }`}>
-                    <span>{opt}</span>
-                    {i === q.correct_option && <span className="text-[8px] font-black uppercase bg-green-500 text-white px-2 py-1 rounded-md ml-2 shadow-sm">Correct Answer</span>}
-                    {i === selectedOptions[idx] && i !== q.correct_option && <span className="text-[8px] font-black uppercase bg-red-500 text-white px-2 py-1 rounded-md ml-2 shadow-sm">Your Answer</span>}
-                  </div>
-                ))}
-              </div>
-            </div>
-          ))}
-        </div>
-      );
+      if (error) throw error;
+      setStatus(`🎉 Published Successfully!`);
+      setBulkData(''); setMockTitle(''); fetchAdminData();
+    } catch (err) { 
+      console.error("Upload Error:", err);
+      setStatus(`❌ Error: ${err.message}`); 
     }
+  };
 
-    // Score Summary Screen
-    return (
-      <div className="max-w-md mx-auto text-center p-12 bg-white dark:bg-gray-800 rounded-[40px] shadow-2xl border-t-8 border-green-500 relative overflow-hidden">
-        {showStreakAnim && (
-          <div className="absolute inset-0 flex flex-col items-center justify-center bg-orange-600 z-50 text-white p-6 text-center animate-in zoom-in duration-500">
-            <div className="text-8xl animate-bounce mb-4">🔥</div>
-            <h2 className="text-5xl font-black uppercase tracking-tighter mb-2">STREAK +1</h2>
-            <button onClick={() => setShowStreakAnim(false)} className="mt-10 bg-white text-orange-600 px-12 py-4 rounded-[2rem] font-black uppercase text-xs shadow-2xl hover:scale-105 transition-all">Continue</button>
-          </div>
-        )}
-        <Award size={64} className="mx-auto text-green-500 mb-6" />
-        <h2 className="text-3xl font-black dark:text-white uppercase tracking-tighter">Neural Record</h2>
-        <div className="text-6xl font-black text-blue-600 my-6">{finalScore}%</div>
-        <p className="text-gray-400 font-bold text-[10px] uppercase mb-6 tracking-widest italic">Factored into lifetime Neural GPA</p>
+  // C. Recursive Delete (Wipes Scores + Mock)
+  const deleteMock = async (id) => {
+    if (!window.confirm("PERMANENT TERMINATION: Wipe this mock and ALL associated student scores?")) return;
+    setStatus('⏳ Purging Grid Node...');
+    try {
+        await supabase.from('scores').delete().eq('mock_id', id);
+        await supabase.from('completed_daily_mocks').delete().eq('mock_id', id);
+        const { error } = await supabase.from('daily_mocks').delete().eq('id', id);
         
-        <div className="flex flex-col gap-4">
-            <button onClick={() => setShowReview(true)} className="flex items-center justify-center gap-2 w-full bg-gray-100 dark:bg-gray-700 py-4 rounded-2xl font-black uppercase text-xs hover:bg-gray-200 transition-all"><Eye size={20} /> Review Answers</button>
-            <button onClick={handleReturn} className="w-full bg-blue-600 text-white py-4 rounded-2xl font-black uppercase text-xs shadow-xl hover:bg-blue-700 active:scale-95 transition-all">Return to Portal</button>
-        </div>
-      </div>
-    );
-  }
+        if (error) throw error;
+        setStatus('✅ Node Purged.');
+        fetchAdminData(); // Refresh list
+    } catch (err) { 
+        setStatus(`❌ Terminate Failed: ${err.message}`); 
+    }
+  };
 
-  // --- VIEW: CBT INTERFACE ---
-  const activeSubData = subjects.find(s => s.subject === activeSubject);
-  const isFinalMinute = timeLeft <= 60; // 🔥 Warning Trigger
+  // D. Upload Library Resource
+  const uploadResource = async () => {
+    if (!bookTitle || !bookUrl) return alert("Fill Library metadata.");
+    const { error } = await supabase.from('study_resources').insert([{ title: bookTitle, file_url: bookUrl, category: bookCategory }]);
+    if (!error) { 
+      setBookTitle(''); setBookUrl(''); 
+      alert("Knowledge Synced."); 
+    }
+  };
+
+  // E. Broadcast Announcement
+  const postAnnouncement = async () => {
+    if (!announcement) return;
+    await supabase.from('announcements').update({ active: false }).eq('active', true);
+    await supabase.from('announcements').insert([{ message: announcement, active: true }]);
+    setAnnouncement(''); 
+    fetchAdminData(); 
+    alert("Broadcast Live.");
+  };
+
+  // F. Save Dev Log
+  const saveLog = async () => {
+    if (!verName || !verDesc) return;
+    await supabase.from('dev_logs').insert([{ version_name: verName, description: verDesc }]);
+    setVerName(''); setVerDesc(''); 
+    fetchAdminData();
+  };
+
+  // --- VIEW RENDERING ---
+  if (loading && allUsers.length === 0) return <div className="p-20 text-center animate-pulse font-black text-blue-600 uppercase">Connecting...</div>;
 
   return (
-    <div className="max-w-6xl mx-auto space-y-6">
-      <div className="bg-white dark:bg-gray-800 p-4 rounded-[2rem] shadow-xl flex flex-wrap justify-between items-center border dark:border-gray-700">
-        <div className="flex gap-2">
-          {subjects.map(s => (
-            <button key={s.subject} onClick={() => {setActiveSubject(s.subject); setCurrentIdx(0);}} 
-              className={`px-6 py-2 rounded-xl font-black text-[10px] uppercase transition-all ${activeSubject === s.subject ? 'bg-blue-600 text-white shadow-lg scale-105' : 'bg-gray-100 dark:bg-gray-900 text-gray-400 hover:bg-gray-200'}`}>{s.subject}</button>
-          ))}
+    <div className="space-y-10 pb-20 max-w-7xl mx-auto p-4 animate-in fade-in duration-700">
+      
+      {/* 1. BROADCAST PANEL */}
+      <div className="bg-gradient-to-r from-blue-600 to-indigo-700 p-8 rounded-[32px] shadow-2xl text-white">
+        <div className="flex items-center gap-3 mb-6">
+          <Megaphone size={32} className="animate-bounce" />
+          <h2 className="text-2xl font-black uppercase tracking-tighter">Global Broadcast</h2>
         </div>
-        
-        {/* 🔥 TIMER UI WITH PULSING ALARM */}
-        <div className={`flex items-center gap-3 font-mono text-xl font-bold px-6 py-2 rounded-xl transition-all duration-300 ${isFinalMinute ? 'bg-red-600 text-white animate-pulse' : 'bg-black text-white'}`}>
-          <Timer size={18} className={isFinalMinute ? 'animate-spin' : ''} /> 
-          {Math.max(0, Math.floor(timeLeft / 60))}:{String(Math.max(0, timeLeft % 60)).padStart(2, '0')}
+        <div className="flex flex-col md:flex-row gap-4">
+          <input 
+            className="flex-1 p-4 rounded-2xl text-gray-900 font-bold border-none outline-none focus:ring-4 focus:ring-blue-400" 
+            placeholder="Type transmission..." 
+            value={announcement} 
+            onChange={(e) => setAnnouncement(e.target.value)} 
+          />
+          <button onClick={postAnnouncement} className="bg-white text-blue-600 px-10 py-4 rounded-2xl font-black uppercase tracking-widest hover:bg-blue-50 active:scale-95 shadow-lg transition-all">
+            Broadcast
+          </button>
         </div>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
-        <div className="lg:col-span-3 bg-white dark:bg-gray-800 p-10 rounded-[3rem] shadow-2xl border dark:border-gray-700 relative">
-          {selectedMock.is_strict && <div className="absolute top-6 right-10 text-red-500 font-black text-[10px] uppercase flex items-center gap-2"><ShieldAlert size={14} /> Strikes: {warnings}/2</div>}
-          <h4 className="text-blue-600 font-black uppercase text-[10px] mb-4 italic">{activeSubject} / Question {currentIdx + 1}</h4>
-          <h3 className="text-2xl font-bold dark:text-white mb-10 leading-tight">{activeSubData.questions[currentIdx].question}</h3>
-          
-          <div className="grid grid-cols-1 gap-4">
-            {activeSubData.questions[currentIdx].options.map((opt, i) => {
-              const absIdx = getAbsIdx(activeSubject, currentIdx);
-              return (
-                <button key={i} onClick={() => setSelectedOptions({...selectedOptions, [absIdx]: i})} 
-                  className={`w-full text-left p-6 rounded-2xl border-2 transition-all font-bold flex items-center gap-4 group ${selectedOptions[absIdx] === i ? 'border-blue-500 bg-blue-50 dark:bg-blue-900/30 dark:text-white' : 'border-gray-100 dark:border-gray-700 dark:text-gray-300 hover:border-blue-300'}`}>
-                  <div className={`w-10 h-10 rounded-xl flex items-center justify-center font-black transition-colors ${selectedOptions[absIdx] === i ? 'bg-blue-600 text-white' : 'bg-gray-100 dark:bg-gray-700 group-hover:bg-blue-100'}`}>{String.fromCharCode(65 + i)}</div>{opt}
+      {/* 2. GLOBAL REGULAR MOCK ROSTER (Latest Results) */}
+      <div className="bg-white dark:bg-gray-800 p-8 rounded-[32px] shadow-xl border dark:border-gray-700">
+        <div className="flex items-center gap-3 mb-6 text-green-500">
+          <Award size={32} />
+          <h2 className="text-2xl font-black uppercase dark:text-white">Global Regular Roster</h2>
+        </div>
+        
+        <div className="overflow-x-auto max-h-96 pr-2 custom-scrollbar">
+          <table className="w-full text-left border-collapse">
+            <thead>
+              <tr className="text-[10px] font-black uppercase text-gray-400 tracking-widest border-b dark:border-gray-700">
+                <th className="pb-4">Node Identity</th>
+                <th className="pb-4">Latest Mock</th>
+                <th className="pb-4 text-center">Score</th>
+                <th className="pb-4 text-right">Timestamp</th>
+              </tr>
+            </thead>
+            <tbody>
+              {/* 🔥 SAFE FILTER to prevent crash */}
+              {allUsers.filter(u => u.last_regular_result).length === 0 ? (
+                <tr><td colSpan="4" className="text-center py-8 text-gray-400 font-bold uppercase text-xs">No Data Found</td></tr>
+              ) : (
+                allUsers.filter(u => u.last_regular_result).map(u => (
+                  <tr key={u.id} className="border-t dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-900/50">
+                    <td className="py-4 font-black uppercase text-xs dark:text-white">{u.username}</td>
+                    <td className="py-4 text-xs font-bold text-gray-500 dark:text-gray-400">{u.last_regular_result.title}</td>
+                    <td className="py-4 text-center">
+                      <span className={`px-3 py-1 rounded-lg font-black text-xs ${u.last_regular_result.percentage >= 50 ? 'bg-green-100 text-green-600' : 'bg-red-100 text-red-600'}`}>
+                        {u.last_regular_result.score}/{u.last_regular_result.total}
+                      </span>
+                    </td>
+                    <td className="py-4 text-right text-[10px] font-bold text-gray-400">
+                      {new Date(u.last_regular_result.timestamp).toLocaleDateString()}
+                    </td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      {/* 3. NEURAL ROSTER (Cumulative Stats) */}
+      <div className="bg-white dark:bg-gray-800 p-8 rounded-[32px] shadow-xl border dark:border-gray-700">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-3 text-blue-600">
+            <Users size={32} />
+            <h2 className="text-2xl font-black uppercase dark:text-white tracking-tighter">Cumulative Roster</h2>
+          </div>
+          <button type="button" onClick={() => setShowRoster(!showRoster)} className={`p-3 rounded-2xl bg-blue-50 dark:bg-gray-700 text-blue-600 transition-all duration-300 hover:scale-110 ${showRoster ? 'rotate-180 bg-blue-600 text-white shadow-lg' : ''}`}>
+            <ChevronDown size={28} strokeWidth={3} />
+          </button>
+        </div>
+        
+        {showRoster && (
+          <div className="overflow-x-auto animate-in slide-in-from-top-4 duration-500 mt-8">
+            <table className="w-full text-left border-separate border-spacing-y-3">
+              <thead>
+                <tr className="text-[10px] font-black uppercase text-gray-400 tracking-[0.2em]">
+                  <th className="px-6 pb-2">Node</th>
+                  <th className="px-6 pb-2">Role</th>
+                  <th className="px-6 pb-2 text-center">Lifetime GPA</th>
+                  <th className="px-6 pb-2 text-right">Streak</th>
+                </tr>
+              </thead>
+              <tbody>
+                {allUsers.map((u) => {
+                  const r = getNeuralRank(u.total_percentage_points, u.total_exams_completed);
+                  return (
+                    <tr key={u.id} className="bg-gray-50 dark:bg-gray-900/50 rounded-2xl hover:scale-[1.01] transition-transform">
+                      <td className="px-6 py-4 rounded-l-2xl">
+                        <div className="flex items-center gap-3">
+                          <img src={`https://api.dicebear.com/7.x/${u.gender === 'neutral' ? 'bottts' : 'avataaars'}/svg?seed=${u.username}`} className="w-10 h-10 rounded-xl bg-white p-1" />
+                          <div className="flex flex-col">
+                            <span className="font-black dark:text-white uppercase text-sm">{u.username}</span>
+                            <span className={`text-[8px] font-black uppercase tracking-widest ${r.color}`}>{r.label}</span>
+                          </div>
+                        </div>
+                      </td>
+                      <td className="px-6 py-4 text-[10px] font-bold text-gray-500 uppercase tracking-tighter">
+                        <div className="flex items-center gap-2"><Target size={14}/> {u.preparing_for || 'General'}</div>
+                      </td>
+                      <td className="px-6 py-4 text-center">
+                        <p className="font-black text-blue-600 text-lg">{(u.total_percentage_points / (u.total_exams_completed || 1)).toFixed(1)}%</p>
+                      </td>
+                      <td className="px-6 py-4 text-right rounded-r-2xl">
+                        <div className="inline-flex items-center gap-1 bg-orange-100 dark:bg-orange-900/20 px-3 py-1 rounded-lg">
+                          <Flame size={12} className="text-orange-500 fill-orange-500" />
+                          <span className="text-xs font-black text-orange-600">{u.streak_count || 0}</span>
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-10">
+        
+        {/* 4. MOCK CREATOR */}
+        <div className="bg-white dark:bg-gray-800 p-8 rounded-[32px] shadow-xl border dark:border-gray-700">
+          <div className="flex items-center gap-3 mb-6 text-blue-600">
+            <UploadCloud size={32} />
+            <h2 className="text-2xl font-black uppercase dark:text-white">Mock Creator</h2>
+          </div>
+          <div className="space-y-4">
+            <input type="text" placeholder="Mock Title" className="w-full p-4 rounded-2xl border dark:bg-gray-900 dark:text-white font-bold outline-none" value={mockTitle} onChange={(e) => setMockTitle(e.target.value)} />
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+               <div className="relative">
+                 <input type="number" className="w-full p-4 rounded-2xl border dark:bg-gray-900 dark:text-white font-black outline-none" value={timeLimit} onChange={(e) => setTimeLimit(e.target.value)} />
+                 <Clock size={16} className="absolute right-4 top-5 text-gray-400" />
+               </div>
+               <button type="button" onClick={() => setIsDailyQuickMock(!isDailyQuickMock)} className={`p-4 rounded-2xl font-black uppercase text-[10px] flex items-center justify-center gap-2 transition-all ${isDailyQuickMock ? 'bg-orange-500 text-white shadow-lg' : 'bg-gray-100 dark:bg-gray-700 text-gray-400'}`}>
+                 <Zap size={14} /> {isDailyQuickMock ? 'Daily' : 'Regular'}
+               </button>
+               <button type="button" onClick={() => setIsStrict(!isStrict)} className={`p-4 rounded-2xl font-black uppercase text-[10px] flex items-center justify-center gap-2 transition-all ${isStrict ? 'bg-red-600 text-white shadow-lg' : 'bg-gray-100 dark:bg-gray-700 text-gray-400'}`}>
+                 <ShieldAlert size={14} /> Strict: {isStrict ? 'ON' : 'OFF'}
+               </button>
+            </div>
+            <textarea className="w-full h-40 p-4 font-mono text-[10px] border dark:bg-gray-900 dark:text-white rounded-2xl outline-none" placeholder='Paste JSON array...' value={bulkData} onChange={(e) => setBulkData(e.target.value)} />
+            <button type="button" onClick={handleBulkUpload} className="w-full bg-blue-600 text-white py-4 rounded-2xl font-black uppercase tracking-widest shadow-xl active:scale-95 transition-all">
+              Publish Mock
+            </button>
+            {status && <p className="text-center font-black uppercase text-xs text-green-500 mt-2">{status}</p>}
+          </div>
+        </div>
+
+        {/* 5. MOCK MANAGEMENT (GRID MANAGER) */}
+        <div className="bg-white dark:bg-gray-800 p-8 rounded-[32px] shadow-xl border dark:border-gray-700">
+          <div className="flex items-center gap-3 mb-6 text-red-500">
+            <ListFilter size={32} />
+            <h2 className="text-2xl font-black uppercase dark:text-white">Grid Management</h2>
+          </div>
+          <div className="space-y-3 max-h-[400px] overflow-y-auto pr-2 custom-scrollbar">
+            {allMocks.length === 0 ? (
+              <div className="text-center py-20 opacity-30 uppercase text-xs font-black tracking-widest">
+                <Database size={40} className="mx-auto mb-2" />
+                No Active Nodes
+              </div>
+            ) : allMocks.map(m => (
+              <div key={m.id} className="p-4 bg-gray-50 dark:bg-gray-900 rounded-2xl border dark:border-gray-800 flex justify-between items-center group transition-all">
+                <div>
+                  <p className="font-black dark:text-white text-xs uppercase">{m.mock_title}</p>
+                  <p className="text-[8px] font-bold text-gray-400 uppercase tracking-widest">
+                    {m.is_daily ? 'Daily' : 'Regular'} • {m.is_strict ? 'Strict' : 'Casual'}
+                  </p>
+                </div>
+                <button onClick={() => deleteMock(m.id)} className="text-gray-400 hover:text-red-500 transition-colors">
+                  <Trash2 size={18} />
                 </button>
-              )
-            })}
-          </div>
-
-          <div className="mt-12 flex justify-between pt-8 border-t dark:border-gray-700">
-            <button disabled={currentIdx === 0} onClick={() => setCurrentIdx(prev => prev - 1)} className="px-6 py-2 text-gray-400 font-bold uppercase text-xs disabled:opacity-30 hover:text-gray-600 transition-all">Previous</button>
-            <button disabled={currentIdx === activeSubData.questions.length - 1} onClick={() => setCurrentIdx(prev => prev + 1)} className="px-10 py-4 bg-blue-600 text-white rounded-2xl font-black uppercase text-xs shadow-lg disabled:opacity-30 hover:scale-105 active:scale-95 transition-all">Next Question</button>
+              </div>
+            ))}
           </div>
         </div>
 
-        <div className="bg-white dark:bg-gray-800 p-8 rounded-[3rem] shadow-xl border dark:border-gray-700 text-center">
-          <p className="text-[10px] font-black uppercase text-gray-400 mb-6 tracking-widest">Question Palette</p>
-          <div className="grid grid-cols-4 gap-2 mb-8 max-h-[300px] overflow-y-auto pr-2 custom-scrollbar">
-            {activeSubData.questions.map((_, i) => {
-              const absIdx = getAbsIdx(activeSubject, i);
-              const isDone = selectedOptions[absIdx] !== undefined;
-              return (
-                <button key={i} onClick={() => setCurrentIdx(i)} 
-                  className={`aspect-square rounded-xl font-black text-xs transition-all ${currentIdx === i ? 'ring-2 ring-blue-500 ring-offset-2 scale-110' : ''} ${isDone ? 'bg-green-500 text-white shadow-md' : 'bg-gray-100 dark:bg-gray-900 text-gray-400 hover:bg-gray-200'}`}>{i + 1}</button>
-              )
-            })}
+        {/* 6. LIBRARY MANAGER */}
+        <div className="bg-white dark:bg-gray-800 p-8 rounded-[32px] shadow-xl border dark:border-gray-700">
+          <div className="flex items-center gap-3 mb-6 text-orange-500">
+            <BookOpen size={32} />
+            <h2 className="text-2xl font-black uppercase dark:text-white">Library Manager</h2>
           </div>
-          <button onClick={() => { if(window.confirm("Submit final neural transmission?")) handleSubmit(false); }} className="w-full bg-red-600 text-white py-4 rounded-2xl font-black uppercase text-xs shadow-xl active:scale-95 transition-all hover:bg-red-700">Submit Test</button>
+          <div className="space-y-4">
+            <input className="w-full p-4 rounded-2xl border dark:bg-gray-900 dark:text-white outline-none" placeholder="Resource Title" value={bookTitle} onChange={e => setBookTitle(e.target.value)} />
+            <input className="w-full p-4 rounded-2xl border dark:bg-gray-900 dark:text-white outline-none" placeholder="PDF URL" value={bookUrl} onChange={e => setBookUrl(e.target.value)} />
+            <select className="w-full p-4 rounded-2xl border dark:bg-gray-900 dark:text-white outline-none font-bold" value={bookCategory} onChange={e => setBookCategory(e.target.value)}>
+              {['Physics', 'Chemistry', 'Biology', 'Maths', 'General'].map(s => <option key={s} value={s}>{s}</option>)}
+            </select>
+            <button type="button" onClick={uploadResource} className="w-full bg-orange-500 text-white py-4 rounded-2xl font-black uppercase shadow-lg active:scale-95 transition-all">
+              Upload Resource
+            </button>
+          </div>
         </div>
+
+        {/* 7. ACCESS KEYS */}
+        <div className="bg-white dark:bg-gray-800 p-8 rounded-[32px] shadow-xl border dark:border-gray-700">
+          <div className="flex items-center gap-3 mb-6 text-indigo-600">
+            <Key size={32} />
+            <h2 className="text-2xl font-black uppercase dark:text-white">Access Keys</h2>
+          </div>
+          <div className="flex gap-2 mb-6">
+            <input type="text" placeholder="Recipient Name" className="flex-1 p-4 rounded-2xl border dark:bg-gray-900 dark:text-white outline-none" value={assignedName} onChange={(e) => setAssignedName(e.target.value)} />
+            <button type="button" onClick={generateKey} className="bg-indigo-600 text-white p-4 rounded-2xl hover:bg-indigo-700">
+              <UserPlus size={24} />
+            </button>
+          </div>
+          <div className="space-y-2 max-h-64 overflow-y-auto pr-2 custom-scrollbar">
+            {activeKeys.map(k => (
+              <div key={k.id} className="p-4 bg-gray-50 dark:bg-gray-900 rounded-2xl border dark:border-gray-800 flex justify-between items-center transition-all">
+                <div>
+                  <p className="font-black text-indigo-600 text-xs tracking-widest">{k.access_key}</p>
+                  <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Node: {k.assigned_to}</p>
+                </div>
+                <button type="button" onClick={async () => { await supabase.from('authorized_users').delete().eq('id', k.id); fetchAdminData(); }} className="text-gray-300 hover:text-red-500 transition-colors">
+                  <Trash2 size={16} />
+                </button>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* 8. PORTAL SIGNALS */}
+        <div className="bg-gray-900 text-white p-8 rounded-[32px] shadow-2xl border border-white/5 lg:col-span-1">
+          <div className="flex items-center gap-3 mb-6 text-orange-400">
+            <MessageSquare size={28} />
+            <h2 className="text-xl font-black uppercase tracking-tight">Portal Signals</h2>
+          </div>
+          <div className="space-y-4 max-h-[400px] overflow-y-auto pr-4 custom-scrollbar">
+            {userRequests.length === 0 ? (
+              <p className="text-gray-500 text-center py-10 font-bold uppercase opacity-50 text-xs tracking-widest">No Signals...</p>
+            ) : userRequests.map(req => (
+              <div key={req.id} className="p-4 bg-white/5 rounded-2xl border border-white/10 hover:border-orange-500/50 transition-all relative group">
+                <div className="flex justify-between items-start mb-2">
+                  <span className="bg-orange-500/20 text-orange-400 px-2 py-0.5 rounded text-[8px] font-black uppercase tracking-widest">{req.request_type}</span>
+                  <span className="text-[8px] text-gray-500 font-bold">{new Date(req.created_at).toLocaleDateString()}</span>
+                </div>
+                <p className="text-xs font-black text-gray-300 uppercase tracking-tighter">{req.user_name}</p>
+                <p className="text-[10px] text-gray-500 italic mt-1 mb-4">"{req.message}"</p>
+                <div className="flex gap-2">
+                  <button type="button" onClick={async () => { await supabase.from('admin_requests').delete().eq('id', req.id); fetchAdminData(); }} className="flex-1 bg-green-600/20 text-green-400 py-2 rounded-xl font-black text-[10px] hover:bg-green-600/40">RESOLVE</button>
+                  <button type="button" onClick={async () => { await supabase.from('admin_requests').delete().eq('id', req.id); fetchAdminData(); }} className="p-2 bg-red-600/20 text-red-400 rounded-xl hover:bg-red-600/40 transition-all">
+                    <X size={14} />
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* 9. DEV LOGS */}
+        <div className="bg-white dark:bg-gray-800 p-8 rounded-[32px] shadow-xl border dark:border-gray-700">
+           <h3 className="text-xl font-black mb-6 flex items-center gap-3 text-blue-600 uppercase tracking-tighter">
+             <History size={24} /> Dev Logs
+           </h3>
+           <div className="space-y-3 mb-6">
+            <input className="w-full bg-gray-50 dark:bg-gray-900 p-4 rounded-2xl text-sm border dark:border-gray-700 outline-none" placeholder="Version Name" value={verName} onChange={e => setVerName(e.target.value)} />
+            <textarea className="w-full bg-gray-50 dark:bg-gray-900 p-4 rounded-2xl text-sm border dark:border-gray-700 outline-none h-20 resize-none" placeholder="Commit details..." value={verDesc} onChange={e => setVerDesc(e.target.value)} />
+            <button type="button" onClick={saveLog} className="w-full bg-indigo-600 text-white py-4 rounded-2xl font-black uppercase text-xs shadow-lg hover:bg-indigo-700 active:scale-95 transition-all">
+              Commit Update
+            </button>
+          </div>
+          <div className="space-y-4 max-h-60 overflow-y-auto pr-2 custom-scrollbar">
+            {history.map(log => (
+              <div key={log.id} className="border-l-4 border-blue-600 pl-4 py-1 hover:bg-blue-50 dark:hover:bg-gray-900/50 transition-all">
+                <p className="text-blue-600 font-black text-xs uppercase tracking-widest">{log.version_name} • <span className="text-gray-400 text-[10px]">{new Date(log.created_at).toLocaleDateString()}</span></p>
+                <p className="text-gray-500 text-[10px] leading-relaxed mt-1">{log.description}</p>
+              </div>
+            ))}
+          </div>
+        </div>
+
       </div>
     </div>
   );
