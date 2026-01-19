@@ -2,7 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { supabase } from '../supabaseClient';
 import { 
   UploadCloud, Database, History, Megaphone, Trash2, 
-  Zap, Loader2, ShieldAlert, Key, UserPlus, 
+  Zap, ShieldAlert, Key, UserPlus, 
   Clock, MessageSquare, X, Users, Flame, Target, 
   GraduationCap, ChevronDown, BookOpen, ListFilter, Award
 } from 'lucide-react';
@@ -15,7 +15,7 @@ export default function AdminPanel() {
   const [isDailyQuickMock, setIsDailyQuickMock] = useState(false);
   const [isStrict, setIsStrict] = useState(false); 
   const [status, setStatus] = useState('');
-  const [allMocks, setAllMocks] = useState([]); 
+  const [allMocks, setAllMocks] = useState([]); // 🔥 State for Grid Management
 
   // --- 2. ACCESS KEY & ROSTER STATE ---
   const [assignedName, setAssignedName] = useState('');
@@ -36,12 +36,11 @@ export default function AdminPanel() {
   const [announcement, setAnnouncement] = useState('');
   const [loading, setLoading] = useState(true);
 
-  // --- 5. ROBUST DATA FETCH (ISOLATED) ---
+  // --- 5. ROBUST DATA FETCH (ISOLATED & CRASH-PROOF) ---
   const fetchAdminData = useCallback(async () => {
     setLoading(true);
     
-    // A. FETCH MOCKS (CRITICAL - Runs Independently)
-    // This ensures Grid Management works even if other tables are missing
+    // A. FETCH MOCKS (Run this first and independently)
     try {
       const { data: mockData, error } = await supabase
         .from('daily_mocks')
@@ -54,7 +53,7 @@ export default function AdminPanel() {
       console.error("Critical Grid Error:", err);
     }
 
-    // B. FETCH PROFILES (CRITICAL)
+    // B. FETCH PROFILES
     try {
         const { data: profileData } = await supabase
             .from('profiles')
@@ -64,7 +63,6 @@ export default function AdminPanel() {
     } catch (err) { console.error("Profile Sync Error:", err); }
 
     // C. FETCH SECONDARY ADMIN TABLES (Fail-Safe)
-    // If these tables don't exist yet, they won't crash the Grid
     try {
       const [logs, keys, reqs] = await Promise.all([
         supabase.from('dev_logs').select('*').order('created_at', { ascending: false }),
@@ -137,12 +135,12 @@ export default function AdminPanel() {
     }
   };
 
-  // 🔥 RECURSIVE DELETE (Wipes Mock + Scores)
+  // 🔥 RECURSIVE DELETE (Fixes Foreign Key Constraint Issues)
   const deleteMock = async (id) => {
     if (!window.confirm("PERMANENT TERMINATION: Wipe this mock and ALL associated student scores?")) return;
     setStatus('⏳ Purging Grid Node...');
     try {
-        // 1. Delete Scores first (Foreign Key)
+        // 1. Delete Scores first
         await supabase.from('scores').delete().eq('mock_id', id);
         // 2. Delete Daily Completions
         await supabase.from('completed_daily_mocks').delete().eq('mock_id', id);
@@ -188,7 +186,7 @@ export default function AdminPanel() {
         </div>
       </div>
 
-      {/* 2. GLOBAL REGULAR MOCK ROSTER (Latest Results) */}
+      {/* 2. GLOBAL REGULAR MOCK ROSTER */}
       <div className="bg-white dark:bg-gray-800 p-8 rounded-[32px] shadow-xl border dark:border-gray-700">
         <div className="flex items-center gap-3 mb-6 text-green-500">
           <Award size={32} />
@@ -288,7 +286,7 @@ export default function AdminPanel() {
           </div>
         </div>
 
-        {/* 5. MOCK MANAGEMENT (GRID MANAGER) */}
+        {/* 5. MOCK MANAGEMENT (GRID MANAGER - FIXED) */}
         <div className="bg-white dark:bg-gray-800 p-8 rounded-[32px] shadow-xl border dark:border-gray-700">
           <div className="flex items-center gap-3 mb-6 text-red-500"><ListFilter size={32} /><h2 className="text-2xl font-black uppercase dark:text-white">Grid Management</h2></div>
           <div className="space-y-3 max-h-[400px] overflow-y-auto pr-2 custom-scrollbar">
