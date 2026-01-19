@@ -11,7 +11,11 @@ import GoalTracker from './components/GoalTracker';
 import StudyChat from './components/StudyChat';
 import InviteButton from './components/InviteButton';
 import StudyHub from './components/StudyHub'; 
-import { Lock, Megaphone, ShieldAlert, Key, Youtube, Layout } from 'lucide-react';
+// 🔥 STABILIZED IMPORTS: All required icons for Dashboard & Engine included
+import { 
+  Lock, Megaphone, ShieldAlert, Key, Youtube, 
+  Layout, Zap, Award, Database, ListFilter 
+} from 'lucide-react';
 
 export default function App() {
   const [user, setUser] = useState(null);
@@ -28,6 +32,7 @@ export default function App() {
 
   // --- 1. ATOMIC USER REFRESH ---
   const refreshUser = useCallback(async (userId) => {
+    if (!userId) return;
     const { data, error } = await supabase
       .from('profiles')
       .select('*')
@@ -48,39 +53,39 @@ export default function App() {
         .single();
       if (data) setGlobalMsg(data.message);
     };
-    fetchAnnouncement();
+    if (user) fetchAnnouncement();
   }, [user?.id]);
 
   // --- 3. REFINED STREAK LOGIC (PROTECTION VS COLLAPSE) ---
   const handleStreakCheck = async (profile) => {
+    if (!profile?.last_mock_date) return;
+    
     const today = new Date();
     today.setHours(0, 0, 0, 0);
     const todayStr = today.toISOString().split('T')[0];
 
     if (profile.last_mock_date === todayStr) return;
 
-    const lastDate = profile.last_mock_date ? new Date(profile.last_mock_date) : null;
+    const lastDate = new Date(profile.last_mock_date);
+    lastDate.setHours(0, 0, 0, 0);
     
-    if (lastDate) {
-      lastDate.setHours(0, 0, 0, 0);
-      const yesterday = new Date(today);
-      yesterday.setDate(yesterday.getDate() - 1);
+    const yesterday = new Date(today);
+    yesterday.setDate(yesterday.getDate() - 1);
 
-      if (lastDate.getTime() < yesterday.getTime()) {
-        if (profile.streak_points > 0) {
-          // 🔥 STREAK FREEZE: Consume point to save count
-          await supabase.from('profiles').update({ 
-            streak_points: profile.streak_points - 1,
-            last_mock_date: yesterday.toISOString().split('T')[0] 
-          }).eq('id', profile.id);
-          
-          alert("🔥 STREAK PROTECTED: 1 Streak Point consumed to maintain your grid connection.");
-          refreshUser(profile.id);
-        } else {
-          // ❄️ STREAK COLLAPSE: Points are 0, reset count
-          await supabase.from('profiles').update({ streak_count: 0 }).eq('id', profile.id);
-          refreshUser(profile.id);
-        }
+    if (lastDate.getTime() < yesterday.getTime()) {
+      if (profile.streak_points > 0) {
+        // 🔥 STREAK FREEZE: Consume point to save count
+        await supabase.from('profiles').update({ 
+          streak_points: profile.streak_points - 1,
+          last_mock_date: yesterday.toISOString().split('T')[0] 
+        }).eq('id', profile.id);
+        
+        alert("🔥 STREAK PROTECTED: 1 Streak Point consumed to maintain your grid connection.");
+        refreshUser(profile.id);
+      } else {
+        // ❄️ STREAK COLLAPSE: Points are 0, reset count
+        await supabase.from('profiles').update({ streak_count: 0 }).eq('id', profile.id);
+        refreshUser(profile.id);
       }
     }
   };
@@ -94,7 +99,7 @@ export default function App() {
         .upsert({ username: username.trim() }, { onConflict: 'username' })
         .select().single();
 
-      if (!error) {
+      if (!error && data) {
         setUser(data);
         handleStreakCheck(data);
       }
@@ -102,7 +107,8 @@ export default function App() {
   };
 
   const validateAccessKey = async () => {
-    setAuthError('⏳ Authenticating...');
+    if (!accessKey.trim()) return;
+    setAuthError('⏳ Authenticating Node...');
     const { data: keyData, error: keyError } = await supabase
       .from('authorized_users')
       .select('*')
@@ -137,14 +143,14 @@ export default function App() {
   if (!user) {
     return (
       <div className={`flex items-center justify-center min-h-screen ${isDarkMode ? 'bg-gray-950' : 'bg-blue-50'}`}>
-        <div className="bg-white dark:bg-gray-900 p-10 rounded-[3rem] shadow-2xl border-2 border-blue-500/20 w-full max-w-md text-center">
+        <div className="bg-white dark:bg-gray-900 p-10 rounded-[3rem] shadow-2xl border-2 border-blue-500/20 w-full max-w-md text-center animate-in fade-in zoom-in duration-500">
           <div className="w-20 h-20 bg-blue-600 rounded-3xl flex items-center justify-center mx-auto mb-6 shadow-xl rotate-3">
              <ShieldAlert className="text-white" size={40} />
           </div>
           <h1 className="text-4xl font-black mb-2 text-blue-600 italic tracking-tighter uppercase">Neural Portal</h1>
-          <p className="text-gray-400 font-bold text-xs uppercase tracking-widest mb-8">Access Simulation Grid</p>
+          <p className="text-gray-400 font-bold text-xs uppercase tracking-widest mb-8">Identify Node</p>
           <input className="w-full p-5 rounded-2xl border-2 mb-4 dark:bg-gray-800 dark:border-gray-700 dark:text-white font-black outline-none focus:border-blue-500 transition-all text-center" placeholder="ENTER USERNAME" value={username} onChange={(e) => setUsername(e.target.value)} />
-          <button onClick={handleLogin} className="w-full bg-blue-600 text-white p-5 rounded-2xl font-black uppercase tracking-widest hover:bg-blue-700 transition-all shadow-xl">Verify Identity</button>
+          <button onClick={handleLogin} className="w-full bg-blue-600 text-white p-5 rounded-2xl font-black uppercase tracking-widest hover:bg-blue-700 shadow-xl transition-all">Verify Identity</button>
         </div>
       </div>
     );
@@ -160,14 +166,13 @@ export default function App() {
           <h2 className="text-2xl font-black dark:text-white uppercase tracking-tighter mb-2">Node Locked</h2>
           <p className="text-gray-500 text-xs font-bold uppercase mb-8">Authorise Node "{user.username}"</p>
           <input className="w-full p-5 rounded-2xl border-2 mb-4 dark:bg-gray-800 dark:border-gray-700 dark:text-white font-mono text-center text-xl tracking-[0.2em] outline-none" placeholder="BRAIN-XXXXXX" value={accessKey} onChange={(e) => setAccessKey(e.target.value)} />
-          <button onClick={validateAccessKey} className="w-full bg-indigo-600 text-white p-5 rounded-2xl font-black uppercase tracking-widest hover:bg-indigo-700 transition-all mb-4 shadow-xl">Activate Identity</button>
+          <button onClick={validateAccessKey} className="w-full bg-indigo-600 text-white p-5 rounded-2xl font-black uppercase tracking-widest hover:bg-indigo-700 shadow-xl transition-all mb-4">Activate Identity</button>
           {authError && <p className="text-red-500 font-black text-[10px] uppercase tracking-widest">{authError}</p>}
         </div>
       </div>
     );
   }
 
-  // --- VIEW: CORE PORTAL ---
   return (
     <div className={isDarkMode ? 'dark' : ''}>
       <div className={`flex min-h-screen transition-colors duration-300 ${isDarkMode ? 'bg-gray-950 text-white' : 'bg-blue-50 text-gray-800'}`}>
@@ -178,7 +183,6 @@ export default function App() {
         </div>
         
         <main className={`flex-1 p-6 md:p-10 transition-all duration-300 ${isSidebarOpen ? 'ml-64' : 'ml-20'}`}>
-          {/* HEADER SECTION */}
           <header className={`mb-10 flex flex-wrap items-center gap-6 transition-all duration-700 ${isExamLocked ? 'opacity-20 pointer-events-none select-none -translate-y-4' : ''}`}>
             <h2 className="text-4xl font-black capitalize text-blue-600 dark:text-blue-400">
               {activeTab === 'ranking' ? 'Leaderboard' : activeTab === 'study' ? 'Study Hub' : activeTab}
@@ -213,7 +217,7 @@ export default function App() {
                       </div>
                       <div className="bg-blue-50 dark:bg-blue-900/20 p-6 rounded-3xl border border-blue-100 dark:border-blue-800 backdrop-blur-sm">
                         <p className="text-sm font-bold text-gray-600 dark:text-gray-400">
-                          System Sync: Active. Global Performance Index: <span className="text-blue-600 font-black">{(user.total_percentage_points / (user.total_exams_completed || 1)).toFixed(1)}%</span>
+                          System Sync: Active. Global Index: <span className="text-blue-600 font-black">{(user.total_percentage_points / (user.total_exams_completed || 1)).toFixed(1)}%</span>
                         </p>
                       </div>
                     </div>
@@ -248,7 +252,6 @@ export default function App() {
             {activeTab === 'profile' && <Profile user={user} />}
           </div>
 
-          {/* ADMIN REQUEST SIGNAL */}
           {!isExamLocked && !isAdmin && (
             <button onClick={sendAdminRequest} className="fixed bottom-8 right-8 bg-blue-600 text-white p-5 rounded-full shadow-[0_0_30px_rgba(37,99,235,0.4)] hover:scale-110 active:scale-95 transition-all z-50 group">
               <Megaphone size={26} className="group-hover:animate-bounce" />
