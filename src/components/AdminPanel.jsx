@@ -2,7 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { supabase } from '../supabaseClient';
 import { 
   UploadCloud, Database, History, Megaphone, Trash2, 
-  Zap, ShieldAlert, Key, UserPlus, 
+  Zap, Loader2, ShieldAlert, Key, UserPlus, 
   Clock, MessageSquare, X, Users, Flame, Target, 
   GraduationCap, ChevronDown, BookOpen, ListFilter, Award
 } from 'lucide-react';
@@ -15,7 +15,7 @@ export default function AdminPanel() {
   const [isDailyQuickMock, setIsDailyQuickMock] = useState(false);
   const [isStrict, setIsStrict] = useState(false); 
   const [status, setStatus] = useState('');
-  const [allMocks, setAllMocks] = useState([]); // 🔥 State for Grid Management
+  const [allMocks, setAllMocks] = useState([]); 
 
   // --- 2. ACCESS KEY & ROSTER STATE ---
   const [assignedName, setAssignedName] = useState('');
@@ -36,45 +36,38 @@ export default function AdminPanel() {
   const [announcement, setAnnouncement] = useState('');
   const [loading, setLoading] = useState(true);
 
-  // --- 5. ROBUST DATA FETCH (ISOLATED & CRASH-PROOF) ---
+  // --- 5. REBUILT GRID FETCH (ISOLATED) ---
   const fetchAdminData = useCallback(async () => {
     setLoading(true);
     
-    // A. FETCH MOCKS (Run this first and independently)
+    // 🔥 NEW: Explicit Grid Synchronization
     try {
-      const { data: mockData, error } = await supabase
+      const { data: mocks, error } = await supabase
         .from('daily_mocks')
-        .select('*')
+        .select('id, mock_title, is_daily, is_strict, time_limit, created_at')
         .order('created_at', { ascending: false });
       
-      if (mockData) setAllMocks(mockData);
-      if (error) console.error("Grid Fetch Error:", error.message);
+      if (error) throw error;
+      setAllMocks(mocks || []);
     } catch (err) {
-      console.error("Critical Grid Error:", err);
+      console.error("Grid Sync Failure:", err.message);
     }
 
-    // B. FETCH PROFILES
+    // Secondary Data Pipeline (Fail-safe)
     try {
-        const { data: profileData } = await supabase
-            .from('profiles')
-            .select('*')
-            .order('total_exams_completed', { ascending: false });
-        if (profileData) setAllUsers(profileData);
-    } catch (err) { console.error("Profile Sync Error:", err); }
-
-    // C. FETCH SECONDARY ADMIN TABLES (Fail-Safe)
-    try {
-      const [logs, keys, reqs] = await Promise.all([
+      const [logs, keys, reqs, profiles] = await Promise.all([
         supabase.from('dev_logs').select('*').order('created_at', { ascending: false }),
         supabase.from('authorized_users').select('*').order('created_at', { ascending: false }),
         supabase.from('admin_requests').select('*').order('created_at', { ascending: false }),
+        supabase.from('profiles').select('*').order('total_exams_completed', { ascending: false })
       ]);
 
       if (logs.data) setHistory(logs.data);
       if (keys.data) setActiveKeys(keys.data);
       if (reqs.data) setUserRequests(reqs.data);
+      if (profiles.data) setAllUsers(profiles.data);
     } catch (err) {
-      console.warn("Secondary tables missing (DevLogs/Keys/Requests). Grid is safe.");
+      console.warn("Secondary administrative tables offline.");
     } finally {
       setLoading(false);
     }
@@ -135,18 +128,13 @@ export default function AdminPanel() {
     }
   };
 
-  // 🔥 RECURSIVE DELETE (Fixes Foreign Key Constraint Issues)
   const deleteMock = async (id) => {
-    if (!window.confirm("PERMANENT TERMINATION: Wipe this mock and ALL associated student scores?")) return;
+    if (!window.confirm("PERMANENT TERMINATION: Wipe this mock and ALL student scores?")) return;
     setStatus('⏳ Purging Grid Node...');
     try {
-        // 1. Delete Scores first
         await supabase.from('scores').delete().eq('mock_id', id);
-        // 2. Delete Daily Completions
         await supabase.from('completed_daily_mocks').delete().eq('mock_id', id);
-        // 3. Delete Mock
         const { error } = await supabase.from('daily_mocks').delete().eq('id', id);
-        
         if (error) throw error;
         setStatus('✅ Node Purged.');
         fetchAdminData();
@@ -186,49 +174,7 @@ export default function AdminPanel() {
         </div>
       </div>
 
-      {/* 2. GLOBAL REGULAR MOCK ROSTER */}
-      <div className="bg-white dark:bg-gray-800 p-8 rounded-[32px] shadow-xl border dark:border-gray-700">
-        <div className="flex items-center gap-3 mb-6 text-green-500">
-          <Award size={32} />
-          <h2 className="text-2xl font-black uppercase dark:text-white">Global Regular Roster</h2>
-        </div>
-        
-        <div className="overflow-x-auto max-h-96 pr-2 custom-scrollbar">
-          <table className="w-full text-left border-collapse">
-            <thead>
-              <tr className="text-[10px] font-black uppercase text-gray-400 tracking-widest border-b dark:border-gray-700">
-                <th className="pb-4">Node</th>
-                <th className="pb-4">Latest Mock</th>
-                <th className="pb-4 text-center">Score</th>
-                <th className="pb-4 text-right">Timestamp</th>
-              </tr>
-            </thead>
-            <tbody>
-              {/* 🔥 SAFE FILTER: Prevents crash if 'last_regular_result' is null */}
-              {allUsers.filter(u => u.last_regular_result).length === 0 ? (
-                <tr><td colSpan="4" className="text-center py-8 text-gray-400 font-bold uppercase text-xs">No Regular Mock Data Found</td></tr>
-              ) : (
-                allUsers.filter(u => u.last_regular_result).map(u => (
-                  <tr key={u.id} className="border-t dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-900/50">
-                    <td className="py-4 font-black uppercase text-xs dark:text-white">{u.username}</td>
-                    <td className="py-4 text-xs font-bold text-gray-500 dark:text-gray-400">{u.last_regular_result.title}</td>
-                    <td className="py-4 text-center">
-                      <span className={`px-3 py-1 rounded-lg font-black text-xs ${u.last_regular_result.percentage >= 50 ? 'bg-green-100 text-green-600' : 'bg-red-100 text-red-600'}`}>
-                        {u.last_regular_result.score}/{u.last_regular_result.total}
-                      </span>
-                    </td>
-                    <td className="py-4 text-right text-[10px] font-bold text-gray-400">
-                      {new Date(u.last_regular_result.timestamp).toLocaleDateString()}
-                    </td>
-                  </tr>
-                ))
-              )}
-            </tbody>
-          </table>
-        </div>
-      </div>
-
-      {/* 3. NEURAL ROSTER (Cumulative Stats) */}
+      {/* 2. NEURAL ROSTER */}
       <div className="bg-white dark:bg-gray-800 p-8 rounded-[32px] shadow-xl border dark:border-gray-700">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-3 text-blue-600"><Users size={32} /><h2 className="text-2xl font-black uppercase dark:text-white tracking-tighter">Cumulative Roster</h2></div>
@@ -267,7 +213,7 @@ export default function AdminPanel() {
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-10">
         
-        {/* 4. MOCK CREATOR */}
+        {/* 3. MOCK CREATOR */}
         <div className="bg-white dark:bg-gray-800 p-8 rounded-[32px] shadow-xl border dark:border-gray-700">
           <div className="flex items-center gap-3 mb-6 text-blue-600"><UploadCloud size={32} /><h2 className="text-2xl font-black uppercase dark:text-white">Mock Creator</h2></div>
           <div className="space-y-4">
@@ -286,25 +232,43 @@ export default function AdminPanel() {
           </div>
         </div>
 
-        {/* 5. MOCK MANAGEMENT (GRID MANAGER - FIXED) */}
+        {/* 4. REBUILT GRID MANAGEMENT (THE FIX) */}
         <div className="bg-white dark:bg-gray-800 p-8 rounded-[32px] shadow-xl border dark:border-gray-700">
-          <div className="flex items-center gap-3 mb-6 text-red-500"><ListFilter size={32} /><h2 className="text-2xl font-black uppercase dark:text-white">Grid Management</h2></div>
+          <div className="flex items-center gap-3 mb-6 text-red-500">
+            <ListFilter size={32} />
+            <h2 className="text-2xl font-black uppercase dark:text-white">Grid Management</h2>
+          </div>
           <div className="space-y-3 max-h-[400px] overflow-y-auto pr-2 custom-scrollbar">
             {allMocks.length === 0 ? (
-              <div className="text-center py-20 opacity-30 uppercase text-xs font-black tracking-widest"><Database size={40} className="mx-auto mb-2" />No Active Nodes</div>
-            ) : allMocks.map(m => (
-              <div key={m.id} className="p-4 bg-gray-50 dark:bg-gray-900 rounded-2xl border dark:border-gray-800 flex justify-between items-center group transition-all">
-                <div>
-                  <p className="font-black dark:text-white text-xs uppercase">{m.mock_title}</p>
-                  <p className="text-[8px] font-bold text-gray-400 uppercase tracking-widest">{m.is_daily ? 'Daily' : 'Regular'} • {m.is_strict ? 'Strict' : 'Casual'}</p>
-                </div>
-                <button onClick={() => deleteMock(m.id)} className="text-gray-400 hover:text-red-500 transition-colors"><Trash2 size={18} /></button>
+              <div className="text-center py-20 opacity-30 uppercase text-xs font-black tracking-widest">
+                <Database size={40} className="mx-auto mb-2" />
+                No Active Nodes
               </div>
-            ))}
+            ) : (
+              allMocks.map(m => (
+                <div key={m.id} className="p-4 bg-gray-50 dark:bg-gray-900 rounded-2xl border dark:border-gray-800 flex justify-between items-center group hover:border-red-500/50 transition-all">
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <p className="font-black dark:text-white text-xs uppercase">{m.mock_title}</p>
+                      {m.is_strict && <ShieldAlert size={12} className="text-red-500" />}
+                    </div>
+                    <p className="text-[8px] font-bold text-gray-400 uppercase tracking-widest">
+                      {m.is_daily ? 'Daily Slot' : 'Regular Grid'} • {m.time_limit}m • {new Date(m.created_at).toLocaleDateString()}
+                    </p>
+                  </div>
+                  <button 
+                    onClick={() => deleteMock(m.id)} 
+                    className="p-2 text-gray-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-all"
+                  >
+                    <Trash2 size={18} />
+                  </button>
+                </div>
+              ))
+            )}
           </div>
         </div>
 
-        {/* 6. LIBRARY MANAGER */}
+        {/* 5. LIBRARY MANAGER */}
         <div className="bg-white dark:bg-gray-800 p-8 rounded-[32px] shadow-xl border dark:border-gray-700">
           <div className="flex items-center gap-3 mb-6 text-orange-500"><BookOpen size={32} /><h2 className="text-2xl font-black uppercase dark:text-white">Library Manager</h2></div>
           <div className="space-y-4">
@@ -317,7 +281,7 @@ export default function AdminPanel() {
           </div>
         </div>
 
-        {/* 7. ACCESS KEYS */}
+        {/* 6. ACCESS KEYS */}
         <div className="bg-white dark:bg-gray-800 p-8 rounded-[32px] shadow-xl border dark:border-gray-700">
           <div className="flex items-center gap-3 mb-6 text-indigo-600"><Key size={32} /><h2 className="text-2xl font-black uppercase dark:text-white">Access Keys</h2></div>
           <div className="flex gap-2 mb-6"><input type="text" placeholder="Recipient Name" className="flex-1 p-4 rounded-2xl border dark:bg-gray-900 dark:text-white outline-none" value={assignedName} onChange={(e) => setAssignedName(e.target.value)} /><button type="button" onClick={generateKey} className="bg-indigo-600 text-white p-4 rounded-2xl hover:bg-indigo-700"><UserPlus size={24} /></button></div>
@@ -331,7 +295,7 @@ export default function AdminPanel() {
           </div>
         </div>
 
-        {/* 8. PORTAL SIGNALS */}
+        {/* 7. PORTAL SIGNALS */}
         <div className="bg-gray-900 text-white p-8 rounded-[32px] shadow-2xl border border-white/5 lg:col-span-1">
           <div className="flex items-center gap-3 mb-6 text-orange-400"><MessageSquare size={28} /><h2 className="text-xl font-black uppercase tracking-tight">Portal Signals</h2></div>
           <div className="space-y-4 max-h-[400px] overflow-y-auto pr-4 custom-scrollbar">
@@ -349,7 +313,7 @@ export default function AdminPanel() {
           </div>
         </div>
 
-        {/* 9. DEV LOGS */}
+        {/* 8. DEV LOGS */}
         <div className="bg-white dark:bg-gray-800 p-8 rounded-[32px] shadow-xl border dark:border-gray-700">
            <h3 className="text-xl font-black mb-6 flex items-center gap-3 text-blue-600 uppercase tracking-tighter"><History size={24} /> Dev Logs</h3>
            <div className="space-y-3 mb-6">
