@@ -403,3 +403,4 @@ export default function AdminPanel({ user }) {
     </div>
   );
 }
+{/* end of code */}
