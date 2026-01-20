@@ -156,8 +156,10 @@ export default function App() {
     );
   }
 
-  // --- VIEW: VERIFICATION LOCK ---
-  const isAdmin = user.username.toLowerCase() === 'thebrain';
+  // --- VIEW: VERIFICATION LOCK (UPDATED ACCESS LOGIC) ---
+  // 🔥 FIXED: Access allowed if 'The Brain' OR 'Moderator'
+  const isAdmin = user.username.toLowerCase() === 'thebrain' || user.is_moderator;
+  
   if (!isAdmin && !user.is_verified) {
     return (
       <div className={`flex items-center justify-center min-h-screen ${isDarkMode ? 'bg-gray-950' : 'bg-blue-50'}`}>
@@ -249,7 +251,10 @@ export default function App() {
             )}
 
             {activeTab === 'ranking' && <Leaderboard />}
-            {activeTab === 'admin' && <AdminPanel />}
+            
+            {/* 🔥 FIXED: Passing user prop for Tiered Admin Access */}
+            {activeTab === 'admin' && <AdminPanel user={user} />}
+            
             {activeTab === 'profile' && <Profile user={user} />}
           </div>
 
