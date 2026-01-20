@@ -25,10 +25,13 @@ export default function Sidebar({ user, activeTab, setActiveTab, setIsDarkMode, 
     { id: 'profile', icon: <User />, label: 'Profile' },
   ];
 
-  // Logic: Insert Admin Panel only for The Brain (Preserved)
-  if (user.username?.toLowerCase() === 'thebrain') {
+  // 🔥 LOGIC UPDATE: Show Admin Panel for "The Brain" OR "Moderators"
+  const isAdmin = user.username?.toLowerCase() === 'thebrain' || user?.is_moderator;
+
+  if (isAdmin) {
     const adminExists = menuItems.find(item => item.id === 'admin');
     if (!adminExists) {
+      // Insert Admin Panel right before 'Profile' (which is the last item)
       menuItems.splice(menuItems.length - 1, 0, { id: 'admin', icon: <Database />, label: 'Admin Panel' });
     }
   }
