@@ -140,6 +140,7 @@ export default function AdminPanel() {
   const generateKey = async () => {
     if (!assignedName) return alert("Enter recipient.");
     const newKey = `BRAIN-${Math.random().toString(36).substring(2, 8).toUpperCase()}`;
+    // Insert into recipient_name to match schema
     await supabase.from('authorized_users').insert([{ access_key: newKey, recipient_name: assignedName }]); 
     setAssignedName(''); fetchAdminData();
   };
@@ -168,6 +169,11 @@ export default function AdminPanel() {
     if (!verName || !verDesc) return;
     await supabase.from('dev_logs').insert([{ version_name: verName, description: verDesc }]);
     setVerName(''); setVerDesc(''); fetchAdminData();
+  };
+
+  const deleteKey = async (id) => {
+    await supabase.from('authorized_users').delete().eq('id', id);
+    fetchAdminData();
   };
 
   if (loading && allUsers.length === 0) return <div className="p-20 text-center animate-pulse font-black text-blue-600 uppercase">Connecting Grid...</div>;
@@ -208,7 +214,8 @@ export default function AdminPanel() {
         </div>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-10">
+      {/* 🔥 FIXED: Added 'items-start' to prevent Roster stretching */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-10 items-start">
         
         {/* 3. MOCK CREATOR */}
         <div className="bg-white dark:bg-gray-800 p-8 rounded-[32px] shadow-xl border dark:border-gray-700">
@@ -254,8 +261,8 @@ export default function AdminPanel() {
           </div>
         </div>
 
-        {/* 4. NEURAL ROSTER */}
-        <div className="bg-white dark:bg-gray-800 p-8 rounded-[32px] shadow-xl border dark:border-gray-700">
+        {/* 4. NEURAL ROSTER (Collapses properly now) */}
+        <div className="bg-white dark:bg-gray-800 p-8 rounded-[32px] shadow-xl border dark:border-gray-700 h-fit">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-3 text-blue-600"><Users size={32} /><h2 className="text-2xl font-black uppercase dark:text-white tracking-tighter">Neural Roster</h2></div>
             <button onClick={() => setShowRoster(!showRoster)} className={`p-3 rounded-2xl bg-blue-50 dark:bg-gray-700 text-blue-600 transition-all ${showRoster ? 'rotate-180 bg-blue-600 text-white' : ''}`}><ChevronDown size={28} /></button>
@@ -284,7 +291,7 @@ export default function AdminPanel() {
           )}
         </div>
 
-        {/* 5. LIBRARY MANAGER (ENHANCED) */}
+        {/* 5. LIBRARY MANAGER */}
         <div className="bg-white dark:bg-gray-800 p-8 rounded-[32px] shadow-xl border dark:border-gray-700">
           <div className="flex items-center gap-3 mb-6 text-orange-500"><BookOpen size={32} /><h2 className="text-2xl font-black uppercase dark:text-white">Library</h2></div>
           <div className="space-y-4">
@@ -297,15 +304,19 @@ export default function AdminPanel() {
           </div>
         </div>
 
-        {/* 6. ACCESS KEYS */}
+        {/* 6. ACCESS KEYS (🔥 FIXED: Robust Name Display) */}
         <div className="bg-white dark:bg-gray-800 p-8 rounded-[32px] shadow-xl border dark:border-gray-700">
           <div className="flex items-center gap-3 mb-6 text-indigo-600"><Key size={32} /><h2 className="text-2xl font-black uppercase dark:text-white">Access Keys</h2></div>
           <div className="flex gap-2 mb-6"><input type="text" placeholder="Recipient" className="flex-1 p-4 rounded-2xl border dark:bg-gray-900 dark:text-white outline-none" value={assignedName} onChange={(e) => setAssignedName(e.target.value)} /><button onClick={generateKey} className="bg-indigo-600 text-white p-4 rounded-2xl hover:bg-indigo-700"><UserPlus size={24} /></button></div>
           <div className="space-y-2 max-h-40 overflow-y-auto pr-2 custom-scrollbar">
             {activeKeys.map(k => (
               <div key={k.id} className="p-4 bg-gray-50 dark:bg-gray-900 rounded-xl flex justify-between items-center transition-all border border-transparent hover:border-red-500/30">
-                <div><p className="font-black text-indigo-600 text-xs tracking-widest">{k.access_key}</p><p className="text-[10px] font-bold text-gray-400 uppercase">Node: {k.recipient_name}</p></div>
-                <button onClick={async () => { await supabase.from('authorized_users').delete().eq('id', k.id); fetchAdminData(); }} className="text-gray-300 hover:text-red-500"><Trash2 size={16} /></button>
+                <div>
+                  <p className="font-black text-indigo-600 text-xs tracking-widest">{k.access_key}</p>
+                  {/* 🔥 Robust Check: Checks new schema, then old schema, then default */}
+                  <p className="text-[10px] font-bold text-gray-400 uppercase">Node: {k.recipient_name || k.assigned_to || 'UNASSIGNED'}</p>
+                </div>
+                <button onClick={() => deleteKey(k.id)} className="text-gray-300 hover:text-red-500"><Trash2 size={16} /></button>
               </div>
             ))}
           </div>
@@ -340,7 +351,6 @@ export default function AdminPanel() {
           <div className="space-y-4 max-h-40 overflow-y-auto pr-2 custom-scrollbar">
             {history.map(log => (
               <div key={log.id} className="border-l-4 border-blue-600 pl-4 py-1 hover:bg-blue-50 dark:hover:bg-gray-900/50 transition-all">
-                {/* 🔥 FIXED: Added closing span tag here */}
                 <p className="text-blue-600 font-black text-xs uppercase">{log.version_name} • <span className="text-gray-400 text-[10px]">{new Date(log.created_at).toLocaleDateString()}</span></p>
                 <p className="text-gray-500 text-[10px] leading-relaxed mt-1">{log.description}</p>
               </div>
