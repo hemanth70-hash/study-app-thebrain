@@ -9,6 +9,7 @@ import {
 
 export default function AdminPanel({ user }) {
   // --- 0. PERMISSION CHECK ---
+  // The 'isRoot' flag identifies YOU (The Brain). Everyone else is a Moderator.
   const isRoot = user?.username?.toLowerCase() === 'thebrain';
 
   // --- 1. MOCK UPLOAD STATE ---
@@ -54,32 +55,27 @@ export default function AdminPanel({ user }) {
   const fetchAdminData = useCallback(async () => {
     setLoading(true);
     try {
-      // Base Data (Visible to Moderators too)
-      const requests = [
+      // 1. Fetch Data visible to EVERYONE (You + Moderators)
+      const [reg, dai, profs] = await Promise.all([
         supabase.from('mocks').select('*').order('created_at', { ascending: false }),
         supabase.from('daily_mocks').select('*').order('created_at', { ascending: false }),
         supabase.from('profiles').select('*').order('total_exams_completed', { ascending: false }),
-      ];
+      ]);
 
-      // 🔥 Sensitive Data (Root Only)
+      setRegularMocks(reg.data || []);
+      setDailyMocks(dai.data || []);
+      setAllUsers(profs.data || []);
+
+      // 2. Fetch Sensitive Data ONLY if you are The Brain (isRoot)
       if (isRoot) {
-        requests.push(
+        const [logs, keys, reqs] = await Promise.all([
           supabase.from('dev_logs').select('*').order('created_at', { ascending: false }),
           supabase.from('authorized_users').select('*').order('created_at', { ascending: false }),
-          supabase.from('admin_requests').select('*').order('created_at', { ascending: false })
-        );
-      }
-
-      const results = await Promise.all(requests);
-
-      setRegularMocks(results[0].data || []);
-      setDailyMocks(results[1].data || []);
-      setAllUsers(results[2].data || []); 
-
-      if (isRoot) {
-        setHistory(results[3].data || []);
-        setActiveKeys(results[4].data || []);
-        setUserRequests(results[5].data || []);
+          supabase.from('admin_requests').select('*').order('created_at', { ascending: false }),
+        ]);
+        setHistory(logs.data || []);
+        setActiveKeys(keys.data || []);
+        setUserRequests(reqs.data || []);
       }
 
     } catch (err) {
@@ -153,6 +149,15 @@ export default function AdminPanel({ user }) {
     }
   };
 
+  const generateKey = async () => {
+    if (!assignedName) return alert("Enter recipient.");
+    const newKey = `BRAIN-${Math.random().toString(36).substring(2, 8).toUpperCase()}`;
+    // 🔥 Saving to 'recipient_name' to ensure it appears in the list
+    await supabase.from('authorized_users').insert([{ access_key: newKey, recipient_name: assignedName }]); 
+    setAssignedName(''); 
+    fetchAdminData(); // Refresh list immediately
+  };
+
   const uploadResource = async () => {
     if (!bookTitle || !bookUrl) return alert("Data missing.");
     const { error } = await supabase.from('study_materials').insert([
@@ -173,18 +178,6 @@ export default function AdminPanel({ user }) {
     if (!error) fetchAdminData();
   };
 
-  const generateKey = async () => {
-    if (!assignedName) return alert("Enter recipient.");
-    const newKey = `BRAIN-${Math.random().toString(36).substring(2, 8).toUpperCase()}`;
-    await supabase.from('authorized_users').insert([{ access_key: newKey, recipient_name: assignedName }]); 
-    setAssignedName(''); fetchAdminData();
-  };
-
-  const deleteKey = async (id) => {
-    await supabase.from('authorized_users').delete().eq('id', id);
-    fetchAdminData();
-  };
-
   const postAnnouncement = async () => {
     if (!announcement) return;
     await supabase.from('announcements').update({ active: false }).neq('id', 0); 
@@ -198,12 +191,17 @@ export default function AdminPanel({ user }) {
     setVerName(''); setVerDesc(''); fetchAdminData();
   };
 
+  const deleteKey = async (id) => {
+    await supabase.from('authorized_users').delete().eq('id', id);
+    fetchAdminData();
+  };
+
   if (loading && allUsers.length === 0) return <div className="p-20 text-center animate-pulse font-black text-blue-600 uppercase">Connecting Grid...</div>;
 
   return (
     <div className="space-y-10 pb-20 max-w-7xl mx-auto p-4 animate-in fade-in duration-700">
       
-      {/* --- HEADER --- */}
+      {/* --- HEADER (Adaptive) --- */}
       <div className="flex items-center gap-4 mb-4">
         <div className={`p-3 rounded-2xl text-white shadow-lg ${isRoot ? 'bg-red-600' : 'bg-blue-600'}`}>
           {isRoot ? <ShieldCheck size={24} /> : <Database size={24} />}
@@ -212,12 +210,16 @@ export default function AdminPanel({ user }) {
           <h2 className="text-3xl font-black uppercase tracking-tighter text-gray-800 dark:text-white">
             {isRoot ? 'Central Command' : 'Moderator Panel'}
           </h2>
-          {!isRoot && <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Restricted Access Mode</p>}
+          {!isRoot && <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Restricted Mode</p>}
         </div>
       </div>
 
-      {/* 1. MOCK CREATOR (VISIBLE TO ALL ADMINS) */}
+      {/* --- SECTIONS VISIBLE TO ALL ADMINS (MOCK CREATOR, ROSTER, LIBRARY) --- */}
+      
+      {/* 🔥 FIXED: 'items-start' added to prevent Roster stretching */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-10 items-start">
+        
+        {/* 1. MOCK CREATOR */}
         <div className="bg-white dark:bg-gray-800 p-8 rounded-[32px] shadow-xl border dark:border-gray-700">
           <div className="flex items-center gap-3 mb-6 text-blue-600"><UploadCloud size={32} /><h2 className="text-2xl font-black uppercase dark:text-white">Mock Creator</h2></div>
           <div className="space-y-4">
@@ -261,7 +263,37 @@ export default function AdminPanel({ user }) {
           </div>
         </div>
 
-        {/* 2. LIBRARY MANAGER (VISIBLE TO ALL ADMINS) */}
+        {/* 2. NEURAL ROSTER (Collapses properly now) */}
+        <div className="bg-white dark:bg-gray-800 p-8 rounded-[32px] shadow-xl border dark:border-gray-700 h-fit">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3 text-blue-600"><Users size={32} /><h2 className="text-2xl font-black uppercase dark:text-white tracking-tighter">Neural Roster</h2></div>
+            <button onClick={() => setShowRoster(!showRoster)} className={`p-3 rounded-2xl bg-blue-50 dark:bg-gray-700 text-blue-600 transition-all ${showRoster ? 'rotate-180 bg-blue-600 text-white' : ''}`}><ChevronDown size={28} /></button>
+          </div>
+          {showRoster && (
+            <div className="overflow-x-auto animate-in slide-in-from-top-4 mt-8">
+              <table className="w-full text-left border-separate border-spacing-y-3">
+                <thead><tr className="text-[10px] font-black uppercase text-gray-400 tracking-widest"><th className="px-6 pb-2">Node</th><th className="px-6 pb-2 text-center">GPA</th><th className="px-6 pb-2 text-right">Streak</th></tr></thead>
+                <tbody>
+                  {allUsers.map((u) => {
+                    const r = getNeuralRank(u.total_percentage_points, u.total_exams_completed);
+                    return (
+                      <tr key={u.id} className="bg-gray-50 dark:bg-gray-900/50 rounded-2xl hover:scale-[1.01] transition-transform">
+                        <td className="px-6 py-4 rounded-l-2xl flex items-center gap-3">
+                          <img src={`https://api.dicebear.com/7.x/${u.gender === 'neutral' ? 'bottts' : 'avataaars'}/svg?seed=${u.username}`} className="w-10 h-10 rounded-xl bg-white p-1" />
+                          <div className="flex flex-col"><span className="font-black dark:text-white uppercase text-sm">{u.username}</span><span className={`text-[8px] font-black uppercase tracking-widest ${r.color}`}>{r.label}</span></div>
+                        </td>
+                        <td className="px-6 py-4 text-center"><p className="font-black text-blue-600 text-lg">{(u.total_percentage_points / (u.total_exams_completed || 1)).toFixed(1)}%</p></td>
+                        <td className="px-6 py-4 text-right rounded-r-2xl"><div className="inline-flex items-center gap-1 bg-orange-100 dark:bg-orange-900/20 px-3 py-1 rounded-lg"><Flame size={12} className="text-orange-500 fill-orange-500" /><span className="text-xs font-black text-orange-600">{u.streak_count || 0}</span></div></td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+
+        {/* 3. LIBRARY MANAGER */}
         <div className="bg-white dark:bg-gray-800 p-8 rounded-[32px] shadow-xl border dark:border-gray-700">
           <div className="flex items-center gap-3 mb-6 text-orange-500"><BookOpen size={32} /><h2 className="text-2xl font-black uppercase dark:text-white">Library</h2></div>
           <div className="space-y-4">
@@ -286,7 +318,7 @@ export default function AdminPanel({ user }) {
             <span className="absolute top-[-14px] left-1/2 -translate-x-1/2 bg-gray-100 dark:bg-gray-900 px-4 text-[10px] font-black uppercase text-gray-400">Restricted Zone</span>
           </div>
 
-          {/* 3. PERMISSIONS MANAGER (TOGGLE MODERATORS) */}
+          {/* 4. PERMISSIONS MANAGER (TOGGLE MODERATORS) */}
           <div className="bg-white dark:bg-gray-800 p-8 rounded-[32px] shadow-xl border-l-8 border-purple-600">
             <div className="flex items-center gap-3 mb-6 text-purple-600"><ShieldCheck size={32} /><h2 className="text-2xl font-black uppercase dark:text-white">Permission Management</h2></div>
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -304,7 +336,7 @@ export default function AdminPanel({ user }) {
             </div>
           </div>
 
-          {/* 4. BROADCAST */}
+          {/* 5. BROADCAST */}
           <div className="bg-gradient-to-r from-blue-600 to-indigo-700 p-8 rounded-[32px] shadow-2xl text-white">
             <div className="flex items-center gap-3 mb-6"><Megaphone size={32} className="animate-bounce" /><h2 className="text-2xl font-black uppercase tracking-tighter">Global Broadcast</h2></div>
             <div className="flex flex-col md:flex-row gap-4">
@@ -313,21 +345,25 @@ export default function AdminPanel({ user }) {
             </div>
           </div>
 
-          {/* 5. ACCESS KEYS */}
+          {/* 6. ACCESS KEYS (🔥 FIXED: Robust Name Display) */}
           <div className="bg-white dark:bg-gray-800 p-8 rounded-[32px] shadow-xl border dark:border-gray-700">
             <div className="flex items-center gap-3 mb-6 text-indigo-600"><Key size={32} /><h2 className="text-2xl font-black uppercase dark:text-white">Access Keys</h2></div>
             <div className="flex gap-2 mb-6"><input type="text" placeholder="Recipient Name" className="flex-1 p-4 rounded-2xl border dark:bg-gray-900 dark:text-white outline-none" value={assignedName} onChange={(e) => setAssignedName(e.target.value)} /><button onClick={generateKey} className="bg-indigo-600 text-white p-4 rounded-2xl hover:bg-indigo-700"><UserPlus size={24} /></button></div>
             <div className="space-y-2 max-h-40 overflow-y-auto pr-2 custom-scrollbar">
               {activeKeys.map(k => (
                 <div key={k.id} className="p-4 bg-gray-50 dark:bg-gray-900 rounded-xl flex justify-between items-center transition-all border border-transparent hover:border-red-500/30">
-                  <div><p className="font-black text-indigo-600 text-xs tracking-widest">{k.access_key}</p><p className="text-[10px] font-bold text-gray-400 uppercase">Node: {k.recipient_name || k.assigned_to || 'UNASSIGNED'}</p></div>
+                  <div>
+                    <p className="font-black text-indigo-600 text-xs tracking-widest">{k.access_key}</p>
+                    {/* 🔥 Robust Check: Checks new schema, then old schema, then default */}
+                    <p className="text-[10px] font-bold text-gray-400 uppercase">Node: {k.recipient_name || k.assigned_to || 'UNASSIGNED'}</p>
+                  </div>
                   <button onClick={() => deleteKey(k.id)} className="text-gray-300 hover:text-red-500"><Trash2 size={16} /></button>
                 </div>
               ))}
             </div>
           </div>
 
-          {/* 6. PORTAL SIGNALS */}
+          {/* 7. PORTAL SIGNALS */}
           <div className="bg-gray-900 text-white p-8 rounded-[32px] shadow-2xl border border-white/5">
             <div className="flex items-center gap-3 mb-6 text-orange-400"><MessageSquare size={28} /><h2 className="text-xl font-black uppercase tracking-tight">Portal Signals</h2></div>
             <div className="space-y-4 max-h-[300px] overflow-y-auto pr-4 custom-scrollbar">
@@ -345,7 +381,7 @@ export default function AdminPanel({ user }) {
             </div>
           </div>
 
-          {/* 7. DEV LOGS */}
+          {/* 8. DEV LOGS */}
           <div className="bg-white dark:bg-gray-800 p-8 rounded-[32px] shadow-xl border dark:border-gray-700">
               <h3 className="text-xl font-black mb-6 flex items-center gap-3 text-blue-600 uppercase tracking-tighter"><History size={24} /> Dev Logs</h3>
               <div className="space-y-3 mb-6">
