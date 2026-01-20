@@ -66,15 +66,24 @@ export default function AdminPanel({ user }) {
       setDailyMocks(dai.data || []);
       setAllUsers(profs.data || []);
 
-      // 2. Fetch Sensitive Data ONLY if you are The Brain (isRoot)
+      // 2. Fetch Access Keys (Filtered Logic)
+      let keyQuery = supabase.from('authorized_users').select('*').order('created_at', { ascending: false });
+      
+      // 🔥 IF NOT ROOT, ONLY SHOW KEYS I CREATED
+      if (!isRoot) {
+        keyQuery = keyQuery.eq('created_by', user.id);
+      }
+      
+      const { data: keyData } = await keyQuery;
+      setActiveKeys(keyData || []);
+
+      // 3. Fetch Sensitive Data ONLY if you are The Brain (isRoot)
       if (isRoot) {
-        const [logs, keys, reqs] = await Promise.all([
+        const [logs, reqs] = await Promise.all([
           supabase.from('dev_logs').select('*').order('created_at', { ascending: false }),
-          supabase.from('authorized_users').select('*').order('created_at', { ascending: false }),
           supabase.from('admin_requests').select('*').order('created_at', { ascending: false }),
         ]);
         setHistory(logs.data || []);
-        setActiveKeys(keys.data || []);
         setUserRequests(reqs.data || []);
       }
 
@@ -83,7 +92,7 @@ export default function AdminPanel({ user }) {
     } finally {
       setLoading(false);
     }
-  }, [isRoot]);
+  }, [isRoot, user.id]);
 
   useEffect(() => { fetchAdminData(); }, [fetchAdminData]);
 
@@ -152,10 +161,21 @@ export default function AdminPanel({ user }) {
   const generateKey = async () => {
     if (!assignedName) return alert("Enter recipient.");
     const newKey = `BRAIN-${Math.random().toString(36).substring(2, 8).toUpperCase()}`;
-    // 🔥 Saving to 'recipient_name' to ensure it appears in the list
-    await supabase.from('authorized_users').insert([{ access_key: newKey, recipient_name: assignedName }]); 
+    
+    // 🔥 STAMP CREATOR ID: This ensures Moderators can see their own keys later
+    await supabase.from('authorized_users').insert([{ 
+      access_key: newKey, 
+      recipient_name: assignedName,
+      created_by: user.id 
+    }]); 
+    
     setAssignedName(''); 
     fetchAdminData(); // Refresh list immediately
+  };
+
+  const deleteKey = async (id) => {
+    await supabase.from('authorized_users').delete().eq('id', id);
+    fetchAdminData();
   };
 
   const uploadResource = async () => {
@@ -191,17 +211,12 @@ export default function AdminPanel({ user }) {
     setVerName(''); setVerDesc(''); fetchAdminData();
   };
 
-  const deleteKey = async (id) => {
-    await supabase.from('authorized_users').delete().eq('id', id);
-    fetchAdminData();
-  };
-
   if (loading && allUsers.length === 0) return <div className="p-20 text-center animate-pulse font-black text-blue-600 uppercase">Connecting Grid...</div>;
 
   return (
     <div className="space-y-10 pb-20 max-w-7xl mx-auto p-4 animate-in fade-in duration-700">
       
-      {/* --- HEADER (Adaptive) --- */}
+      {/* --- HEADER --- */}
       <div className="flex items-center gap-4 mb-4">
         <div className={`p-3 rounded-2xl text-white shadow-lg ${isRoot ? 'bg-red-600' : 'bg-blue-600'}`}>
           {isRoot ? <ShieldCheck size={24} /> : <Database size={24} />}
@@ -210,13 +225,13 @@ export default function AdminPanel({ user }) {
           <h2 className="text-3xl font-black uppercase tracking-tighter text-gray-800 dark:text-white">
             {isRoot ? 'Central Command' : 'Moderator Panel'}
           </h2>
-          {!isRoot && <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Restricted Mode</p>}
+          <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">
+            {isRoot ? 'System Root Access' : `Access granted to: ${user.username}`}
+          </p>
         </div>
       </div>
 
-      {/* --- SECTIONS VISIBLE TO ALL ADMINS (MOCK CREATOR, ROSTER, LIBRARY) --- */}
-      
-      {/* 🔥 FIXED: 'items-start' added to prevent Roster stretching */}
+      {/* --- SHARED ZONES (Visible to Root + Moderators) --- */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-10 items-start">
         
         {/* 1. MOCK CREATOR */}
@@ -234,8 +249,7 @@ export default function AdminPanel({ user }) {
               {isPublishing ? 'Publishing...' : 'Publish Mock'}
             </button>
             {status && <p className="text-center font-black uppercase text-[10px] text-blue-500 mt-2">{status}</p>}
-
-            {/* DELETE NODES */}
+            
             <div className="mt-8 pt-8 border-t dark:border-gray-700 grid grid-cols-1 md:grid-cols-2 gap-4">
                <div>
                  <p className="text-[10px] font-black uppercase text-blue-400 mb-2 flex items-center gap-2"><ListFilter size={14}/> Normal Mocks</p>
@@ -263,7 +277,7 @@ export default function AdminPanel({ user }) {
           </div>
         </div>
 
-        {/* 2. NEURAL ROSTER (Collapses properly now) */}
+        {/* 2. NEURAL ROSTER */}
         <div className="bg-white dark:bg-gray-800 p-8 rounded-[32px] shadow-xl border dark:border-gray-700 h-fit">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-3 text-blue-600"><Users size={32} /><h2 className="text-2xl font-black uppercase dark:text-white tracking-tighter">Neural Roster</h2></div>
@@ -305,10 +319,28 @@ export default function AdminPanel({ user }) {
             <button onClick={uploadResource} className="w-full bg-orange-500 text-white py-4 rounded-2xl font-black uppercase shadow-lg transition-all active:scale-95">Upload Resource</button>
           </div>
         </div>
+
+        {/* 4. ACCESS KEYS (Moved out of Restricted Zone) */}
+        <div className="bg-white dark:bg-gray-800 p-8 rounded-[32px] shadow-xl border dark:border-gray-700">
+          <div className="flex items-center gap-3 mb-6 text-indigo-600"><Key size={32} /><h2 className="text-2xl font-black uppercase dark:text-white">Access Keys</h2></div>
+          <div className="flex gap-2 mb-6"><input type="text" placeholder="Recipient Name" className="flex-1 p-4 rounded-2xl border dark:bg-gray-900 dark:text-white outline-none" value={assignedName} onChange={(e) => setAssignedName(e.target.value)} /><button onClick={generateKey} className="bg-indigo-600 text-white p-4 rounded-2xl hover:bg-indigo-700"><UserPlus size={24} /></button></div>
+          <div className="space-y-2 max-h-40 overflow-y-auto pr-2 custom-scrollbar">
+            {activeKeys.length > 0 ? activeKeys.map(k => (
+              <div key={k.id} className="p-4 bg-gray-50 dark:bg-gray-900 rounded-xl flex justify-between items-center transition-all border border-transparent hover:border-red-500/30">
+                <div>
+                  <p className="font-black text-indigo-600 text-xs tracking-widest">{k.access_key}</p>
+                  <p className="text-[10px] font-bold text-gray-400 uppercase">Node: {k.recipient_name || k.assigned_to || 'UNASSIGNED'}</p>
+                </div>
+                <button onClick={() => deleteKey(k.id)} className="text-gray-300 hover:text-red-500"><Trash2 size={16} /></button>
+              </div>
+            )) : <p className="text-center text-[10px] text-gray-400 italic">No active keys.</p>}
+          </div>
+        </div>
+
       </div>
 
       {/* ---------------------------------------------------------------------------------- */}
-      {/* 🔥 THE BRAIN'S EXCLUSIVE ZONE: EVERYTHING BELOW IS HIDDEN FROM MODERATORS 🔥 */}
+      {/* 🔥 RESTRICTED ZONES (ROOT ONLY) 🔥 */}
       {/* ---------------------------------------------------------------------------------- */}
       
       {isRoot && (
@@ -318,7 +350,7 @@ export default function AdminPanel({ user }) {
             <span className="absolute top-[-14px] left-1/2 -translate-x-1/2 bg-gray-100 dark:bg-gray-900 px-4 text-[10px] font-black uppercase text-gray-400">Restricted Zone</span>
           </div>
 
-          {/* 4. PERMISSIONS MANAGER (TOGGLE MODERATORS) */}
+          {/* 5. PERMISSIONS MANAGER */}
           <div className="bg-white dark:bg-gray-800 p-8 rounded-[32px] shadow-xl border-l-8 border-purple-600">
             <div className="flex items-center gap-3 mb-6 text-purple-600"><ShieldCheck size={32} /><h2 className="text-2xl font-black uppercase dark:text-white">Permission Management</h2></div>
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -336,30 +368,12 @@ export default function AdminPanel({ user }) {
             </div>
           </div>
 
-          {/* 5. BROADCAST */}
+          {/* 6. BROADCAST */}
           <div className="bg-gradient-to-r from-blue-600 to-indigo-700 p-8 rounded-[32px] shadow-2xl text-white">
             <div className="flex items-center gap-3 mb-6"><Megaphone size={32} className="animate-bounce" /><h2 className="text-2xl font-black uppercase tracking-tighter">Global Broadcast</h2></div>
             <div className="flex flex-col md:flex-row gap-4">
               <input className="flex-1 p-4 rounded-2xl text-gray-900 font-bold border-none outline-none" placeholder="Type transmission..." value={announcement} onChange={(e) => setAnnouncement(e.target.value)} />
               <button onClick={postAnnouncement} className="bg-white text-blue-600 px-10 py-4 rounded-2xl font-black uppercase tracking-widest hover:bg-blue-50 transition-all">Broadcast</button>
-            </div>
-          </div>
-
-          {/* 6. ACCESS KEYS (🔥 FIXED: Robust Name Display) */}
-          <div className="bg-white dark:bg-gray-800 p-8 rounded-[32px] shadow-xl border dark:border-gray-700">
-            <div className="flex items-center gap-3 mb-6 text-indigo-600"><Key size={32} /><h2 className="text-2xl font-black uppercase dark:text-white">Access Keys</h2></div>
-            <div className="flex gap-2 mb-6"><input type="text" placeholder="Recipient Name" className="flex-1 p-4 rounded-2xl border dark:bg-gray-900 dark:text-white outline-none" value={assignedName} onChange={(e) => setAssignedName(e.target.value)} /><button onClick={generateKey} className="bg-indigo-600 text-white p-4 rounded-2xl hover:bg-indigo-700"><UserPlus size={24} /></button></div>
-            <div className="space-y-2 max-h-40 overflow-y-auto pr-2 custom-scrollbar">
-              {activeKeys.map(k => (
-                <div key={k.id} className="p-4 bg-gray-50 dark:bg-gray-900 rounded-xl flex justify-between items-center transition-all border border-transparent hover:border-red-500/30">
-                  <div>
-                    <p className="font-black text-indigo-600 text-xs tracking-widest">{k.access_key}</p>
-                    {/* 🔥 Robust Check: Checks new schema, then old schema, then default */}
-                    <p className="text-[10px] font-bold text-gray-400 uppercase">Node: {k.recipient_name || k.assigned_to || 'UNASSIGNED'}</p>
-                  </div>
-                  <button onClick={() => deleteKey(k.id)} className="text-gray-300 hover:text-red-500"><Trash2 size={16} /></button>
-                </div>
-              ))}
             </div>
           </div>
 
@@ -403,4 +417,3 @@ export default function AdminPanel({ user }) {
     </div>
   );
 }
-{/* end of code */}
