@@ -5,7 +5,7 @@ import autoTable from 'jspdf-autotable';
 import { 
   Award, BookOpen, Clock, Zap, Trash2, ShieldAlert, 
   Loader2, TrendingUp, Save, RefreshCw, Dice5, 
-  ChevronDown, ChevronUp, GraduationCap, Target, Edit3, Activity, ShieldCheck, FileText, Download
+  ChevronDown, ChevronUp, GraduationCap, Target, Edit3, Activity, ShieldCheck, FileText, Download, Megaphone
 } from 'lucide-react';
 
 export default function Profile({ user }) {
@@ -48,7 +48,7 @@ export default function Profile({ user }) {
     setCurrentSeed(newSeed);
   };
 
-  // --- 3. PDF GENERATION LOGIC (NEW) ---
+  // --- 3. PDF GENERATION LOGIC ---
   const downloadPDF = () => {
     if (!user.last_regular_result) return;
     const doc = new jsPDF();
@@ -125,6 +125,26 @@ export default function Profile({ user }) {
       alert(`Sync Error: ${err.message}`);
     } finally {
       setIsSaving(false);
+    }
+  };
+
+  // --- 5. ADMIN REQUEST LOGIC (New) ---
+  const sendAdminRequest = async () => {
+    const msg = window.prompt("Transmission to The Brain (Admin):");
+    if (!msg) return;
+
+    try {
+      const { error } = await supabase.from('admin_requests').insert([{
+        user_id: user.id, 
+        user_name: user.username, 
+        message: msg, 
+        request_type: 'USER_REQUEST'
+      }]);
+
+      if (error) throw error;
+      alert("Signal transmitted to The Brain.");
+    } catch (err) {
+      alert("Transmission Failed.");
     }
   };
 
@@ -231,7 +251,7 @@ export default function Profile({ user }) {
         </div>
       </div>
 
-      {/* --- 🔥 NEW: LATEST MOCK ANALYSIS (The Memory Efficient Block) --- */}
+      {/* --- LATEST MOCK ANALYSIS --- */}
       {user.last_regular_result && (
         <div className="bg-gradient-to-br from-indigo-900 to-blue-900 p-8 rounded-[32px] shadow-2xl text-white relative overflow-hidden animate-in slide-in-from-bottom-8">
           <div className="absolute top-0 right-0 p-32 bg-blue-500/20 rounded-full blur-3xl -translate-y-10 translate-x-10"></div>
@@ -375,6 +395,28 @@ export default function Profile({ user }) {
             </div>
           )}
         </div>
+      </div>
+
+      {/* --- 🔥 NEW: NEURAL UPLINK (ADMIN REQUEST) --- */}
+      <div className="bg-gradient-to-r from-gray-900 to-gray-800 text-white p-8 rounded-[2.5rem] shadow-xl border border-gray-700 relative overflow-hidden group">
+        <div className="relative z-10 flex flex-col md:flex-row items-center justify-between gap-6">
+          <div>
+            <h3 className="text-2xl font-black uppercase tracking-tight mb-2 flex items-center gap-2">
+              <Megaphone size={24} className="text-yellow-400" /> Neural Uplink
+            </h3>
+            <p className="text-xs text-gray-400 font-bold leading-relaxed max-w-lg">
+              Establish a direct line to Central Command (The Brain). Use this uplink for feature requests, bug reports, or urgent access issues.
+            </p>
+          </div>
+          <button 
+            onClick={sendAdminRequest}
+            className="w-full md:w-auto bg-white/10 hover:bg-white/20 text-white px-8 py-4 rounded-2xl font-black uppercase tracking-widest backdrop-blur-md border border-white/10 transition-all active:scale-95 shadow-2xl"
+          >
+            Establish Connection
+          </button>
+        </div>
+        {/* Decor */}
+        <div className="absolute top-0 right-0 p-24 bg-yellow-500/10 rounded-full blur-3xl transform translate-x-1/2 -translate-y-1/2 group-hover:bg-yellow-500/20 transition-colors"></div>
       </div>
 
       <div className="flex justify-end">
