@@ -1,18 +1,17 @@
 import React, { useState, useEffect } from 'react';
 import { supabase } from '../supabaseClient';
-import { Target, ChevronUp, ChevronDown, CheckCircle, Flame } from 'lucide-react';
+import { Target, CheckCircle2, Loader2 } from 'lucide-react';
 
 export default function GoalTracker({ user }) {
-  const [goal, setGoal] = useState(5); // Default fallback
+  // Using 'daily_goal_target' to match the database column we created
+  const [goal, setGoal] = useState(5); 
   const [completedToday, setCompletedToday] = useState(0);
+  const [isEditing, setIsEditing] = useState(false);
   const [loading, setLoading] = useState(true);
-  const [isUpdating, setIsUpdating] = useState(false);
 
   // --- 1. INITIAL SYNC (Fetch Goal & Today's Progress) ---
   useEffect(() => {
-    if (user?.id) {
-      fetchGoalData();
-    }
+    if (user?.id) fetchGoalData();
   }, [user?.id]);
 
   const fetchGoalData = async () => {
@@ -32,7 +31,6 @@ export default function GoalTracker({ user }) {
       }
 
       // B. Count Exams Completed TODAY
-      // We look at the 'scores' table for records created today
       const { count } = await supabase
         .from('scores')
         .select('*', { count: 'exact', head: true })
@@ -48,97 +46,73 @@ export default function GoalTracker({ user }) {
     }
   };
 
-  // --- 2. UPDATE LOGIC (Save to DB Immediately) ---
-  const updateGoal = async (newGoal) => {
-    if (newGoal < 1 || newGoal > 50) return; // Safety limits
+  // --- 2. UPDATE LOGIC (Save to DB) ---
+  const updateGoal = async () => {
+    if (goal < 1) return;
     
-    // 1. Optimistic Update (Instant UI change)
-    setGoal(newGoal);
-    setIsUpdating(true);
-
-    // 2. Database Write
-    try {
-      const { error } = await supabase
-        .from('profiles')
-        .update({ daily_goal_target: newGoal })
-        .eq('id', user.id);
-
-      if (error) throw error;
-    } catch (err) {
-      console.error("Failed to save goal:", err);
-      // Revert if failed (Optional, but good practice)
-    } finally {
-      setTimeout(() => setIsUpdating(false), 500);
-    }
+    await supabase
+      .from('profiles')
+      .update({ daily_goal_target: goal }) // Saving to the correct column
+      .eq('id', user.id);
+      
+    setIsEditing(false);
   };
 
-  // Progress Calculation
-  const progress = Math.min((completedToday / goal) * 100, 100);
-  const isGoalMet = completedToday >= goal;
+  const progressPercentage = Math.min((completedToday / goal) * 100, 100);
 
   return (
-    <div className="bg-white dark:bg-gray-800 p-8 rounded-[2.5rem] shadow-xl border-b-8 border-orange-500 h-full flex flex-col justify-between relative overflow-hidden group">
+    <div className="bg-white dark:bg-gray-800 p-8 rounded-3xl shadow-xl border-t-8 border-indigo-500 h-full flex flex-col justify-between">
       
-      {/* Background Decoration */}
-      <div className="absolute -right-6 -top-6 text-orange-500/10 group-hover:text-orange-500/20 transition-colors duration-500">
-        <Target size={140} />
-      </div>
-
-      {/* Header */}
-      <div className="relative z-10">
-        <div className="flex justify-between items-start">
-          <div>
-            <h3 className="text-xl font-black uppercase tracking-tighter dark:text-white">Daily Target</h3>
-            <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mt-1">
-              {isGoalMet ? 'Mission Accomplished' : `${goal - completedToday} Exams Remaining`}
-            </p>
+      {/* Header Section */}
+      <div className="flex justify-between items-center mb-6">
+        <div className="flex items-center gap-3 text-indigo-600 dark:text-indigo-400">
+          <Target size={28} />
+          <h3 className="text-xl font-black uppercase tracking-tight">Daily Goal</h3>
+        </div>
+        
+        {isEditing ? (
+          <div className="flex gap-2 animate-in fade-in slide-in-from-right-4">
+            <input 
+              type="number" 
+              className="w-16 p-1 rounded border dark:bg-gray-700 dark:border-gray-600 text-black dark:text-white font-bold text-center outline-none focus:ring-2 ring-indigo-500"
+              value={goal} 
+              onChange={(e) => setGoal(parseInt(e.target.value) || 0)}
+            />
+            <button onClick={updateGoal} className="bg-green-500 hover:bg-green-600 text-white px-3 py-1 rounded-lg text-xs font-black tracking-widest transition-colors">SET</button>
           </div>
-          {isGoalMet && <div className="bg-green-100 text-green-600 p-2 rounded-full animate-bounce"><CheckCircle size={20} /></div>}
-        </div>
-      </div>
-
-      {/* Main Counter & Controls */}
-      <div className="relative z-10 flex items-center justify-between mt-6">
-        <div className="flex flex-col">
-          <span className="text-5xl font-black text-gray-800 dark:text-white tracking-tighter">
-            {completedToday}<span className="text-2xl text-gray-300 dark:text-gray-600">/{goal}</span>
-          </span>
-        </div>
-
-        {/* Adjuster Buttons */}
-        <div className="flex flex-col gap-2 bg-gray-50 dark:bg-gray-900 p-1.5 rounded-xl border border-gray-200 dark:border-gray-700">
-          <button 
-            onClick={() => updateGoal(goal + 1)}
-            disabled={isUpdating}
-            className="p-2 hover:bg-white dark:hover:bg-gray-800 rounded-lg text-gray-400 hover:text-green-500 transition-all shadow-sm active:scale-90"
-          >
-            <ChevronUp size={18} strokeWidth={3} />
+        ) : (
+          <button onClick={() => setIsEditing(true)} className="text-gray-400 hover:text-indigo-500 text-[10px] font-black uppercase tracking-widest transition-colors">
+            Adjust Goal
           </button>
-          <button 
-            onClick={() => updateGoal(goal - 1)}
-            disabled={isUpdating}
-            className="p-2 hover:bg-white dark:hover:bg-gray-800 rounded-lg text-gray-400 hover:text-red-500 transition-all shadow-sm active:scale-90"
-          >
-            <ChevronDown size={18} strokeWidth={3} />
-          </button>
-        </div>
-      </div>
-
-      {/* Progress Bar */}
-      <div className="relative z-10 mt-6">
-        <div className="h-4 w-full bg-gray-100 dark:bg-gray-700 rounded-full overflow-hidden shadow-inner">
-          <div 
-            className={`h-full transition-all duration-1000 ease-out ${isGoalMet ? 'bg-green-500' : 'bg-orange-500'}`}
-            style={{ width: `${progress}%` }}
-          />
-        </div>
-        {isGoalMet && (
-          <p className="text-[10px] font-black text-center text-green-500 mt-2 uppercase tracking-widest flex items-center justify-center gap-1">
-            <Flame size={12} /> Neural Limits Exceeded
-          </p>
         )}
       </div>
 
+      {/* Progress Section */}
+      {loading ? (
+        <div className="flex justify-center py-4">
+          <Loader2 className="animate-spin text-indigo-200" />
+        </div>
+      ) : (
+        <div className="space-y-4">
+          <div className="flex justify-between text-sm font-bold dark:text-gray-300">
+            <span>{completedToday} Mocks Finished</span>
+            <span>Goal: {goal}</span>
+          </div>
+          
+          <div className="h-4 w-full bg-gray-100 dark:bg-gray-700 rounded-full overflow-hidden shadow-inner">
+            <div 
+              className="h-full bg-gradient-to-r from-indigo-500 to-purple-500 transition-all duration-1000 ease-out"
+              style={{ width: `${progressPercentage}%` }}
+            />
+          </div>
+
+          {completedToday >= goal && (
+            <div className="flex items-center gap-2 text-green-500 font-black justify-center bg-green-50 dark:bg-green-900/20 p-3 rounded-xl animate-in zoom-in duration-300 border border-green-100 dark:border-green-900/30">
+              <CheckCircle2 size={18} /> Daily Goal Smashed!
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 }
