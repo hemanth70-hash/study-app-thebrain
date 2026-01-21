@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { supabase } from '../supabaseClient';
-import { Trophy, Medal, Flame, ShieldCheck, GraduationCap, Target, Loader2, Award } from 'lucide-react';
+import { Trophy, Medal, Flame, ShieldCheck, GraduationCap, Target, Loader2, Award, Crown } from 'lucide-react';
 
 export default function Leaderboard() {
   const [rankings, setRankings] = useState([]);
@@ -93,20 +93,36 @@ export default function Leaderboard() {
                   ? (u.total_percentage_points / u.total_exams_completed).toFixed(1) 
                   : 0;
                 
+                // 🔥 TOP 3 STYLING LOGIC
+                let rankDisplay;
+                let rankStyle = "bg-gray-50 dark:bg-gray-900/40 border-transparent";
+                
+                if (index === 0) {
+                    rankStyle = "bg-yellow-50/50 dark:bg-yellow-900/10 border-yellow-200 dark:border-yellow-800";
+                    rankDisplay = <Crown size={32} className="text-yellow-500 fill-yellow-500 animate-bounce" />;
+                } else if (index === 1) {
+                    rankStyle = "bg-gray-100/50 dark:bg-gray-800/50 border-gray-200 dark:border-gray-700";
+                    rankDisplay = <Medal size={28} className="text-gray-400 fill-gray-200" />;
+                } else if (index === 2) {
+                    rankStyle = "bg-orange-50/50 dark:bg-orange-900/10 border-orange-200 dark:border-orange-800";
+                    rankDisplay = <Medal size={28} className="text-amber-700 fill-amber-500" />;
+                } else {
+                    rankDisplay = <span className="font-black text-2xl text-gray-300 italic">#{index + 1}</span>;
+                }
+
                 return (
-                  <tr key={u.id} className={`group transition-all hover:scale-[1.01] ${index === 0 ? 'bg-blue-50/50 dark:bg-blue-900/20' : 'bg-gray-50 dark:bg-gray-900/40'} rounded-2xl`}>
+                  <tr key={u.id} className={`group transition-all hover:scale-[1.01] rounded-2xl border-2 ${rankStyle}`}>
                     
+                    {/* 1. RANK COLUMN (Updated with Icons) */}
                     <td className="px-6 py-4 rounded-l-[2rem]">
-                      <div className="flex flex-col items-center">
-                        <span className={`font-black text-2xl italic ${index === 0 ? 'text-yellow-500' : 'text-gray-300'}`}>
-                          {index === 0 ? <Medal size={28} /> : `#${index + 1}`}
-                        </span>
+                      <div className="flex flex-col items-center justify-center h-full">
+                        {rankDisplay}
                       </div>
                     </td>
 
                     <td className="px-6 py-4">
                       <div className="flex items-center gap-4">
-                        <div className="w-12 h-12 rounded-2xl bg-white dark:bg-gray-800 border-2 border-blue-100 dark:border-gray-700 p-0.5 overflow-hidden">
+                        <div className={`w-12 h-12 rounded-2xl bg-white dark:bg-gray-800 border-2 p-0.5 overflow-hidden ${index === 0 ? 'border-yellow-400 shadow-yellow-200 shadow-lg' : 'border-blue-100 dark:border-gray-700'}`}>
                           <img 
                             src={`https://api.dicebear.com/7.x/${u.gender === 'neutral' ? 'bottts' : 'avataaars'}/svg?seed=${u.avatar_seed || u.username}${u.gender === 'female' ? '&facialHairProbability=0' : ''}`} 
                             className="w-full h-full object-contain"
