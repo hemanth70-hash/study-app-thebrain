@@ -16,21 +16,40 @@ export default function Leaderboard() {
     return { label: 'Aspirant', color: 'text-gray-400 bg-gray-50 dark:bg-gray-800 border-gray-200' };
   };
 
+  // --- 🔥 2. THE TRUTH ENGINE (Re-Added) ---
+  const calculateRealStreak = (user) => {
+    // If no data or streak is already 0, return 0
+    if (!user.last_mock_date || user.streak_count === 0) return 0;
+
+    const today = new Date();
+    today.setHours(0, 0, 0, 0); // Reset time to midnight
+    
+    const yesterday = new Date(today);
+    yesterday.setDate(yesterday.getDate() - 1); // Get yesterday midnight
+
+    const lastDate = new Date(user.last_mock_date);
+    lastDate.setHours(0, 0, 0, 0); // Reset stored date to midnight
+
+    // LOGIC: If last played date is BEFORE yesterday, the streak is broken visually
+    if (lastDate.getTime() < yesterday.getTime()) {
+      return 0; // 💀 Shows 0 even if DB says 1
+    }
+    return user.streak_count; // 🔥 Streak is safe
+  };
+
   useEffect(() => {
     const fetchRankings = async () => {
       setLoading(true);
       try {
-        // 🔥 PRIMARY STEALTH: Filter Admin identity at the query level
         const { data, error } = await supabase
           .from('profiles')
           .select('*')
-          .not('username', 'ilike', 'thebrain') // Case-insensitive filter
+          .not('username', 'ilike', 'thebrain') 
           .order('streak_count', { ascending: false })
           .order('total_exams_completed', { ascending: false })
           .limit(25);
 
         if (!error && data) {
-          // 🔥 SECONDARY STEALTH: JS Filter backup for absolute security
           const civilianNodes = data.filter(u => u.username.toLowerCase() !== 'thebrain');
           setRankings(civilianNodes);
         }
@@ -93,7 +112,10 @@ export default function Leaderboard() {
                   ? (u.total_percentage_points / u.total_exams_completed).toFixed(1) 
                   : 0;
                 
-                // 🔥 TOP 3 STYLING LOGIC
+                // 🔥 CALCULATE REAL STREAK (Override Database)
+                const displayStreak = calculateRealStreak(u);
+
+                // Top 3 Styling Logic
                 let rankDisplay;
                 let rankStyle = "bg-gray-50 dark:bg-gray-900/40 border-transparent";
                 
@@ -113,13 +135,14 @@ export default function Leaderboard() {
                 return (
                   <tr key={u.id} className={`group transition-all hover:scale-[1.01] rounded-2xl border-2 ${rankStyle}`}>
                     
-                    {/* 1. RANK COLUMN (Updated with Icons) */}
+                    {/* Rank */}
                     <td className="px-6 py-4 rounded-l-[2rem]">
                       <div className="flex flex-col items-center justify-center h-full">
                         {rankDisplay}
                       </div>
                     </td>
 
+                    {/* Identity */}
                     <td className="px-6 py-4">
                       <div className="flex items-center gap-4">
                         <div className={`w-12 h-12 rounded-2xl bg-white dark:bg-gray-800 border-2 p-0.5 overflow-hidden ${index === 0 ? 'border-yellow-400 shadow-yellow-200 shadow-lg' : 'border-blue-100 dark:border-gray-700'}`}>
@@ -139,6 +162,7 @@ export default function Leaderboard() {
                       </div>
                     </td>
 
+                    {/* Goal */}
                     <td className="px-6 py-4">
                       <div className="flex flex-col gap-1">
                         <div className="flex items-center gap-2 text-[10px] font-bold text-gray-500 uppercase tracking-widest">
@@ -150,6 +174,7 @@ export default function Leaderboard() {
                       </div>
                     </td>
 
+                    {/* GPA */}
                     <td className="px-6 py-4 text-center">
                       <div className="flex flex-col">
                         <span className={`font-black text-2xl ${parseFloat(gpa) >= 75 ? 'text-green-600' : 'text-blue-600'}`}>{gpa}%</span>
@@ -157,10 +182,17 @@ export default function Leaderboard() {
                       </div>
                     </td>
 
+                    {/* Streak (🔥 USING CALCULATED VALUE) */}
                     <td className="px-6 py-4 text-right rounded-r-[2rem]">
-                      <div className="inline-flex items-center gap-3 bg-white dark:bg-gray-800 px-5 py-2.5 rounded-2xl border-2 border-orange-100 dark:border-gray-700 shadow-sm group-hover:border-orange-50 transition-all">
-                        <Flame size={18} className={`${u.streak_count > 0 ? 'text-orange-500 fill-orange-500 animate-pulse' : 'text-gray-200'}`} />
-                        <span className={`font-black text-xl ${u.streak_count > 0 ? 'text-orange-600' : 'text-gray-400'}`}>{u.streak_count || 0}</span>
+                      <div className={`inline-flex items-center gap-3 bg-white dark:bg-gray-800 px-5 py-2.5 rounded-2xl border-2 shadow-sm transition-all ${
+                        displayStreak > 0 
+                        ? 'border-orange-100 dark:border-orange-900/30' 
+                        : 'border-gray-100 dark:border-gray-700 opacity-60 grayscale'
+                      }`}>
+                        <Flame size={18} className={`${displayStreak > 0 ? 'text-orange-500 fill-orange-500 animate-pulse' : 'text-gray-300'}`} />
+                        <span className={`font-black text-xl ${displayStreak > 0 ? 'text-orange-600' : 'text-gray-400'}`}>
+                          {displayStreak} 
+                        </span>
                       </div>
                     </td>
 
