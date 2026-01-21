@@ -64,7 +64,10 @@ export default function AdminPanel({ user }) {
 
       setRegularMocks(reg.data || []);
       setDailyMocks(dai.data || []);
-      setAllUsers(profs.data || []);
+      
+      // 🔥 STEALTH PROTOCOL: Filter 'The Brain' out of the roster immediately
+      const civilianNodes = (profs.data || []).filter(u => u.username.toLowerCase() !== 'thebrain');
+      setAllUsers(civilianNodes);
 
       // 2. Fetch Access Keys (Filtered Logic)
       let keyQuery = supabase.from('authorized_users').select('*').order('created_at', { ascending: false });
@@ -354,7 +357,7 @@ export default function AdminPanel({ user }) {
           <div className="bg-white dark:bg-gray-800 p-8 rounded-[32px] shadow-xl border-l-8 border-purple-600">
             <div className="flex items-center gap-3 mb-6 text-purple-600"><ShieldCheck size={32} /><h2 className="text-2xl font-black uppercase dark:text-white">Permission Management</h2></div>
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-              {allUsers.filter(u => u.username.toLowerCase() !== 'thebrain').map(u => (
+              {allUsers.map(u => (
                 <div key={u.id} className={`p-4 rounded-2xl border-2 flex items-center justify-between transition-all ${u.is_moderator ? 'border-purple-500 bg-purple-50 dark:bg-purple-900/20' : 'border-gray-100 dark:border-gray-700'}`}>
                   <div>
                     <p className="font-black uppercase text-xs dark:text-white">{u.username}</p>
