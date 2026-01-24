@@ -9,6 +9,7 @@ import {
 
 export default function AdminPanel({ user }) {
   // --- 0. PERMISSION CHECK ---
+  // The 'isRoot' flag identifies YOU (The Brain). Everyone else is a Moderator.
   const isRoot = user?.username?.toLowerCase() === 'thebrain';
 
   // --- 1. MOCK UPLOAD STATE ---
@@ -25,11 +26,11 @@ export default function AdminPanel({ user }) {
   const [dailyMocks, setDailyMocks] = useState([]); 
 
   // --- 2. SYSTEM & ROSTER STATE ---
-  const [assignedName, setAssignedName] = useState('');
-  const [activeKeys, setActiveKeys] = useState([]); // Now stores Invites
+  // Renamed 'activeKeys' contextually to handle Invite Codes, but keeping state name for stability if you prefer
+  const [activeKeys, setActiveKeys] = useState([]); 
   const [userRequests, setUserRequests] = useState([]);
   const [allUsers, setAllUsers] = useState([]); 
-  const [showRoster, setShowRoster] = useState(true); // Default open for better visibility
+  const [showRoster, setShowRoster] = useState(true); // Default TRUE for visibility
   const [loading, setLoading] = useState(true);
 
   // --- 3. LIBRARY MANAGER STATE ---
@@ -68,7 +69,8 @@ export default function AdminPanel({ user }) {
       const civilianNodes = (profs.data || []).filter(u => u.username.toLowerCase() !== 'thebrain');
       setAllUsers(civilianNodes);
 
-      // 2. Fetch INVITE CODES (Previously Access Keys)
+      // 2. Fetch INVITE CODES (Replaces Access Keys)
+      // We look at 'invite_codes' table now
       let keyQuery = supabase.from('invite_codes').select('*').order('created_at', { ascending: false });
       
       // 🔥 IF NOT ROOT, ONLY SHOW KEYS I CREATED
@@ -160,17 +162,28 @@ export default function AdminPanel({ user }) {
     }
   };
 
-  // 🔥 NEW: GENERATE INVITE CODE
+  // 🔥 NEW: GENERATE INVITE CODE LOGIC
   const generateInvite = async () => {
-    const code = `NEURAL-${Math.random().toString(36).substring(2, 6).toUpperCase()}`;
-    await supabase.from('invite_codes').insert([{ 
-      code: code,
-      created_by: user.id 
-    }]); 
-    fetchAdminData();
+    try {
+      // Create a random 6-char suffix like 'A9F2B1'
+      const suffix = Math.random().toString(36).substring(2, 8).toUpperCase();
+      const newCode = `NEURAL-${suffix}`;
+      
+      // Insert into 'invite_codes' table
+      const { error } = await supabase.from('invite_codes').insert([{ 
+        code: newCode, 
+        created_by: user.id 
+      }]);
+      
+      if (error) throw error;
+      fetchAdminData(); // Refresh list immediately
+    } catch (err) {
+      alert(`Generation Failed: ${err.message}`);
+    }
   };
 
   const deleteInvite = async (id) => {
+    // Delete from 'invite_codes'
     await supabase.from('invite_codes').delete().eq('id', id);
     fetchAdminData();
   };
@@ -228,10 +241,11 @@ export default function AdminPanel({ user }) {
         </div>
       </div>
 
-      {/* --- SPLIT LAYOUT (Mock Creator vs Tools) --- */}
+      {/* --- LAYOUT: SPLIT TOP SECTION --- */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-10 items-start">
         
-        {/* 1. LEFT COL: MOCK CREATOR */}
+        {/* 1. MOCK CREATOR (LEFT COLUMN) */}
+        {/* 🔥 THEME: Using bg-slate-900 instead of gray-800 */}
         <div className="bg-white dark:bg-slate-900 p-8 rounded-[32px] shadow-xl border dark:border-slate-700">
           <div className="flex items-center gap-3 mb-6 text-blue-600"><UploadCloud size={32} /><h2 className="text-2xl font-black uppercase dark:text-white">Mock Creator</h2></div>
           <div className="space-y-4">
@@ -274,10 +288,10 @@ export default function AdminPanel({ user }) {
           </div>
         </div>
 
-        {/* 2. RIGHT COL: TOOLS STACK */}
-        <div className="space-y-10">
+        {/* 2. RIGHT COL: TOOLS STACK (Invite & Library) */}
+        <div className="space-y-8 h-full">
           
-          {/* INVITE GENERATOR */}
+          {/* INVITE GENERATOR (Replaced Access Keys) */}
           <div className="bg-white dark:bg-slate-900 p-8 rounded-[32px] shadow-xl border dark:border-slate-700">
             <div className="flex items-center gap-3 mb-6 text-indigo-600"><Key size={32} /><h2 className="text-2xl font-black uppercase dark:text-white">Invite Generator</h2></div>
             <div className="mb-6 space-y-4">
@@ -321,8 +335,8 @@ export default function AdminPanel({ user }) {
         </div>
       </div>
 
-      {/* --- 🔥 NEURAL ROSTER (MOVED TO FULL WIDTH BOTTOM) --- */}
-      <div className="bg-white dark:bg-slate-900 p-8 rounded-[32px] shadow-xl border dark:border-slate-700 mt-10">
+      {/* --- 🔥 LAYOUT CHANGE: NEURAL ROSTER (Now Full Width, Below Top Section) --- */}
+      <div className="bg-white dark:bg-slate-900 p-8 rounded-[32px] shadow-xl border dark:border-slate-700 mt-8 h-fit">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-3 text-blue-600"><Users size={32} /><h2 className="text-2xl font-black uppercase dark:text-white tracking-tighter">Neural Roster</h2></div>
           <button onClick={() => setShowRoster(!showRoster)} className={`p-3 rounded-2xl bg-blue-50 dark:bg-slate-800 text-blue-600 transition-all ${showRoster ? 'rotate-180 bg-blue-600 text-white' : ''}`}><ChevronDown size={28} /></button>
