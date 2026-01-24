@@ -14,7 +14,7 @@ import StudyHub from './components/StudyHub';
 // 🔥 STABILIZED IMPORTS: All required icons for Dashboard & Engine included
 import { 
   Lock, Megaphone, ShieldAlert, Key, Youtube, 
-  Layout, Zap, Award, Database, ListFilter, Skull 
+  Layout, Zap, Award, Database, ListFilter 
 } from 'lucide-react';
 
 export default function App() {
@@ -25,35 +25,12 @@ export default function App() {
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
   const [globalMsg, setGlobalMsg] = useState(null);
   const [isExamLocked, setIsExamLocked] = useState(false); 
-  const [loginError, setLoginError] = useState('');
 
-  // --- 1. THE REAPER (AUTO-DELETE LOGIC) ---
-  const runTheReaper = async () => {
-    // Only The Brain runs the cleanup to save resources
-    const today = new Date();
-    const sixtyDaysAgo = new Date(today);
-    sixtyDaysAgo.setDate(today.getDate() - 60);
-    const dateStr = sixtyDaysAgo.toISOString().split('T')[0];
+  // --- ACCESS KEY STATES ---
+  const [accessKey, setAccessKey] = useState('');
+  const [authError, setAuthError] = useState('');
 
-    // Find Inactive Users (> 60 days)
-    const { data: deadNodes } = await supabase
-      .from('profiles')
-      .select('id, username')
-      .lt('last_mock_date', dateStr)
-      .neq('username', 'TheBrain'); // Never delete yourself
-
-    if (deadNodes && deadNodes.length > 0) {
-      console.log("💀 THE REAPER: Purging inactive nodes...", deadNodes);
-      
-      for (const node of deadNodes) {
-        // Cascade delete related data
-        await supabase.from('scores').delete().eq('user_id', node.id);
-        await supabase.from('subject_notes').delete().eq('user_id', node.id);
-        await supabase.from('profiles').delete().eq('id', node.id);
-      }
-    }
-  };
-
+  // --- 1. ATOMIC USER REFRESH ---
   const refreshUser = useCallback(async (userId) => {
     if (!userId) return;
     const { data, error } = await supabase
@@ -113,71 +90,46 @@ export default function App() {
     }
   };
 
-  // --- 4. NEW LOGIN SYSTEM (INVITE CODES) ---
+  // --- 4. LOGIN & AUTH PIPELINE ---
   const handleLogin = async () => {
     if (!username.trim()) return;
-    setLoginError('');
-
     try {
-      const inputName = username.trim();
-
-      // A. CHECK IF USER EXISTS
-      const { data: existingUser } = await supabase
+      const { data, error } = await supabase
         .from('profiles')
-        .select('*')
-        .ilike('username', inputName)
-        .maybeSingle();
+        .upsert({ username: username.trim() }, { onConflict: 'username' })
+        .select().single();
 
-      if (existingUser) {
-        // User exists -> Log them in
-        setUser(existingUser);
-        handleStreakCheck(existingUser);
-        
-        // If "The Brain" logs in, run The Reaper
-        if (existingUser.username.toLowerCase() === 'thebrain') {
-          runTheReaper();
-        }
-        return;
+      if (!error && data) {
+        setUser(data);
+        handleStreakCheck(data);
       }
+    } catch (err) { console.error("Identity Error", err); }
+  };
 
-      // B. IF USER DOES NOT EXIST -> CHECK INVITE CODES
-      const { data: invite } = await supabase
-        .from('invite_codes')
-        .select('*')
-        .eq('code', inputName)
-        .eq('is_used', false)
-        .maybeSingle();
+  const validateAccessKey = async () => {
+    if (!accessKey.trim()) return;
+    setAuthError('⏳ Authenticating Node...');
+    const { data: keyData, error: keyError } = await supabase
+      .from('authorized_users')
+      .select('*')
+      .eq('access_key', accessKey.trim().toUpperCase())
+      .single();
 
-      if (invite) {
-        // Valid Code Found -> Create Account using the Code as Username
-        const { data: newUser, error: createError } = await supabase
-          .from('profiles')
-          .insert([{ 
-            username: inputName, // The code becomes the username
-            is_verified: true,   // Auto-verified
-            last_mock_date: new Date().toISOString().split('T')[0] // Mark active today
-          }])
-          .select()
-          .single();
+    if (keyData && !keyError) {
+      const { error: updateError } = await supabase
+        .from('profiles')
+        .update({ is_verified: true })
+        .eq('id', user.id);
 
-        if (newUser && !createError) {
-          // Mark invite as used
-          await supabase.from('invite_codes').update({ is_used: true }).eq('id', invite.id);
-          setUser(newUser);
-        } else {
-          setLoginError("Error initializing node.");
-        }
-      } else {
-        setLoginError("❌ Access Denied: User not found or Invalid Invite Code.");
+      if (!updateError) {
+        await refreshUser(user.id);
+        setAuthError('');
       }
-
-    } catch (err) { 
-      console.error("Login Error", err); 
-      setLoginError("System Failure.");
+    } else {
+      setAuthError('❌ Unauthorized: Invalid Access Key.');
     }
   };
 
-  // Admin Request (for regular users)
   const sendAdminRequest = async () => {
     const msg = window.prompt("Transmission to The Brain:");
     if (!msg) return;
@@ -190,29 +142,42 @@ export default function App() {
   // --- VIEW: LOGIN ---
   if (!user) {
     return (
-      // 🔥 FORCED HEX COLOR: #0f172a is Deep Slate/Cyber Blue
-      <div className={`flex items-center justify-center min-h-screen ${isDarkMode ? 'bg-[#0f172a]' : 'bg-blue-50'}`}>
-        <div className="bg-white dark:bg-[#1e293b] p-10 rounded-[3rem] shadow-2xl border-2 border-blue-500/20 w-full max-w-md text-center animate-in fade-in zoom-in duration-500">
+      <div className={`flex items-center justify-center min-h-screen ${isDarkMode ? 'bg-gray-950' : 'bg-blue-50'}`}>
+        <div className="bg-white dark:bg-gray-900 p-10 rounded-[3rem] shadow-2xl border-2 border-blue-500/20 w-full max-w-md text-center animate-in fade-in zoom-in duration-500">
           <div className="w-20 h-20 bg-blue-600 rounded-3xl flex items-center justify-center mx-auto mb-6 shadow-xl rotate-3">
              <ShieldAlert className="text-white" size={40} />
           </div>
-          <h1 className="text-4xl font-black mb-2 text-blue-600 dark:text-blue-400 italic tracking-tighter uppercase">Neural Portal</h1>
-          <p className="text-gray-400 dark:text-gray-300 font-bold text-xs uppercase tracking-widest mb-8">Identify Node / Enter Code</p>
-          <input className="w-full p-5 rounded-2xl border-2 mb-4 dark:bg-[#0f172a] dark:border-[#334155] dark:text-white font-black outline-none focus:border-blue-500 transition-all text-center" placeholder="USERNAME OR INVITE CODE" value={username} onChange={(e) => setUsername(e.target.value)} />
-          <button onClick={handleLogin} className="w-full bg-blue-600 text-white p-5 rounded-2xl font-black uppercase tracking-widest hover:bg-blue-700 shadow-xl transition-all">Initialize Connection</button>
-          {loginError && <p className="text-red-500 font-black text-[10px] uppercase tracking-widest mt-4 animate-pulse">{loginError}</p>}
+          <h1 className="text-4xl font-black mb-2 text-blue-600 italic tracking-tighter uppercase">Neural Portal</h1>
+          <p className="text-gray-400 font-bold text-xs uppercase tracking-widest mb-8">Identify Node</p>
+          <input className="w-full p-5 rounded-2xl border-2 mb-4 dark:bg-gray-800 dark:border-gray-700 dark:text-white font-black outline-none focus:border-blue-500 transition-all text-center" placeholder="ENTER USERNAME" value={username} onChange={(e) => setUsername(e.target.value)} />
+          <button onClick={handleLogin} className="w-full bg-blue-600 text-white p-5 rounded-2xl font-black uppercase tracking-widest hover:bg-blue-700 shadow-xl transition-all">Verify Identity</button>
         </div>
       </div>
     );
   }
 
-  // Admin Check
-  const isAdmin = user.username.toLowerCase() === 'thebrain' || user.is_moderator;
+  // --- VIEW: VERIFICATION LOCK (UPDATED ACCESS LOGIC) ---
+ // 🔥 ACCESS UPDATE: Checks for Root Admin OR Moderator Status
+const isAdmin = user.username.toLowerCase() === 'thebrain' || user?.is_moderator;
+ 
+  if (!isAdmin && !user.is_verified) {
+    return (
+      <div className={`flex items-center justify-center min-h-screen ${isDarkMode ? 'bg-gray-950' : 'bg-blue-50'}`}>
+        <div className="bg-white dark:bg-gray-900 p-10 rounded-[3rem] shadow-2xl border-2 border-indigo-500/20 w-full max-w-md text-center">
+          <Key className="mx-auto mb-6 text-indigo-500" size={48} />
+          <h2 className="text-2xl font-black dark:text-white uppercase tracking-tighter mb-2">Node Locked</h2>
+          <p className="text-gray-500 text-xs font-bold uppercase mb-8">Authorise Node "{user.username}"</p>
+          <input className="w-full p-5 rounded-2xl border-2 mb-4 dark:bg-gray-800 dark:border-gray-700 dark:text-white font-mono text-center text-xl tracking-[0.2em] outline-none" placeholder="BRAIN-XXXXXX" value={accessKey} onChange={(e) => setAccessKey(e.target.value)} />
+          <button onClick={validateAccessKey} className="w-full bg-indigo-600 text-white p-5 rounded-2xl font-black uppercase tracking-widest hover:bg-indigo-700 transition-all mb-4 shadow-xl">Activate Identity</button>
+          {authError && <p className="text-red-500 font-black text-[10px] uppercase tracking-widest">{authError}</p>}
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className={isDarkMode ? 'dark' : ''}>
-      {/* 🔥 FORCED HEX COLOR: bg-[#0f172a] ensures Dark Mode is Blue/Black, not Gray */}
-      <div className={`flex min-h-screen transition-colors duration-300 ${isDarkMode ? 'bg-[#0f172a] text-white' : 'bg-blue-50 text-gray-800'}`}>
+      <div className={`flex min-h-screen transition-colors duration-300 ${isDarkMode ? 'bg-gray-950 text-white' : 'bg-blue-50 text-gray-800'}`}>
         
         {/* SIDEBAR LOCKDOWN */}
         <div className={`${isExamLocked ? 'pointer-events-none opacity-40 blur-[3px] grayscale select-none' : ''} transition-all duration-700 z-40`}>
@@ -233,7 +198,7 @@ export default function App() {
                 </div>
               )}
             </div>
-            <div className="flex items-center gap-3 bg-white dark:bg-[#1e293b] px-6 py-2 rounded-2xl shadow-sm border-2 border-orange-50 dark:border-[#334155]">
+            <div className="flex items-center gap-3 bg-white dark:bg-gray-800 px-6 py-2 rounded-2xl shadow-sm border-2 border-orange-50 dark:border-gray-700">
               <span className="text-2xl animate-pulse">🔥</span>
               <span className="font-black text-xl text-orange-500">{user.streak_count || 0}</span>
             </div>
@@ -243,8 +208,7 @@ export default function App() {
             {activeTab === 'dashboard' && (
               <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-700">
                 <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-                  {/* 🔥 CARD THEME: bg-[#1e293b] (Slate 800) */}
-                  <div className="lg:col-span-2 bg-white dark:bg-[#1e293b] p-10 rounded-[2.5rem] shadow-xl border-b-8 border-blue-500 flex flex-col justify-between relative overflow-hidden group">
+                  <div className="lg:col-span-2 bg-white dark:bg-gray-900 p-10 rounded-[2.5rem] shadow-xl border-b-8 border-blue-500 flex flex-col justify-between relative overflow-hidden group">
                     <div className="absolute top-0 right-0 p-10 opacity-5 group-hover:rotate-12 transition-transform duration-700"><Layout size={160} /></div>
                     <div className="relative z-10">
                       <div className="flex justify-between items-start mb-6">
@@ -254,8 +218,8 @@ export default function App() {
                         </div>
                         <InviteButton />
                       </div>
-                      <div className="bg-blue-50 dark:bg-[#0f172a] p-6 rounded-3xl border border-blue-100 dark:border-[#334155] backdrop-blur-sm">
-                        <p className="text-sm font-bold text-gray-600 dark:text-gray-300">
+                      <div className="bg-blue-50 dark:bg-blue-900/20 p-6 rounded-3xl border border-blue-100 dark:border-blue-800 backdrop-blur-sm">
+                        <p className="text-sm font-bold text-gray-600 dark:text-gray-400">
                           Synchronization Active. Global Performance Index: <span className="text-blue-600 font-black">{(user.total_percentage_points / (user.total_exams_completed || 1)).toFixed(1)}%</span>
                         </p>
                       </div>
