@@ -3,7 +3,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { 
   LayoutDashboard, BookOpen, Timer, Trophy, 
   User, Moon, Sun, ChevronLeft, ChevronRight, 
-  Database, Flame, Youtube, ShieldCheck, Keyboard // 🔥 Added Keyboard Icon
+  Database, Flame, Youtube, ShieldCheck, Keyboard 
 } from 'lucide-react';
 
 export default function Sidebar({ user, activeTab, setActiveTab, setIsDarkMode, isDarkMode, isOpen, setIsOpen }) {
@@ -36,14 +36,20 @@ export default function Sidebar({ user, activeTab, setActiveTab, setIsDarkMode, 
   if (isAdmin) {
     const adminExists = menuItems.find(item => item.id === 'admin');
     if (!adminExists) {
-      // Insert Admin Panel right before 'Profile' (which is the last item)
+      // Insert Admin Panel right before 'Profile'
       menuItems.splice(menuItems.length - 1, 0, { id: 'admin', icon: <Database />, label: 'Admin Panel' });
     }
   }
 
+  // --- 3. SELECTION HANDLER ---
+  const handleSelect = (id) => {
+    setActiveTab(id);
+    setIsOpen(false); // 🔥 AUTO-COLLAPSE ON SELECTION
+  };
+
   return (
     <>
-      {/* 3. NEON TOGGLE BUTTON */}
+      {/* 4. NEON TOGGLE BUTTON */}
       <button 
         onClick={() => setIsOpen(!isOpen)} 
         className={`fixed top-6 z-50 p-2.5 rounded-full bg-blue-600 text-white shadow-[0_0_20px_rgba(37,99,235,0.4)] hover:shadow-[0_0_30px_rgba(37,99,235,0.6)] transition-all duration-500 active:scale-90 ${isOpen ? 'left-60' : 'left-6'}`}
@@ -51,7 +57,7 @@ export default function Sidebar({ user, activeTab, setActiveTab, setIsDarkMode, 
         {isOpen ? <ChevronLeft size={20} /> : <ChevronRight size={20} />}
       </button>
 
-      {/* 4. MAIN SIDEBAR CONTAINER */}
+      {/* 5. MAIN SIDEBAR CONTAINER */}
       <motion.div 
         initial={{ x: -260 }}
         animate={{ x: isOpen ? 0 : -260 }}
@@ -87,7 +93,7 @@ export default function Sidebar({ user, activeTab, setActiveTab, setIsDarkMode, 
             </p>
           </div>
           
-          {/* Dynamic Streak Badge (Preserved Animation) */}
+          {/* Dynamic Streak Badge */}
           <motion.div 
             animate={user.streak_count > 0 ? { scale: [1, 1.05, 1], boxShadow: ["0 0 0px rgba(249,115,22,0)", "0 0 15px rgba(249,115,22,0.2)", "0 0 0px rgba(249,115,22,0)"] } : {}}
             transition={{ repeat: Infinity, duration: 2 }}
@@ -104,12 +110,12 @@ export default function Sidebar({ user, activeTab, setActiveTab, setIsDarkMode, 
           </motion.div>
         </div>
 
-        {/* 5. NAVIGATION MENU */}
+        {/* 6. NAVIGATION MENU */}
         <nav className="flex-1 space-y-2 overflow-y-auto custom-scrollbar pr-1">
           {menuItems.map((item) => (
             <button
               key={item.id}
-              onClick={() => setActiveTab(item.id)}
+              onClick={() => handleSelect(item.id)}
               className={`w-full flex items-center gap-4 p-4 rounded-2xl transition-all duration-300 group relative ${
                 activeTab === item.id 
                 ? 'bg-blue-600 text-white shadow-xl shadow-blue-600/30 scale-[1.02]' 
@@ -133,7 +139,7 @@ export default function Sidebar({ user, activeTab, setActiveTab, setIsDarkMode, 
           ))}
         </nav>
 
-        {/* 6. NEURAL THEME SWITCHER */}
+        {/* 7. NEURAL THEME SWITCHER */}
         <button 
           onClick={() => setIsDarkMode(!isDarkMode)}
           className="mt-8 flex items-center justify-between p-4 bg-gray-50 dark:bg-gray-800/50 rounded-[1.5rem] border border-gray-100 dark:border-gray-700 transition-all hover:border-blue-500/30 group"
