@@ -190,6 +190,7 @@ export default function App() {
   // --- VIEW: LOGIN ---
   if (!user) {
     return (
+      // 🔥 THEME FIX: Using 'bg-slate-950' for Deep Cyber Blue
       <div className={`flex items-center justify-center min-h-screen ${isDarkMode ? 'bg-slate-950' : 'bg-blue-50'}`}>
         <div className="bg-white dark:bg-slate-900 p-10 rounded-[3rem] shadow-2xl border-2 border-blue-500/20 w-full max-w-md text-center animate-in fade-in zoom-in duration-500">
           <div className="w-20 h-20 bg-blue-600 rounded-3xl flex items-center justify-center mx-auto mb-6 shadow-xl rotate-3">
@@ -208,10 +209,10 @@ export default function App() {
   // Admin Check
   const isAdmin = user.username.toLowerCase() === 'thebrain' || user.is_moderator;
 
-  // 🔥 THEME FIX: Main container now uses 'bg-slate-950'
   return (
     <div className={isDarkMode ? 'dark' : ''}>
-      <div className={`flex min-h-screen transition-colors duration-300 ${isDarkMode ? 'bg-slate-950 text-slate-100' : 'bg-blue-50 text-gray-800'}`}>
+      {/* 🔥 THEME FIX: Main container 'bg-slate-950' */}
+      <div className={`flex min-h-screen transition-colors duration-300 ${isDarkMode ? 'bg-slate-950 text-white' : 'bg-blue-50 text-gray-800'}`}>
         
         {/* SIDEBAR LOCKDOWN */}
         <div className={`${isExamLocked ? 'pointer-events-none opacity-40 blur-[3px] grayscale select-none' : ''} transition-all duration-700 z-40`}>
@@ -253,7 +254,7 @@ export default function App() {
                         <InviteButton />
                       </div>
                       <div className="bg-blue-50 dark:bg-blue-900/20 p-6 rounded-3xl border border-blue-100 dark:border-blue-800 backdrop-blur-sm">
-                        <p className="text-sm font-bold text-gray-600 dark:text-slate-300">
+                        <p className="text-sm font-bold text-gray-600 dark:text-gray-400">
                           Synchronization Active. Global Performance Index: <span className="text-blue-600 font-black">{(user.total_percentage_points / (user.total_exams_completed || 1)).toFixed(1)}%</span>
                         </p>
                       </div>
