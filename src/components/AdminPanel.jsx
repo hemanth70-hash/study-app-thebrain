@@ -232,27 +232,28 @@ export default function AdminPanel({ user }) {
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-10 items-start">
         
         {/* 1. MOCK CREATOR */}
-        <div className="bg-white dark:bg-gray-800 p-8 rounded-[32px] shadow-xl border dark:border-gray-700">
+        {/* 🔥 THEME FIX: bg-slate-900 */}
+        <div className="bg-white dark:bg-slate-900 p-8 rounded-[32px] shadow-xl border dark:border-slate-700">
           <div className="flex items-center gap-3 mb-6 text-blue-600"><UploadCloud size={32} /><h2 className="text-2xl font-black uppercase dark:text-white">Mock Creator</h2></div>
           <div className="space-y-4">
-            <input type="text" placeholder="Mock Title" className="w-full p-4 rounded-2xl border dark:bg-gray-900 dark:text-white font-bold" value={mockTitle} onChange={(e) => setMockTitle(e.target.value)} />
+            <input type="text" placeholder="Mock Title" className="w-full p-4 rounded-2xl border dark:bg-slate-800 dark:text-white font-bold" value={mockTitle} onChange={(e) => setMockTitle(e.target.value)} />
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-               <div className="relative"><input type="number" className="w-full p-4 rounded-2xl border dark:bg-gray-900 dark:text-white font-black" value={timeLimit} onChange={(e) => setTimeLimit(e.target.value)} /><Clock size={16} className="absolute right-4 top-5 text-gray-400" /></div>
-               <button type="button" onClick={() => setIsDailyQuickMock(!isDailyQuickMock)} className={`p-4 rounded-2xl font-black uppercase text-[10px] flex items-center gap-2 transition-all ${isDailyQuickMock ? 'bg-orange-500 text-white shadow-lg' : 'bg-gray-100 dark:bg-gray-700 text-gray-400'}`}><Zap size={14} /> {isDailyQuickMock ? 'Daily' : 'Regular'}</button>
-               <button type="button" onClick={() => setIsStrict(!isStrict)} className={`p-4 rounded-2xl font-black uppercase text-[10px] flex items-center gap-2 transition-all ${isStrict ? 'bg-red-600 text-white shadow-lg' : 'bg-gray-100 dark:bg-gray-700 text-gray-400'}`}><ShieldAlert size={14} /> Strict: {isStrict ? 'ON' : 'OFF'}</button>
+               <div className="relative"><input type="number" className="w-full p-4 rounded-2xl border dark:bg-slate-800 dark:text-white font-black" value={timeLimit} onChange={(e) => setTimeLimit(e.target.value)} /><Clock size={16} className="absolute right-4 top-5 text-gray-400" /></div>
+               <button type="button" onClick={() => setIsDailyQuickMock(!isDailyQuickMock)} className={`p-4 rounded-2xl font-black uppercase text-[10px] flex items-center gap-2 transition-all ${isDailyQuickMock ? 'bg-orange-500 text-white shadow-lg' : 'bg-gray-100 dark:bg-slate-800 text-gray-400'}`}><Zap size={14} /> {isDailyQuickMock ? 'Daily' : 'Regular'}</button>
+               <button type="button" onClick={() => setIsStrict(!isStrict)} className={`p-4 rounded-2xl font-black uppercase text-[10px] flex items-center gap-2 transition-all ${isStrict ? 'bg-red-600 text-white shadow-lg' : 'bg-gray-100 dark:bg-slate-800 text-gray-400'}`}><ShieldAlert size={14} /> Strict: {isStrict ? 'ON' : 'OFF'}</button>
             </div>
-            <textarea className="w-full h-40 p-4 font-mono text-[10px] border dark:bg-gray-900 dark:text-white rounded-2xl outline-none" placeholder='Paste JSON array...' value={bulkData} onChange={(e) => setBulkData(e.target.value)} />
+            <textarea className="w-full h-40 p-4 font-mono text-[10px] border dark:bg-slate-800 dark:text-white rounded-2xl outline-none" placeholder='Paste JSON array...' value={bulkData} onChange={(e) => setBulkData(e.target.value)} />
             <button disabled={isPublishing} onClick={handlePublish} className="w-full bg-blue-600 text-white py-4 rounded-2xl font-black uppercase tracking-widest shadow-xl active:scale-95 transition-all">
               {isPublishing ? 'Publishing...' : 'Publish Mock'}
             </button>
             {status && <p className="text-center font-black uppercase text-[10px] text-blue-500 mt-2">{status}</p>}
             
-            <div className="mt-8 pt-8 border-t dark:border-gray-700 grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="mt-8 pt-8 border-t dark:border-slate-800 grid grid-cols-1 md:grid-cols-2 gap-4">
                <div>
                  <p className="text-[10px] font-black uppercase text-blue-400 mb-2 flex items-center gap-2"><ListFilter size={14}/> Normal Mocks</p>
                  <div className="space-y-2 max-h-48 overflow-y-auto pr-2 custom-scrollbar">
                    {regularMocks.map(m => (
-                     <div key={m.id} className="p-3 bg-gray-50 dark:bg-gray-900 rounded-xl flex justify-between items-center group transition-all border border-transparent hover:border-red-500/30">
+                     <div key={m.id} className="p-3 bg-gray-50 dark:bg-slate-800 rounded-xl flex justify-between items-center group transition-all border border-transparent hover:border-red-500/30">
                        <div><p className="font-bold text-[10px] dark:text-white uppercase truncate w-24">{m.mock_title}</p><p className="text-[8px] font-bold text-gray-400 uppercase">{m.time_limit}m</p></div>
                        <button onClick={() => deleteMock(m.id, 'mocks')} className="p-1.5 text-gray-400 hover:text-red-500"><Trash2 size={14}/></button>
                      </div>
@@ -275,7 +276,7 @@ export default function AdminPanel({ user }) {
         </div>
 
         {/* 2. INVITE GENERATOR (Replaced Access Keys) */}
-        <div className="bg-white dark:bg-gray-800 p-8 rounded-[32px] shadow-xl border dark:border-gray-700">
+        <div className="bg-white dark:bg-slate-900 p-8 rounded-[32px] shadow-xl border dark:border-slate-700">
           <div className="flex items-center gap-3 mb-6 text-indigo-600"><Key size={32} /><h2 className="text-2xl font-black uppercase dark:text-white">Invite Generator</h2></div>
           <div className="mb-6 space-y-4">
             <p className="text-[10px] font-bold text-gray-400 uppercase leading-relaxed">
@@ -303,12 +304,12 @@ export default function AdminPanel({ user }) {
         </div>
 
         {/* 3. LIBRARY MANAGER */}
-        <div className="bg-white dark:bg-gray-800 p-8 rounded-[32px] shadow-xl border dark:border-gray-700">
+        <div className="bg-white dark:bg-slate-900 p-8 rounded-[32px] shadow-xl border dark:border-slate-700">
           <div className="flex items-center gap-3 mb-6 text-orange-500"><BookOpen size={32} /><h2 className="text-2xl font-black uppercase dark:text-white">Library</h2></div>
           <div className="space-y-4">
-            <input className="w-full p-4 rounded-2xl border dark:bg-gray-900 dark:text-white outline-none" placeholder="Resource Title" value={bookTitle} onChange={e => setBookTitle(e.target.value)} />
-            <input className="w-full p-4 rounded-2xl border dark:bg-gray-900 dark:text-white outline-none" placeholder="PDF URL" value={bookUrl} onChange={e => setBookUrl(e.target.value)} />
-            <select className="w-full p-4 rounded-2xl border dark:bg-gray-900 dark:text-white outline-none font-bold cursor-pointer" value={bookCategory} onChange={e => setBookCategory(e.target.value)}>
+            <input className="w-full p-4 rounded-2xl border dark:bg-slate-800 dark:text-white outline-none" placeholder="Resource Title" value={bookTitle} onChange={e => setBookTitle(e.target.value)} />
+            <input className="w-full p-4 rounded-2xl border dark:bg-slate-800 dark:text-white outline-none" placeholder="PDF URL" value={bookUrl} onChange={e => setBookUrl(e.target.value)} />
+            <select className="w-full p-4 rounded-2xl border dark:bg-slate-800 dark:text-white outline-none font-bold cursor-pointer" value={bookCategory} onChange={e => setBookCategory(e.target.value)}>
               {librarySubjects.map(s => <option key={s} value={s}>{s}</option>)}
             </select>
             <button onClick={uploadResource} className="w-full bg-orange-500 text-white py-4 rounded-2xl font-black uppercase shadow-lg transition-all active:scale-95">Upload Resource</button>
@@ -316,10 +317,10 @@ export default function AdminPanel({ user }) {
         </div>
 
         {/* 4. NEURAL ROSTER (Filtered) */}
-        <div className="bg-white dark:bg-gray-800 p-8 rounded-[32px] shadow-xl border dark:border-gray-700 h-fit">
+        <div className="bg-white dark:bg-slate-900 p-8 rounded-[32px] shadow-xl border dark:border-slate-700 h-fit">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-3 text-blue-600"><Users size={32} /><h2 className="text-2xl font-black uppercase dark:text-white tracking-tighter">Neural Roster</h2></div>
-            <button onClick={() => setShowRoster(!showRoster)} className={`p-3 rounded-2xl bg-blue-50 dark:bg-gray-700 text-blue-600 transition-all ${showRoster ? 'rotate-180 bg-blue-600 text-white' : ''}`}><ChevronDown size={28} /></button>
+            <button onClick={() => setShowRoster(!showRoster)} className={`p-3 rounded-2xl bg-blue-50 dark:bg-slate-800 text-blue-600 transition-all ${showRoster ? 'rotate-180 bg-blue-600 text-white' : ''}`}><ChevronDown size={28} /></button>
           </div>
           {showRoster && (
             <div className="overflow-x-auto animate-in slide-in-from-top-4 mt-8">
@@ -329,7 +330,7 @@ export default function AdminPanel({ user }) {
                   {allUsers.map((u) => {
                     const r = getNeuralRank(u.total_percentage_points, u.total_exams_completed);
                     return (
-                      <tr key={u.id} className="bg-gray-50 dark:bg-gray-900/50 rounded-2xl hover:scale-[1.01] transition-transform">
+                      <tr key={u.id} className="bg-gray-50 dark:bg-slate-800 rounded-2xl hover:scale-[1.01] transition-transform">
                         <td className="px-6 py-4 rounded-l-2xl flex items-center gap-3">
                           <img src={`https://api.dicebear.com/7.x/${u.gender === 'neutral' ? 'bottts' : 'avataaars'}/svg?seed=${u.username}`} className="w-10 h-10 rounded-xl bg-white p-1" />
                           <div className="flex flex-col"><span className="font-black dark:text-white uppercase text-sm">{u.username}</span><span className={`text-[8px] font-black uppercase tracking-widest ${r.color}`}>{r.label}</span></div>
@@ -354,16 +355,16 @@ export default function AdminPanel({ user }) {
       {isRoot && (
         <div className="space-y-10 animate-in slide-in-from-bottom-8">
           
-          <div className="border-t-4 border-dashed border-gray-200 dark:border-gray-700 my-10 relative">
-            <span className="absolute top-[-14px] left-1/2 -translate-x-1/2 bg-gray-100 dark:bg-gray-900 px-4 text-[10px] font-black uppercase text-gray-400">Restricted Zone</span>
+          <div className="border-t-4 border-dashed border-gray-200 dark:border-slate-700 my-10 relative">
+            <span className="absolute top-[-14px] left-1/2 -translate-x-1/2 bg-gray-100 dark:bg-slate-900 px-4 text-[10px] font-black uppercase text-gray-400">Restricted Zone</span>
           </div>
 
           {/* 5. PERMISSIONS MANAGER */}
-          <div className="bg-white dark:bg-gray-800 p-8 rounded-[32px] shadow-xl border-l-8 border-purple-600">
+          <div className="bg-white dark:bg-slate-900 p-8 rounded-[32px] shadow-xl border-l-8 border-purple-600">
             <div className="flex items-center gap-3 mb-6 text-purple-600"><ShieldCheck size={32} /><h2 className="text-2xl font-black uppercase dark:text-white">Permission Management</h2></div>
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
               {allUsers.map(u => (
-                <div key={u.id} className={`p-4 rounded-2xl border-2 flex items-center justify-between transition-all ${u.is_moderator ? 'border-purple-500 bg-purple-50 dark:bg-purple-900/20' : 'border-gray-100 dark:border-gray-700'}`}>
+                <div key={u.id} className={`p-4 rounded-2xl border-2 flex items-center justify-between transition-all ${u.is_moderator ? 'border-purple-500 bg-purple-50 dark:bg-purple-900/20' : 'border-gray-100 dark:border-slate-800'}`}>
                   <div>
                     <p className="font-black uppercase text-xs dark:text-white">{u.username}</p>
                     <p className="text-[9px] font-bold text-gray-400">{u.is_moderator ? 'MODERATOR' : 'STUDENT'}</p>
@@ -386,7 +387,7 @@ export default function AdminPanel({ user }) {
           </div>
 
           {/* 7. PORTAL SIGNALS */}
-          <div className="bg-gray-900 text-white p-8 rounded-[32px] shadow-2xl border border-white/5">
+          <div className="bg-slate-900 text-white p-8 rounded-[32px] shadow-2xl border border-white/5">
             <div className="flex items-center gap-3 mb-6 text-orange-400"><MessageSquare size={28} /><h2 className="text-xl font-black uppercase tracking-tight">Portal Signals</h2></div>
             <div className="space-y-4 max-h-[300px] overflow-y-auto pr-4 custom-scrollbar">
               {userRequests.map(req => (
@@ -404,16 +405,16 @@ export default function AdminPanel({ user }) {
           </div>
 
           {/* 8. DEV LOGS */}
-          <div className="bg-white dark:bg-gray-800 p-8 rounded-[32px] shadow-xl border dark:border-gray-700">
+          <div className="bg-white dark:bg-slate-900 p-8 rounded-[32px] shadow-xl border dark:border-slate-700">
               <h3 className="text-xl font-black mb-6 flex items-center gap-3 text-blue-600 uppercase tracking-tighter"><History size={24} /> Dev Logs</h3>
               <div className="space-y-3 mb-6">
-              <input className="w-full bg-gray-50 dark:bg-gray-900 p-4 rounded-2xl text-sm border dark:border-gray-700 outline-none" placeholder="Version Name" value={verName} onChange={e => setVerName(e.target.value)} />
-              <textarea className="w-full bg-gray-50 dark:bg-gray-900 p-4 rounded-2xl text-sm border dark:border-gray-700 outline-none h-20 resize-none" placeholder="Commit details..." value={verDesc} onChange={e => setVerDesc(e.target.value)} />
+              <input className="w-full bg-gray-50 dark:bg-slate-800 p-4 rounded-2xl text-sm border dark:border-slate-700 outline-none" placeholder="Version Name" value={verName} onChange={e => setVerName(e.target.value)} />
+              <textarea className="w-full bg-gray-50 dark:bg-slate-800 p-4 rounded-2xl text-sm border dark:border-slate-700 outline-none h-20 resize-none" placeholder="Commit details..." value={verDesc} onChange={e => setVerDesc(e.target.value)} />
               <button onClick={saveLog} className="w-full bg-indigo-600 text-white py-4 rounded-2xl font-black uppercase text-xs shadow-lg hover:bg-indigo-700 transition-all">Commit Update</button>
             </div>
             <div className="space-y-4 max-h-40 overflow-y-auto pr-2 custom-scrollbar">
               {history.map(log => (
-                <div key={log.id} className="border-l-4 border-blue-600 pl-4 py-1 hover:bg-blue-50 dark:hover:bg-gray-900/50 transition-all">
+                <div key={log.id} className="border-l-4 border-blue-600 pl-4 py-1 hover:bg-blue-50 dark:hover:bg-slate-800 transition-all">
                   <p className="text-blue-600 font-black text-xs uppercase">{log.version_name} • <span className="text-gray-400 text-[10px]">{new Date(log.created_at).toLocaleDateString()}</span></p>
                   <p className="text-gray-500 text-[10px] leading-relaxed mt-1">{log.description}</p>
                 </div>

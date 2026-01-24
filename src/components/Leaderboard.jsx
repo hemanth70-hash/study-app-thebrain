@@ -13,7 +13,7 @@ export default function Leaderboard() {
     if (gpa >= 85) return { label: 'Genius', color: 'text-blue-600 bg-blue-50 dark:bg-blue-900/30 border-blue-200' };
     if (gpa >= 70) return { label: 'Specialist', color: 'text-green-600 bg-green-50 dark:bg-green-900/30 border-green-200' };
     if (gpa >= 50) return { label: 'Scholar', color: 'text-orange-600 bg-orange-50 dark:bg-orange-900/30 border-orange-200' };
-    return { label: 'Aspirant', color: 'text-gray-400 bg-gray-50 dark:bg-gray-800 border-gray-200' };
+    return { label: 'Aspirant', color: 'text-slate-400 bg-slate-50 dark:bg-slate-800 border-slate-200' };
   };
 
   // --- 2. THE TRUTH ENGINE (Visual Streak Fix) ---
@@ -110,11 +110,12 @@ export default function Leaderboard() {
       </div>
 
       {/* --- RANKINGS TABLE --- */}
-      <div className="bg-white dark:bg-gray-800 rounded-[3rem] shadow-2xl border dark:border-gray-700 overflow-hidden">
+      {/* 🔥 THEME FIX: Swapped gray-800 for slate-900 */}
+      <div className="bg-white dark:bg-slate-900 rounded-[3rem] shadow-2xl border dark:border-slate-700 overflow-hidden">
         <div className="overflow-x-auto p-4">
           <table className="w-full text-left border-separate border-spacing-y-4">
             <thead>
-              <tr className="text-[10px] font-black uppercase text-gray-400 tracking-[0.2em]">
+              <tr className="text-[10px] font-black uppercase text-slate-400 tracking-[0.2em]">
                 <th className="px-6 pb-2 text-center">Rank</th>
                 <th className="px-6 pb-2">User Identity</th>
                 <th className="px-6 pb-2">Goal Profile</th>
@@ -135,19 +136,20 @@ export default function Leaderboard() {
 
                 // Top 3 Styling Logic
                 let rankDisplay;
-                let rankStyle = "bg-gray-50 dark:bg-gray-900/40 border-transparent";
+                // 🔥 THEME FIX: Swapped gray-900 for slate-800 for better blue tint
+                let rankStyle = "bg-gray-50 dark:bg-slate-800/50 border-transparent";
                 
                 if (index === 0) {
                     rankStyle = "bg-yellow-50/50 dark:bg-yellow-900/10 border-yellow-200 dark:border-yellow-800";
                     rankDisplay = <Crown size={32} className="text-yellow-500 fill-yellow-500 animate-bounce" />;
                 } else if (index === 1) {
-                    rankStyle = "bg-gray-100/50 dark:bg-gray-800/50 border-gray-200 dark:border-gray-700";
-                    rankDisplay = <Medal size={28} className="text-gray-400 fill-gray-200" />;
+                    rankStyle = "bg-slate-100/50 dark:bg-slate-800/80 border-slate-200 dark:border-slate-600";
+                    rankDisplay = <Medal size={28} className="text-slate-400 fill-slate-200" />;
                 } else if (index === 2) {
                     rankStyle = "bg-orange-50/50 dark:bg-orange-900/10 border-orange-200 dark:border-orange-800";
                     rankDisplay = <Medal size={28} className="text-amber-700 fill-amber-500" />;
                 } else {
-                    rankDisplay = <span className="font-black text-2xl text-gray-300 italic">#{index + 1}</span>;
+                    rankDisplay = <span className="font-black text-2xl text-slate-300 italic">#{index + 1}</span>;
                 }
 
                 return (
@@ -163,7 +165,7 @@ export default function Leaderboard() {
                     {/* Identity & Status */}
                     <td className="px-6 py-4">
                       <div className="flex items-center gap-4">
-                        <div className={`w-12 h-12 rounded-2xl bg-white dark:bg-gray-800 border-2 p-0.5 overflow-hidden ${index === 0 ? 'border-yellow-400 shadow-yellow-200 shadow-lg' : 'border-blue-100 dark:border-gray-700'}`}>
+                        <div className={`w-12 h-12 rounded-2xl bg-white dark:bg-slate-700 border-2 p-0.5 overflow-hidden ${index === 0 ? 'border-yellow-400 shadow-yellow-200 shadow-lg' : 'border-blue-100 dark:border-slate-600'}`}>
                           <img 
                             src={`https://api.dicebear.com/7.x/${u.gender === 'neutral' ? 'bottts' : 'avataaars'}/svg?seed=${u.avatar_seed || u.username}${u.gender === 'female' ? '&facialHairProbability=0' : ''}`} 
                             className="w-full h-full object-contain"
@@ -198,7 +200,7 @@ export default function Leaderboard() {
                     {/* Goal */}
                     <td className="px-6 py-4">
                       <div className="flex flex-col gap-1">
-                        <div className="flex items-center gap-2 text-[10px] font-bold text-gray-500 uppercase tracking-widest">
+                        <div className="flex items-center gap-2 text-[10px] font-bold text-slate-500 uppercase tracking-widest">
                           <GraduationCap size={14} className="text-blue-500" /> {u.education || 'Student'}
                         </div>
                         <div className="flex items-center gap-2 text-[10px] font-black text-red-500 uppercase tracking-widest">
@@ -211,19 +213,19 @@ export default function Leaderboard() {
                     <td className="px-6 py-4 text-center">
                       <div className="flex flex-col">
                         <span className={`font-black text-2xl ${parseFloat(gpa) >= 75 ? 'text-green-600' : 'text-blue-600'}`}>{gpa}%</span>
-                        <span className="text-[8px] font-black text-gray-400 uppercase">Lifetime Avg</span>
+                        <span className="text-[8px] font-black text-slate-400 uppercase">Lifetime Avg</span>
                       </div>
                     </td>
 
                     {/* Streak */}
                     <td className="px-6 py-4 text-right rounded-r-[2rem]">
-                      <div className={`inline-flex items-center gap-3 bg-white dark:bg-gray-800 px-5 py-2.5 rounded-2xl border-2 shadow-sm transition-all ${
+                      <div className={`inline-flex items-center gap-3 bg-white dark:bg-slate-700 px-5 py-2.5 rounded-2xl border-2 shadow-sm transition-all ${
                         displayStreak > 0 
                         ? 'border-orange-100 dark:border-orange-900/30' 
-                        : 'border-gray-100 dark:border-gray-700 opacity-60 grayscale'
+                        : 'border-slate-100 dark:border-slate-600 opacity-60 grayscale'
                       }`}>
-                        <Flame size={18} className={`${displayStreak > 0 ? 'text-orange-500 fill-orange-500 animate-pulse' : 'text-gray-300'}`} />
-                        <span className={`font-black text-xl ${displayStreak > 0 ? 'text-orange-600' : 'text-gray-400'}`}>
+                        <Flame size={18} className={`${displayStreak > 0 ? 'text-orange-500 fill-orange-500 animate-pulse' : 'text-slate-300'}`} />
+                        <span className={`font-black text-xl ${displayStreak > 0 ? 'text-orange-600' : 'text-slate-400'}`}>
                           {displayStreak} 
                         </span>
                       </div>
@@ -233,7 +235,7 @@ export default function Leaderboard() {
                 );
               }) : (
                 <tr>
-                  <td colSpan="5" className="text-center py-20 text-gray-400 font-black uppercase text-xs opacity-50">
+                  <td colSpan="5" className="text-center py-20 text-slate-400 font-black uppercase text-xs opacity-50">
                     No civilian nodes identified.
                   </td>
                 </tr>
