@@ -2,7 +2,8 @@ import React from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
   LayoutDashboard, BookOpen, Timer, Trophy, 
-  User, Moon, Sun, ChevronLeft, ChevronRight, Database, Flame, Youtube, ShieldCheck
+  User, Moon, Sun, ChevronLeft, ChevronRight, 
+  Database, Flame, Youtube, ShieldCheck, Keyboard // 🔥 Added Keyboard Icon
 } from 'lucide-react';
 
 export default function Sidebar({ user, activeTab, setActiveTab, setIsDarkMode, isDarkMode, isOpen, setIsOpen }) {
@@ -20,6 +21,10 @@ export default function Sidebar({ user, activeTab, setActiveTab, setIsDarkMode, 
     { id: 'dashboard', icon: <LayoutDashboard />, label: 'Dashboard' },
     { id: 'study', icon: <Youtube />, label: 'Study Hub' }, 
     { id: 'subjects', icon: <BookOpen />, label: 'Resources' },
+    
+    // 🔥 NEW MODULE ADDED HERE
+    { id: 'typing', icon: <Keyboard />, label: 'Neural Typer' },
+
     { id: 'mocks', icon: <Timer />, label: 'Mock Tests' },
     { id: 'ranking', icon: <Trophy />, label: 'Leaderboard' },
     { id: 'profile', icon: <User />, label: 'Profile' },
