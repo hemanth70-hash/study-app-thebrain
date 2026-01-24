@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { supabase } from '../supabaseClient';
-import { Trophy, Medal, Flame, ShieldCheck, GraduationCap, Target, Loader2, Award, Crown } from 'lucide-react';
+import { Trophy, Medal, Flame, ShieldCheck, GraduationCap, Target, Loader2, Award, Crown, Skull, AlertTriangle } from 'lucide-react';
 
 export default function Leaderboard() {
   const [rankings, setRankings] = useState([]);
@@ -16,25 +16,42 @@ export default function Leaderboard() {
     return { label: 'Aspirant', color: 'text-gray-400 bg-gray-50 dark:bg-gray-800 border-gray-200' };
   };
 
-  // --- 🔥 2. THE TRUTH ENGINE (Re-Added) ---
+  // --- 2. THE TRUTH ENGINE (Visual Streak Fix) ---
   const calculateRealStreak = (user) => {
-    // If no data or streak is already 0, return 0
     if (!user.last_mock_date || user.streak_count === 0) return 0;
 
     const today = new Date();
-    today.setHours(0, 0, 0, 0); // Reset time to midnight
+    today.setHours(0, 0, 0, 0);
     
     const yesterday = new Date(today);
-    yesterday.setDate(yesterday.getDate() - 1); // Get yesterday midnight
+    yesterday.setDate(yesterday.getDate() - 1);
 
     const lastDate = new Date(user.last_mock_date);
-    lastDate.setHours(0, 0, 0, 0); // Reset stored date to midnight
+    lastDate.setHours(0, 0, 0, 0);
 
-    // LOGIC: If last played date is BEFORE yesterday, the streak is broken visually
     if (lastDate.getTime() < yesterday.getTime()) {
-      return 0; // 💀 Shows 0 even if DB says 1
+      return 0; // Streak is dead visually
     }
-    return user.streak_count; // 🔥 Streak is safe
+    return user.streak_count;
+  };
+
+  // --- 🔥 3. INACTIVITY WATCHDOG ---
+  const getInactivityStatus = (lastDateStr) => {
+    if (!lastDateStr) return { status: 'dead', days: 99 };
+    
+    const last = new Date(lastDateStr);
+    const today = new Date();
+    const diffTime = Math.abs(today - last);
+    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+
+    // Reaper deletes at 60 days
+    if (diffDays > 60) return { status: 'purge', days: diffDays }; 
+    // Danger Zone (30-60 days)
+    if (diffDays > 30) return { status: 'danger', days: diffDays, remaining: 60 - diffDays };
+    // Warning Zone (7-30 days)
+    if (diffDays > 7) return { status: 'warning', days: diffDays };
+    
+    return { status: 'active', days: 0 };
   };
 
   useEffect(() => {
@@ -112,8 +129,9 @@ export default function Leaderboard() {
                   ? (u.total_percentage_points / u.total_exams_completed).toFixed(1) 
                   : 0;
                 
-                // 🔥 CALCULATE REAL STREAK (Override Database)
+                // Real-time calculations
                 const displayStreak = calculateRealStreak(u);
+                const health = getInactivityStatus(u.last_mock_date);
 
                 // Top 3 Styling Logic
                 let rankDisplay;
@@ -142,7 +160,7 @@ export default function Leaderboard() {
                       </div>
                     </td>
 
-                    {/* Identity */}
+                    {/* Identity & Status */}
                     <td className="px-6 py-4">
                       <div className="flex items-center gap-4">
                         <div className={`w-12 h-12 rounded-2xl bg-white dark:bg-gray-800 border-2 p-0.5 overflow-hidden ${index === 0 ? 'border-yellow-400 shadow-yellow-200 shadow-lg' : 'border-blue-100 dark:border-gray-700'}`}>
@@ -153,7 +171,22 @@ export default function Leaderboard() {
                           />
                         </div>
                         <div className="flex flex-col">
-                          <span className="font-black dark:text-white uppercase text-sm tracking-tight">{u.username}</span>
+                          <div className="flex items-center gap-2">
+                            <span className="font-black dark:text-white uppercase text-sm tracking-tight">{u.username}</span>
+                            
+                            {/* 🔥 INACTIVITY BADGES */}
+                            {health.status === 'warning' && (
+                              <span className="bg-yellow-100 text-yellow-600 border border-yellow-200 px-2 py-0.5 rounded text-[8px] font-black uppercase flex items-center gap-1">
+                                <AlertTriangle size={8} /> Inactive
+                              </span>
+                            )}
+                            {health.status === 'danger' && (
+                              <span className="bg-red-100 text-red-600 border border-red-200 px-2 py-0.5 rounded text-[8px] font-black uppercase flex items-center gap-1 animate-pulse">
+                                <Skull size={8} /> Deletion in {health.remaining}d
+                              </span>
+                            )}
+                          </div>
+
                           <div className={`mt-1 inline-flex items-center gap-1.5 px-2 py-0.5 rounded-lg border text-[8px] font-black uppercase tracking-widest w-fit shadow-sm ${nodeRank.color}`}>
                             <ShieldCheck size={10} />
                             {nodeRank.label}
@@ -182,7 +215,7 @@ export default function Leaderboard() {
                       </div>
                     </td>
 
-                    {/* Streak (🔥 USING CALCULATED VALUE) */}
+                    {/* Streak */}
                     <td className="px-6 py-4 text-right rounded-r-[2rem]">
                       <div className={`inline-flex items-center gap-3 bg-white dark:bg-gray-800 px-5 py-2.5 rounded-2xl border-2 shadow-sm transition-all ${
                         displayStreak > 0 
