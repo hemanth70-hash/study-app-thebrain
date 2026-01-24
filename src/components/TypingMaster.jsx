@@ -36,16 +36,15 @@ const WORDS_HARD = ["synchronization", "infrastructure", "authentication", "cryp
 
 const generateCampaignText = (lvl) => {
   // 🔥 EXPANDED TEXT GENERATION (3-4 Lines Minimum)
-  
-  // SECTOR 1: Row Drills (Heavy repetition for muscle memory)
+  // SECTOR 1: Row Drills
   if (lvl <= 10) return generateRowString(ROWS.middle, 150 + (lvl * 5));
   if (lvl <= 20) return generateRowString(ROWS.top, 150 + (lvl * 5));
   if (lvl <= 30) return generateRowString(ROWS.bottom, 150 + (lvl * 5));
   
-  // SECTOR 2: Fluency (50-70 Words per level)
+  // SECTOR 2: Fluency
   if (lvl <= 60) return generateParagraph(WORDS_MED, 50 + Math.ceil((lvl-30)));
 
-  // SECTOR 3: Mastery (Complex Paragraphs)
+  // SECTOR 3: Mastery
   return generateParagraph(WORDS_HARD, 40 + Math.ceil((lvl-60)));
 };
 
@@ -53,7 +52,6 @@ const generateRowString = (chars, length) => {
   let res = "";
   for(let i=0; i<length; i++) {
     res += chars[Math.floor(Math.random() * chars.length)];
-    // Add space randomly but consistently to simulate words
     if (i > 0 && i % 6 === 0) res += " "; 
   }
   return res;
@@ -75,7 +73,7 @@ export default function TypingMaster({ user }) {
   const [maxLevel, setMaxLevel] = useState(user.typing_level || 1);
   const [currentLevel, setCurrentLevel] = useState(user.typing_level || 1);
   const [perfectStreak, setPerfectStreak] = useState(0);
-  const [resultStars, setResultStars] = useState(0); // 0, 1, 2, 3
+  const [resultStars, setResultStars] = useState(0); 
 
   // TYPING ENGINE
   const [text, setText] = useState('');
@@ -153,15 +151,15 @@ export default function TypingMaster({ user }) {
     const acc = Math.round((correct / val.length) * 100) || 100;
     setAccuracy(acc);
 
-    // 🔥 FIX: FINISH WHEN LENGTH MATCHES (Ignore errors for completion trigger)
-    if (val.length === text.length) {
+    // 🔥 FIX: FINISH WHEN LENGTH MATCHES (Prevents getting stuck on error)
+    if (val.length >= text.length) {
       setIsFinished(true);
       await handleLevelComplete(acc);
     }
   };
 
   const handleLevelComplete = async (acc) => {
-    // Star Calculation
+    // Star Calc
     let stars = 0;
     if (acc === 100) stars = 3;
     else if (acc >= 95) stars = 2;
@@ -185,7 +183,7 @@ export default function TypingMaster({ user }) {
       setPerfectStreak(0);
     }
 
-    // Unlock Next Level (If passed with at least 1 star)
+    // Unlock Next Level
     if (stars >= 1 && currentLevel === maxLevel) {
       const nextLevel = maxLevel + 1;
       await supabase.from('profiles').update({ typing_level: nextLevel }).eq('id', user.id);
@@ -198,6 +196,7 @@ export default function TypingMaster({ user }) {
     if (direction === 'prev' && currentLevel > 1) {
         setCurrentLevel(c => c - 1);
     }
+    // Can only move next if we aren't at the max unlocked level
     if (direction === 'next' && currentLevel < maxLevel) {
         setCurrentLevel(c => c + 1);
     }
@@ -209,10 +208,8 @@ export default function TypingMaster({ user }) {
     if (gameInputRef.current) gameInputRef.current.focus();
   };
 
-  // Game Loop
   useEffect(() => {
     if (!gameActive) return;
-
     let lastTime = Date.now();
     const loop = () => {
       const now = Date.now();
@@ -220,21 +217,17 @@ export default function TypingMaster({ user }) {
       lastTime = now;
 
       setBalloons(prev => {
-        // Spawn Rate
         if (Math.random() < 0.015) { 
           const word = WORDS_MED[Math.floor(Math.random() * WORDS_MED.length)];
           return [...prev, { id: Date.now(), word, x: Math.random() * 80 + 10, y: -10 }];
         }
-        // Move & Check
         const nextBalloons = [];
         let livesLost = 0;
-        
         prev.forEach(b => {
           const newY = b.y + (0.1 + (balloonScore * 0.005)); 
           if (newY > 95) livesLost++;
           else nextBalloons.push({ ...b, y: newY });
         });
-
         if (livesLost > 0) {
           setBalloonLives(l => {
              const newLives = l - livesLost;
@@ -245,10 +238,8 @@ export default function TypingMaster({ user }) {
         }
         return nextBalloons;
       });
-
       if (gameActive) requestRef.current = requestAnimationFrame(loop);
     };
-    
     requestRef.current = requestAnimationFrame(loop);
     return () => cancelAnimationFrame(requestRef.current);
   }, [gameActive, balloonScore]);
@@ -256,7 +247,6 @@ export default function TypingMaster({ user }) {
   const handleBalloonInput = (e) => {
     const val = e.target.value.trim().toLowerCase();
     setInput(e.target.value); 
-    
     const match = balloons.find(b => b.word.toLowerCase() === val);
     if (match) {
       playSound('correct');
@@ -266,21 +256,17 @@ export default function TypingMaster({ user }) {
     }
   };
 
-
   // --- 6. RENDER HELPERS ---
   const getFingerClass = (keyChar) => {
     const zone = KEY_ZONES[keyChar.toLowerCase()];
     if (!zone) return 'border-slate-700 text-slate-500'; 
     const nextChar = text[input.length]?.toLowerCase();
-    
-    // Hint Color
     if (nextChar === keyChar.toLowerCase()) {
       if (zone.includes('pinky')) return 'bg-pink-500 text-white shadow-lg border-pink-400 scale-110';
       if (zone.includes('ring')) return 'bg-blue-500 text-white shadow-lg border-blue-400 scale-110';
       if (zone.includes('middle')) return 'bg-emerald-500 text-white shadow-lg border-emerald-400 scale-110';
       return 'bg-orange-500 text-white shadow-lg border-orange-400 scale-110';
     }
-    // Active Pressed
     if (activeKey === keyChar.toLowerCase()) return 'bg-white text-slate-900 scale-95';
     return 'border-slate-700 text-slate-400 dark:bg-slate-800/50';
   };
@@ -329,6 +315,32 @@ export default function TypingMaster({ user }) {
       {/* --- CAMPAIGN VIEW --- */}
       {mode === 'campaign' && (
         <>
+          {/* 🔥 STATS & REWARD HUD (ENSURED VISIBILITY) */}
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+            <div className="bg-white dark:bg-slate-900 p-4 rounded-2xl border border-slate-200 dark:border-slate-800 flex items-center justify-between">
+               <div><p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Velocity</p><p className="text-3xl font-black text-slate-800 dark:text-white">{wpm}</p></div>
+               <Activity className="text-slate-300" />
+            </div>
+            <div className="bg-white dark:bg-slate-900 p-4 rounded-2xl border border-slate-200 dark:border-slate-800 flex items-center justify-between">
+               <div><p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Precision</p><p className="text-3xl font-black text-slate-800 dark:text-white">{accuracy}%</p></div>
+               <Target className="text-slate-300" />
+            </div>
+            <div className="md:col-span-2 bg-gradient-to-r from-orange-500 to-red-600 p-4 rounded-2xl text-white relative overflow-hidden flex items-center justify-between">
+               <div className="relative z-10 w-full">
+                 <div className="flex justify-between items-center mb-2">
+                    <p className="font-bold text-[10px] uppercase tracking-widest opacity-90">Streak Freeze Progress</p>
+                    <span className="font-black text-xs bg-white/20 px-2 py-0.5 rounded">{perfectStreak}/5</span>
+                 </div>
+                 <div className="flex gap-1.5 h-2">
+                   {[1,2,3,4,5].map(i => (
+                     <div key={i} className={`flex-1 rounded-full transition-all duration-500 ${i <= perfectStreak ? 'bg-white shadow-[0_0_10px_rgba(255,255,255,0.8)]' : 'bg-black/20'}`} />
+                   ))}
+                 </div>
+               </div>
+               <Flame className="absolute -right-4 -bottom-4 text-white/10 rotate-12" size={80} />
+            </div>
+          </div>
+
           {/* SECTOR MAP */}
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
              <div className={`p-4 rounded-xl border-2 transition-all ${currentLevel <= 30 ? 'border-cyan-500 bg-cyan-500/10' : 'border-slate-700 opacity-60'}`}>
@@ -346,7 +358,7 @@ export default function TypingMaster({ user }) {
           </div>
 
           {/* LEVEL CONTROLLER */}
-          <div className="flex items-center justify-between bg-white dark:bg-slate-900 p-4 rounded-2xl shadow-sm border border-slate-200 dark:border-slate-800">
+          <div className="flex items-center justify-between bg-white dark:bg-slate-900 p-4 rounded-2xl shadow-sm border border-slate-200 dark:border-slate-800 mt-4">
              <button onClick={() => jumpLevel('prev')} disabled={currentLevel <= 1} className="p-2 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg disabled:opacity-30"><ChevronLeft/></button>
              <div className="text-center">
                <h3 className="text-2xl font-black uppercase text-slate-800 dark:text-white">Level {currentLevel}</h3>
@@ -356,39 +368,23 @@ export default function TypingMaster({ user }) {
           </div>
 
           {/* TYPING ARENA */}
-          <div className="relative bg-white dark:bg-[#0f172a] p-10 md:p-14 rounded-[2.5rem] shadow-2xl border border-slate-200 dark:border-slate-800 min-h-[200px] flex flex-col justify-center text-center">
+          <div className="relative bg-white dark:bg-[#0f172a] p-10 md:p-14 rounded-[2.5rem] shadow-2xl border border-slate-200 dark:border-slate-800 min-h-[200px] flex flex-col justify-center text-center mt-4">
             {isFinished ? (
                <div className="animate-in zoom-in space-y-6">
-                 
                  {/* RESULT STARS */}
                  <div className="flex justify-center gap-4">
                    {[...Array(3)].map((_, i) => (
-                     <Star 
-                       key={i} 
-                       size={48} 
-                       className={`transition-all duration-500 ${i < resultStars ? 'fill-yellow-400 text-yellow-500 scale-110 drop-shadow-[0_0_15px_rgba(250,204,21,0.6)]' : 'text-slate-700'}`} 
-                     />
+                     <Star key={i} size={48} className={`transition-all duration-500 ${i < resultStars ? 'fill-yellow-400 text-yellow-500 scale-110 drop-shadow-[0_0_15px_rgba(250,204,21,0.6)]' : 'text-slate-700'}`} />
                    ))}
                  </div>
-
                  <div>
-                    <h3 className="text-3xl font-black uppercase dark:text-white">
-                      {resultStars === 3 ? 'Perfect Sync' : resultStars > 0 ? 'Passed' : 'Sync Failed'}
-                    </h3>
+                    <h3 className="text-3xl font-black uppercase dark:text-white">{resultStars === 3 ? 'Perfect Sync' : resultStars > 0 ? 'Passed' : 'Sync Failed'}</h3>
                     <p className="text-slate-400 font-bold mt-2">Accuracy: {accuracy}% • WPM: {wpm}</p>
                  </div>
-
                  <div className="flex justify-center gap-4">
-                    {/* RETRY BUTTON */}
-                    <button onClick={loadLevel} className="bg-slate-700 text-white px-8 py-3 rounded-xl font-black uppercase tracking-widest hover:bg-slate-600 transition-all flex items-center gap-2">
-                       <RefreshCw size={18}/> Re-Attempt
-                    </button>
-                    
-                    {/* NEXT BUTTON (Only if Passed & Unlocked Next) */}
+                    <button onClick={loadLevel} className="bg-slate-700 text-white px-8 py-3 rounded-xl font-black uppercase tracking-widest hover:bg-slate-600 transition-all flex items-center gap-2"><RefreshCw size={18}/> Re-Attempt</button>
                     {(resultStars > 0 && currentLevel < maxLevel) && (
-                      <button onClick={() => jumpLevel('next')} className="bg-cyan-600 text-white px-8 py-3 rounded-xl font-black uppercase tracking-widest hover:scale-105 transition-all flex items-center gap-2">
-                         <FastForward size={18}/> Next Level
-                      </button>
+                      <button onClick={() => jumpLevel('next')} className="bg-cyan-600 text-white px-8 py-3 rounded-xl font-black uppercase tracking-widest hover:scale-105 transition-all flex items-center gap-2"><FastForward size={18}/> Next Level</button>
                     )}
                  </div>
                </div>
@@ -401,19 +397,15 @@ export default function TypingMaster({ user }) {
             )}
           </div>
 
-          {/* VIRTUAL KEYBOARD */}
-          <div className="hidden md:flex flex-col items-center gap-2 mt-8 opacity-90 select-none">
+          {/* VIRTUAL KEYBOARD (ALWAYS VISIBLE) */}
+          <div className="flex flex-col items-center gap-2 mt-8 opacity-90 select-none">
             {KEYBOARD_ROWS.map((row, rIdx) => (
               <div key={rIdx} className="flex gap-1.5">
-                {row.map((key) => (
-                  <div key={key} className={`w-10 h-10 flex items-center justify-center rounded-lg border-b-4 font-bold text-sm uppercase transition-all duration-75 ${getFingerClass(key)}`}>
-                    {key}
-                  </div>
-                ))}
+                {row.map((key) => <div key={key} className={`w-8 h-8 md:w-10 md:h-10 flex items-center justify-center rounded-lg border-b-4 font-bold text-sm uppercase transition-all duration-75 ${getFingerClass(key)}`}>{key}</div>)}
               </div>
             ))}
             <div className="flex gap-1.5 w-full justify-center">
-               <div className={`w-64 h-10 rounded-lg border-b-4 transition-all duration-75 ${text[input.length] === ' ' ? 'bg-orange-500 border-orange-400' : 'border-slate-700 dark:bg-slate-800/50'}`}></div>
+               <div className={`w-40 md:w-64 h-8 md:h-10 rounded-lg border-b-4 transition-all duration-75 ${text[input.length] === ' ' ? 'bg-orange-500 border-orange-400' : 'border-slate-700 dark:bg-slate-800/50'}`}></div>
             </div>
           </div>
         </>
@@ -435,22 +427,12 @@ export default function TypingMaster({ user }) {
                  <p className="text-white font-black text-xl">Score: {balloonScore}</p>
                  <div className="flex gap-1 text-red-500">{[...Array(balloonLives)].map((_,i) => <span key={i}>❤️</span>)}</div>
                </div>
-               
                <div className="absolute bottom-10 left-1/2 -translate-x-1/2 z-10 w-2/3 max-w-md">
-                 <input 
-                   ref={gameInputRef}
-                   autoFocus
-                   value={input}
-                   onChange={handleBalloonInput}
-                   className="w-full bg-slate-800/90 text-white text-center font-bold uppercase p-4 rounded-2xl border-2 border-pink-500/50 outline-none placeholder-slate-600 focus:border-pink-500 transition-all shadow-[0_0_30px_rgba(236,72,153,0.3)]"
-                   placeholder="TYPE HERE..." 
-                 />
+                 <input ref={gameInputRef} autoFocus value={input} onChange={handleBalloonInput} className="w-full bg-slate-800/90 text-white text-center font-bold uppercase p-4 rounded-2xl border-2 border-pink-500/50 outline-none placeholder-slate-600 focus:border-pink-500 transition-all shadow-[0_0_30px_rgba(236,72,153,0.3)]" placeholder="TYPE HERE..." />
                </div>
-
                {balloons.map(b => (
                  <div key={b.id} className="absolute bg-white text-slate-900 px-3 py-1 rounded-full font-bold text-xs shadow-[0_0_15px_rgba(255,255,255,0.5)] border-2 border-pink-500 animate-in zoom-in" style={{ left: `${b.x}%`, top: `${b.y}%` }}>
-                   {b.word}
-                   <div className="absolute left-1/2 top-full h-4 w-[1px] bg-white/50"></div>
+                   {b.word}<div className="absolute left-1/2 top-full h-4 w-[1px] bg-white/50"></div>
                  </div>
                ))}
                <div className="absolute bottom-0 w-full h-2 bg-pink-500/50 shadow-[0_0_20px_#ec4899]"></div>
@@ -458,7 +440,6 @@ export default function TypingMaster({ user }) {
            )}
         </div>
       )}
-
     </div>
   );
 }
