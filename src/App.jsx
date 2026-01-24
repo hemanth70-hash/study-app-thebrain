@@ -190,15 +190,15 @@ export default function App() {
   // --- VIEW: LOGIN ---
   if (!user) {
     return (
-      // 🔥 THEME FIX: Using 'bg-slate-950' for Deep Cyber Blue
-      <div className={`flex items-center justify-center min-h-screen ${isDarkMode ? 'bg-slate-950' : 'bg-blue-50'}`}>
-        <div className="bg-white dark:bg-slate-900 p-10 rounded-[3rem] shadow-2xl border-2 border-blue-500/20 w-full max-w-md text-center animate-in fade-in zoom-in duration-500">
+      // 🔥 FORCED HEX COLOR: #0f172a is Deep Slate/Cyber Blue
+      <div className={`flex items-center justify-center min-h-screen ${isDarkMode ? 'bg-[#0f172a]' : 'bg-blue-50'}`}>
+        <div className="bg-white dark:bg-[#1e293b] p-10 rounded-[3rem] shadow-2xl border-2 border-blue-500/20 w-full max-w-md text-center animate-in fade-in zoom-in duration-500">
           <div className="w-20 h-20 bg-blue-600 rounded-3xl flex items-center justify-center mx-auto mb-6 shadow-xl rotate-3">
              <ShieldAlert className="text-white" size={40} />
           </div>
-          <h1 className="text-4xl font-black mb-2 text-blue-600 italic tracking-tighter uppercase">Neural Portal</h1>
-          <p className="text-gray-400 font-bold text-xs uppercase tracking-widest mb-8">Identify Node / Enter Code</p>
-          <input className="w-full p-5 rounded-2xl border-2 mb-4 dark:bg-slate-800 dark:border-slate-700 dark:text-white font-black outline-none focus:border-blue-500 transition-all text-center" placeholder="USERNAME OR INVITE CODE" value={username} onChange={(e) => setUsername(e.target.value)} />
+          <h1 className="text-4xl font-black mb-2 text-blue-600 dark:text-blue-400 italic tracking-tighter uppercase">Neural Portal</h1>
+          <p className="text-gray-400 dark:text-gray-300 font-bold text-xs uppercase tracking-widest mb-8">Identify Node / Enter Code</p>
+          <input className="w-full p-5 rounded-2xl border-2 mb-4 dark:bg-[#0f172a] dark:border-[#334155] dark:text-white font-black outline-none focus:border-blue-500 transition-all text-center" placeholder="USERNAME OR INVITE CODE" value={username} onChange={(e) => setUsername(e.target.value)} />
           <button onClick={handleLogin} className="w-full bg-blue-600 text-white p-5 rounded-2xl font-black uppercase tracking-widest hover:bg-blue-700 shadow-xl transition-all">Initialize Connection</button>
           {loginError && <p className="text-red-500 font-black text-[10px] uppercase tracking-widest mt-4 animate-pulse">{loginError}</p>}
         </div>
@@ -211,8 +211,8 @@ export default function App() {
 
   return (
     <div className={isDarkMode ? 'dark' : ''}>
-      {/* 🔥 THEME FIX: Main container 'bg-slate-950' */}
-      <div className={`flex min-h-screen transition-colors duration-300 ${isDarkMode ? 'bg-slate-950 text-white' : 'bg-blue-50 text-gray-800'}`}>
+      {/* 🔥 FORCED HEX COLOR: bg-[#0f172a] ensures Dark Mode is Blue/Black, not Gray */}
+      <div className={`flex min-h-screen transition-colors duration-300 ${isDarkMode ? 'bg-[#0f172a] text-white' : 'bg-blue-50 text-gray-800'}`}>
         
         {/* SIDEBAR LOCKDOWN */}
         <div className={`${isExamLocked ? 'pointer-events-none opacity-40 blur-[3px] grayscale select-none' : ''} transition-all duration-700 z-40`}>
@@ -233,7 +233,7 @@ export default function App() {
                 </div>
               )}
             </div>
-            <div className="flex items-center gap-3 bg-white dark:bg-slate-800 px-6 py-2 rounded-2xl shadow-sm border-2 border-orange-50 dark:border-slate-700">
+            <div className="flex items-center gap-3 bg-white dark:bg-[#1e293b] px-6 py-2 rounded-2xl shadow-sm border-2 border-orange-50 dark:border-[#334155]">
               <span className="text-2xl animate-pulse">🔥</span>
               <span className="font-black text-xl text-orange-500">{user.streak_count || 0}</span>
             </div>
@@ -243,7 +243,8 @@ export default function App() {
             {activeTab === 'dashboard' && (
               <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-700">
                 <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-                  <div className="lg:col-span-2 bg-white dark:bg-slate-900 p-10 rounded-[2.5rem] shadow-xl border-b-8 border-blue-500 flex flex-col justify-between relative overflow-hidden group">
+                  {/* 🔥 CARD THEME: bg-[#1e293b] (Slate 800) */}
+                  <div className="lg:col-span-2 bg-white dark:bg-[#1e293b] p-10 rounded-[2.5rem] shadow-xl border-b-8 border-blue-500 flex flex-col justify-between relative overflow-hidden group">
                     <div className="absolute top-0 right-0 p-10 opacity-5 group-hover:rotate-12 transition-transform duration-700"><Layout size={160} /></div>
                     <div className="relative z-10">
                       <div className="flex justify-between items-start mb-6">
@@ -253,8 +254,8 @@ export default function App() {
                         </div>
                         <InviteButton />
                       </div>
-                      <div className="bg-blue-50 dark:bg-blue-900/20 p-6 rounded-3xl border border-blue-100 dark:border-blue-800 backdrop-blur-sm">
-                        <p className="text-sm font-bold text-gray-600 dark:text-gray-400">
+                      <div className="bg-blue-50 dark:bg-[#0f172a] p-6 rounded-3xl border border-blue-100 dark:border-[#334155] backdrop-blur-sm">
+                        <p className="text-sm font-bold text-gray-600 dark:text-gray-300">
                           Synchronization Active. Global Performance Index: <span className="text-blue-600 font-black">{(user.total_percentage_points / (user.total_exams_completed || 1)).toFixed(1)}%</span>
                         </p>
                       </div>
