@@ -31,29 +31,30 @@ const KEYBOARD_ROWS = [
 
 // --- CAMPAIGN GENERATOR ---
 const ROWS = { middle: "asdfghjkl;", top: "qwertyuiop", bottom: "zxcvbnm" };
-const WORDS_MED = ["the", "quick", "brown", "fox", "jumps", "over", "lazy", "dog", "neural", "grid", "system", "logic", "code", "react", "data", "node", "loop", "array", "function", "variable", "constant", "string", "number", "boolean", "object", "syntax", "error", "debug"];
-const WORDS_HARD = ["synchronization", "infrastructure", "authentication", "cryptography", "decentralized", "architecture", "implementation", "polymorphism", "encapsulation", "asynchronous", "middleware", "virtualization", "scalability", "redundancy", "throughput", "latency"];
+const WORDS_MED = ["the", "quick", "brown", "fox", "jumps", "over", "lazy", "dog", "neural", "grid", "system", "logic", "code", "react", "data", "node", "loop", "array", "function", "variable", "constant", "string", "number", "boolean", "object", "syntax", "error", "debug", "compile", "deploy", "server", "client", "socket", "packet", "latency", "bandwidth"];
+const WORDS_HARD = ["synchronization", "infrastructure", "authentication", "cryptography", "decentralized", "architecture", "implementation", "polymorphism", "encapsulation", "asynchronous", "middleware", "virtualization", "scalability", "redundancy", "throughput", "latency", "instantiation", "inheritance", "abstraction", "algorithm"];
 
 const generateCampaignText = (lvl) => {
-  // 🔥 EXPANDED: 3-Line Minimum (~150-200 chars)
+  // 🔥 EXPANDED TEXT GENERATION (3-4 Lines Minimum)
   
-  // SECTOR 1: Row Drills (Very long strings to force muscle memory)
-  if (lvl <= 10) return generateRowString(ROWS.middle, 120 + (lvl * 5));
-  if (lvl <= 20) return generateRowString(ROWS.top, 120 + (lvl * 5));
-  if (lvl <= 30) return generateRowString(ROWS.bottom, 120 + (lvl * 5));
+  // SECTOR 1: Row Drills (Heavy repetition for muscle memory)
+  if (lvl <= 10) return generateRowString(ROWS.middle, 150 + (lvl * 5));
+  if (lvl <= 20) return generateRowString(ROWS.top, 150 + (lvl * 5));
+  if (lvl <= 30) return generateRowString(ROWS.bottom, 150 + (lvl * 5));
   
-  // SECTOR 2: Fluency (40-60 Words per level)
-  if (lvl <= 60) return generateParagraph(WORDS_MED, 40 + Math.ceil((lvl-30)));
+  // SECTOR 2: Fluency (50-70 Words per level)
+  if (lvl <= 60) return generateParagraph(WORDS_MED, 50 + Math.ceil((lvl-30)));
 
   // SECTOR 3: Mastery (Complex Paragraphs)
-  return generateParagraph(WORDS_HARD, 30 + Math.ceil((lvl-60)));
+  return generateParagraph(WORDS_HARD, 40 + Math.ceil((lvl-60)));
 };
 
 const generateRowString = (chars, length) => {
   let res = "";
   for(let i=0; i<length; i++) {
     res += chars[Math.floor(Math.random() * chars.length)];
-    if (i % 6 === 5 && i !== length-1) res += " "; // Space every 6 chars
+    // Add space randomly but consistently to simulate words
+    if (i > 0 && i % 6 === 0) res += " "; 
   }
   return res;
 };
@@ -66,8 +67,8 @@ const generateParagraph = (wordList, count) => {
 
 export default function TypingMaster({ user }) {
   // GLOBAL
-  const [mode, setMode] = useState('campaign'); // 'campaign', 'games'
-  const [gameType, setGameType] = useState('balloon'); // 'balloon', 'infinite'
+  const [mode, setMode] = useState('campaign'); 
+  const [gameType, setGameType] = useState('balloon'); 
   const [soundEnabled, setSoundEnabled] = useState(true);
 
   // CAMPAIGN STATE
@@ -100,7 +101,12 @@ export default function TypingMaster({ user }) {
 
   // --- 1. LOADERS ---
   const loadLevel = useCallback(() => {
-    setIsFinished(false); setInput(''); setStartTime(null); setWpm(0); setAccuracy(100); setResultStars(0);
+    setIsFinished(false); 
+    setInput(''); 
+    setStartTime(null); 
+    setWpm(0); 
+    setAccuracy(100); 
+    setResultStars(0);
     setText(generateCampaignText(currentLevel));
     setTimeout(() => inputRef.current?.focus(), 100);
   }, [currentLevel]);
@@ -141,19 +147,21 @@ export default function TypingMaster({ user }) {
     const words = val.length / 5;
     setWpm(Math.round(words / (time || 0.001)));
     
+    // Accuracy Calc
     let correct = 0;
     for (let i = 0; i < val.length; i++) if (val[i] === text[i]) correct++;
     const acc = Math.round((correct / val.length) * 100) || 100;
     setAccuracy(acc);
 
-    if (val === text) {
+    // 🔥 FIX: FINISH WHEN LENGTH MATCHES (Ignore errors for completion trigger)
+    if (val.length === text.length) {
       setIsFinished(true);
       await handleLevelComplete(acc);
     }
   };
 
   const handleLevelComplete = async (acc) => {
-    // 🔥 STAR CALCULATION
+    // Star Calculation
     let stars = 0;
     if (acc === 100) stars = 3;
     else if (acc >= 95) stars = 2;
@@ -187,8 +195,12 @@ export default function TypingMaster({ user }) {
 
   // --- 4. LEVEL NAVIGATION ---
   const jumpLevel = (direction) => {
-    if (direction === 'prev' && currentLevel > 1) setCurrentLevel(c => c - 1);
-    if (direction === 'next' && currentLevel < maxLevel) setCurrentLevel(c => c + 1);
+    if (direction === 'prev' && currentLevel > 1) {
+        setCurrentLevel(c => c - 1);
+    }
+    if (direction === 'next' && currentLevel < maxLevel) {
+        setCurrentLevel(c => c + 1);
+    }
   };
 
   // --- 5. BALLOON GAME ENGINE ---
@@ -197,7 +209,7 @@ export default function TypingMaster({ user }) {
     if (gameInputRef.current) gameInputRef.current.focus();
   };
 
-  // Game Loop Effect
+  // Game Loop
   useEffect(() => {
     if (!gameActive) return;
 
@@ -208,7 +220,7 @@ export default function TypingMaster({ user }) {
       lastTime = now;
 
       setBalloons(prev => {
-        // Spawn
+        // Spawn Rate
         if (Math.random() < 0.015) { 
           const word = WORDS_MED[Math.floor(Math.random() * WORDS_MED.length)];
           return [...prev, { id: Date.now(), word, x: Math.random() * 80 + 10, y: -10 }];
@@ -218,7 +230,7 @@ export default function TypingMaster({ user }) {
         let livesLost = 0;
         
         prev.forEach(b => {
-          const newY = b.y + (0.1 + (balloonScore * 0.005)); // Speed up with score
+          const newY = b.y + (0.1 + (balloonScore * 0.005)); 
           if (newY > 95) livesLost++;
           else nextBalloons.push({ ...b, y: newY });
         });
@@ -243,7 +255,7 @@ export default function TypingMaster({ user }) {
 
   const handleBalloonInput = (e) => {
     const val = e.target.value.trim().toLowerCase();
-    setInput(e.target.value); // Keep visual input
+    setInput(e.target.value); 
     
     const match = balloons.find(b => b.word.toLowerCase() === val);
     if (match) {
@@ -372,8 +384,8 @@ export default function TypingMaster({ user }) {
                        <RefreshCw size={18}/> Re-Attempt
                     </button>
                     
-                    {/* NEXT BUTTON (Only if Passed) */}
-                    {resultStars > 0 && (
+                    {/* NEXT BUTTON (Only if Passed & Unlocked Next) */}
+                    {(resultStars > 0 && currentLevel < maxLevel) && (
                       <button onClick={() => jumpLevel('next')} className="bg-cyan-600 text-white px-8 py-3 rounded-xl font-black uppercase tracking-widest hover:scale-105 transition-all flex items-center gap-2">
                          <FastForward size={18}/> Next Level
                       </button>
