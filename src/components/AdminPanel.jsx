@@ -29,7 +29,7 @@ export default function AdminPanel({ user }) {
   const [activeKeys, setActiveKeys] = useState([]); // Now stores Invites
   const [userRequests, setUserRequests] = useState([]);
   const [allUsers, setAllUsers] = useState([]); 
-  const [showRoster, setShowRoster] = useState(false); 
+  const [showRoster, setShowRoster] = useState(true); // Default open for better visibility
   const [loading, setLoading] = useState(true);
 
   // --- 3. LIBRARY MANAGER STATE ---
@@ -228,11 +228,10 @@ export default function AdminPanel({ user }) {
         </div>
       </div>
 
-      {/* --- SHARED ZONES (Visible to Root + Moderators) --- */}
+      {/* --- SPLIT LAYOUT (Mock Creator vs Tools) --- */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-10 items-start">
         
-        {/* 1. MOCK CREATOR */}
-        {/* 🔥 THEME FIX: bg-slate-900 */}
+        {/* 1. LEFT COL: MOCK CREATOR */}
         <div className="bg-white dark:bg-slate-900 p-8 rounded-[32px] shadow-xl border dark:border-slate-700">
           <div className="flex items-center gap-3 mb-6 text-blue-600"><UploadCloud size={32} /><h2 className="text-2xl font-black uppercase dark:text-white">Mock Creator</h2></div>
           <div className="space-y-4">
@@ -275,77 +274,81 @@ export default function AdminPanel({ user }) {
           </div>
         </div>
 
-        {/* 2. INVITE GENERATOR (Replaced Access Keys) */}
-        <div className="bg-white dark:bg-slate-900 p-8 rounded-[32px] shadow-xl border dark:border-slate-700">
-          <div className="flex items-center gap-3 mb-6 text-indigo-600"><Key size={32} /><h2 className="text-2xl font-black uppercase dark:text-white">Invite Generator</h2></div>
-          <div className="mb-6 space-y-4">
-            <p className="text-[10px] font-bold text-gray-400 uppercase leading-relaxed">
-              Generate unique access codes for new recruits. Users enter this code as their username to initialize their account.
-            </p>
-            <button onClick={generateInvite} className="w-full bg-indigo-600 text-white p-4 rounded-2xl hover:bg-indigo-700 font-black uppercase text-xs tracking-widest shadow-lg flex items-center justify-center gap-2 active:scale-95 transition-all">
-              <UserPlus size={16} /> Generate Invite Code
-            </button>
-          </div>
-          <div className="space-y-2 max-h-40 overflow-y-auto pr-2 custom-scrollbar">
-            {activeKeys.length > 0 ? activeKeys.map(k => (
-              <div key={k.id} className={`p-4 rounded-xl flex justify-between items-center transition-all border ${k.is_used ? 'bg-gray-100 border-gray-200 opacity-60' : 'bg-indigo-50 border-indigo-100 dark:bg-indigo-900/20'}`}>
-                <div>
-                  <p className={`font-black text-lg tracking-widest ${k.is_used ? 'text-gray-400 line-through' : 'text-indigo-600'}`}>{k.code}</p>
-                  <p className="text-[8px] font-bold text-gray-400 uppercase">
-                    {k.is_used ? 'CLAIMED' : 'ACTIVE'} • {k.created_by === user.id ? 'You' : 'Admin'}
-                  </p>
-                </div>
-                {!k.is_used && (
-                  <button onClick={() => deleteInvite(k.id)} className="text-gray-300 hover:text-red-500"><Trash2 size={16} /></button>
-                )}
-              </div>
-            )) : <p className="text-center text-[10px] text-gray-400 italic">No active invites.</p>}
-          </div>
-        </div>
-
-        {/* 3. LIBRARY MANAGER */}
-        <div className="bg-white dark:bg-slate-900 p-8 rounded-[32px] shadow-xl border dark:border-slate-700">
-          <div className="flex items-center gap-3 mb-6 text-orange-500"><BookOpen size={32} /><h2 className="text-2xl font-black uppercase dark:text-white">Library</h2></div>
-          <div className="space-y-4">
-            <input className="w-full p-4 rounded-2xl border dark:bg-slate-800 dark:text-white outline-none" placeholder="Resource Title" value={bookTitle} onChange={e => setBookTitle(e.target.value)} />
-            <input className="w-full p-4 rounded-2xl border dark:bg-slate-800 dark:text-white outline-none" placeholder="PDF URL" value={bookUrl} onChange={e => setBookUrl(e.target.value)} />
-            <select className="w-full p-4 rounded-2xl border dark:bg-slate-800 dark:text-white outline-none font-bold cursor-pointer" value={bookCategory} onChange={e => setBookCategory(e.target.value)}>
-              {librarySubjects.map(s => <option key={s} value={s}>{s}</option>)}
-            </select>
-            <button onClick={uploadResource} className="w-full bg-orange-500 text-white py-4 rounded-2xl font-black uppercase shadow-lg transition-all active:scale-95">Upload Resource</button>
-          </div>
-        </div>
-
-        {/* 4. NEURAL ROSTER (Filtered) */}
-        <div className="bg-white dark:bg-slate-900 p-8 rounded-[32px] shadow-xl border dark:border-slate-700 h-fit">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-3 text-blue-600"><Users size={32} /><h2 className="text-2xl font-black uppercase dark:text-white tracking-tighter">Neural Roster</h2></div>
-            <button onClick={() => setShowRoster(!showRoster)} className={`p-3 rounded-2xl bg-blue-50 dark:bg-slate-800 text-blue-600 transition-all ${showRoster ? 'rotate-180 bg-blue-600 text-white' : ''}`}><ChevronDown size={28} /></button>
-          </div>
-          {showRoster && (
-            <div className="overflow-x-auto animate-in slide-in-from-top-4 mt-8">
-              <table className="w-full text-left border-separate border-spacing-y-3">
-                <thead><tr className="text-[10px] font-black uppercase text-gray-400 tracking-widest"><th className="px-6 pb-2">Node</th><th className="px-6 pb-2 text-center">GPA</th><th className="px-6 pb-2 text-right">Streak</th></tr></thead>
-                <tbody>
-                  {allUsers.map((u) => {
-                    const r = getNeuralRank(u.total_percentage_points, u.total_exams_completed);
-                    return (
-                      <tr key={u.id} className="bg-gray-50 dark:bg-slate-800 rounded-2xl hover:scale-[1.01] transition-transform">
-                        <td className="px-6 py-4 rounded-l-2xl flex items-center gap-3">
-                          <img src={`https://api.dicebear.com/7.x/${u.gender === 'neutral' ? 'bottts' : 'avataaars'}/svg?seed=${u.username}`} className="w-10 h-10 rounded-xl bg-white p-1" />
-                          <div className="flex flex-col"><span className="font-black dark:text-white uppercase text-sm">{u.username}</span><span className={`text-[8px] font-black uppercase tracking-widest ${r.color}`}>{r.label}</span></div>
-                        </td>
-                        <td className="px-6 py-4 text-center"><p className="font-black text-blue-600 text-lg">{(u.total_percentage_points / (u.total_exams_completed || 1)).toFixed(1)}%</p></td>
-                        <td className="px-6 py-4 text-right rounded-r-2xl"><div className="inline-flex items-center gap-1 bg-orange-100 dark:bg-orange-900/20 px-3 py-1 rounded-lg"><Flame size={12} className="text-orange-500 fill-orange-500" /><span className="text-xs font-black text-orange-600">{u.streak_count || 0}</span></div></td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
+        {/* 2. RIGHT COL: TOOLS STACK */}
+        <div className="space-y-10">
+          
+          {/* INVITE GENERATOR */}
+          <div className="bg-white dark:bg-slate-900 p-8 rounded-[32px] shadow-xl border dark:border-slate-700">
+            <div className="flex items-center gap-3 mb-6 text-indigo-600"><Key size={32} /><h2 className="text-2xl font-black uppercase dark:text-white">Invite Generator</h2></div>
+            <div className="mb-6 space-y-4">
+              <p className="text-[10px] font-bold text-gray-400 uppercase leading-relaxed">
+                Generate unique access codes for new recruits. Users enter this code as their username to initialize their account.
+              </p>
+              <button onClick={generateInvite} className="w-full bg-indigo-600 text-white p-4 rounded-2xl hover:bg-indigo-700 font-black uppercase text-xs tracking-widest shadow-lg flex items-center justify-center gap-2 active:scale-95 transition-all">
+                <UserPlus size={16} /> Generate Invite Code
+              </button>
             </div>
-          )}
-        </div>
+            <div className="space-y-2 max-h-40 overflow-y-auto pr-2 custom-scrollbar">
+              {activeKeys.length > 0 ? activeKeys.map(k => (
+                <div key={k.id} className={`p-4 rounded-xl flex justify-between items-center transition-all border ${k.is_used ? 'bg-gray-100 border-gray-200 opacity-60' : 'bg-indigo-50 border-indigo-100 dark:bg-indigo-900/20'}`}>
+                  <div>
+                    <p className={`font-black text-lg tracking-widest ${k.is_used ? 'text-gray-400 line-through' : 'text-indigo-600'}`}>{k.code}</p>
+                    <p className="text-[8px] font-bold text-gray-400 uppercase">
+                      {k.is_used ? 'CLAIMED' : 'ACTIVE'} • {k.created_by === user.id ? 'You' : 'Admin'}
+                    </p>
+                  </div>
+                  {!k.is_used && (
+                    <button onClick={() => deleteInvite(k.id)} className="text-gray-300 hover:text-red-500"><Trash2 size={16} /></button>
+                  )}
+                </div>
+              )) : <p className="text-center text-[10px] text-gray-400 italic">No active invites.</p>}
+            </div>
+          </div>
 
+          {/* LIBRARY MANAGER */}
+          <div className="bg-white dark:bg-slate-900 p-8 rounded-[32px] shadow-xl border dark:border-slate-700">
+            <div className="flex items-center gap-3 mb-6 text-orange-500"><BookOpen size={32} /><h2 className="text-2xl font-black uppercase dark:text-white">Library</h2></div>
+            <div className="space-y-4">
+              <input className="w-full p-4 rounded-2xl border dark:bg-slate-800 dark:text-white outline-none" placeholder="Resource Title" value={bookTitle} onChange={e => setBookTitle(e.target.value)} />
+              <input className="w-full p-4 rounded-2xl border dark:bg-slate-800 dark:text-white outline-none" placeholder="PDF URL" value={bookUrl} onChange={e => setBookUrl(e.target.value)} />
+              <select className="w-full p-4 rounded-2xl border dark:bg-slate-800 dark:text-white outline-none font-bold cursor-pointer" value={bookCategory} onChange={e => setBookCategory(e.target.value)}>
+                {librarySubjects.map(s => <option key={s} value={s}>{s}</option>)}
+              </select>
+              <button onClick={uploadResource} className="w-full bg-orange-500 text-white py-4 rounded-2xl font-black uppercase shadow-lg transition-all active:scale-95">Upload Resource</button>
+            </div>
+          </div>
+
+        </div>
+      </div>
+
+      {/* --- 🔥 NEURAL ROSTER (MOVED TO FULL WIDTH BOTTOM) --- */}
+      <div className="bg-white dark:bg-slate-900 p-8 rounded-[32px] shadow-xl border dark:border-slate-700 mt-10">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-3 text-blue-600"><Users size={32} /><h2 className="text-2xl font-black uppercase dark:text-white tracking-tighter">Neural Roster</h2></div>
+          <button onClick={() => setShowRoster(!showRoster)} className={`p-3 rounded-2xl bg-blue-50 dark:bg-slate-800 text-blue-600 transition-all ${showRoster ? 'rotate-180 bg-blue-600 text-white' : ''}`}><ChevronDown size={28} /></button>
+        </div>
+        {showRoster && (
+          <div className="overflow-x-auto animate-in slide-in-from-top-4 mt-8">
+            <table className="w-full text-left border-separate border-spacing-y-3">
+              <thead><tr className="text-[10px] font-black uppercase text-gray-400 tracking-widest"><th className="px-6 pb-2">Node</th><th className="px-6 pb-2 text-center">GPA</th><th className="px-6 pb-2 text-right">Streak</th></tr></thead>
+              <tbody>
+                {allUsers.map((u) => {
+                  const r = getNeuralRank(u.total_percentage_points, u.total_exams_completed);
+                  return (
+                    <tr key={u.id} className="bg-gray-50 dark:bg-slate-800 rounded-2xl hover:scale-[1.01] transition-transform">
+                      <td className="px-6 py-4 rounded-l-2xl flex items-center gap-3">
+                        <img src={`https://api.dicebear.com/7.x/${u.gender === 'neutral' ? 'bottts' : 'avataaars'}/svg?seed=${u.username}`} className="w-10 h-10 rounded-xl bg-white p-1" />
+                        <div className="flex flex-col"><span className="font-black dark:text-white uppercase text-sm">{u.username}</span><span className={`text-[8px] font-black uppercase tracking-widest ${r.color}`}>{r.label}</span></div>
+                      </td>
+                      <td className="px-6 py-4 text-center"><p className="font-black text-blue-600 text-lg">{(u.total_percentage_points / (u.total_exams_completed || 1)).toFixed(1)}%</p></td>
+                      <td className="px-6 py-4 text-right rounded-r-2xl"><div className="inline-flex items-center gap-1 bg-orange-100 dark:bg-orange-900/20 px-3 py-1 rounded-lg"><Flame size={12} className="text-orange-500 fill-orange-500" /><span className="text-xs font-black text-orange-600">{u.streak_count || 0}</span></div></td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
       </div>
 
       {/* ---------------------------------------------------------------------------------- */}
