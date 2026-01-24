@@ -1,199 +1,247 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { supabase } from '../supabaseClient';
 import { 
-  Keyboard, RefreshCw, Activity, CheckCircle, Target, 
-  Zap, Lock, Database, FastForward, Award, Volume2, VolumeX
+  Keyboard, Activity, CheckCircle, Target, 
+  Zap, Lock, Database, FastForward, Award, Volume2, VolumeX,
+  Gamepad2, Flame, Play, Pause, RefreshCw
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
 
-// --- CONFIGURATION ---
-const SOUND_PATHS = {
-  correct: '/sounds/bubble.mp3',
-  error: '/sounds/thud.mp3'
+// --- CONFIGURATION & ASSETS ---
+const SOUND_PATHS = { correct: '/sounds/bubble.mp3', error: '/sounds/thud.mp3' };
+
+// --- CAMPAIGN CONTENT GENERATORS ---
+const ROWS = {
+  middle: "asdfghjkl;",
+  top: "qwertyuiop",
+  bottom: "zxcvbnm"
 };
 
-// --- KEYBOARD MAP (Finger Zones) ---
-// Pinky(P), Ring(R), Middle(M), Index(I)
-const KEY_ZONES = {
-  'q': 'pinky-l', 'a': 'pinky-l', 'z': 'pinky-l', '1': 'pinky-l',
-  'w': 'ring-l', 's': 'ring-l', 'x': 'ring-l', '2': 'ring-l',
-  'e': 'middle-l', 'd': 'middle-l', 'c': 'middle-l', '3': 'middle-l',
-  'r': 'index-l', 'f': 'index-l', 'v': 'index-l', '4': 'index-l', '5': 'index-l', 't': 'index-l', 'g': 'index-l', 'b': 'index-l',
-  'y': 'index-r', 'h': 'index-r', 'n': 'index-r', '6': 'index-r', '7': 'index-r', 'u': 'index-r', 'j': 'index-r', 'm': 'index-r',
-  'i': 'middle-r', 'k': 'middle-r', ',': 'middle-r', '8': 'middle-r',
-  'o': 'ring-r', 'l': 'ring-r', '.': 'ring-r', '9': 'ring-r',
-  'p': 'pinky-r', ';': 'pinky-r', '/': 'pinky-r', '0': 'pinky-r', '-': 'pinky-r', '=': 'pinky-r', '[': 'pinky-r', ']': 'pinky-r', "'": 'pinky-r'
+const WORDS_MED = ["the", "quick", "brown", "fox", "jumps", "over", "lazy", "dog", "neural", "grid", "system", "logic", "code", "react", "data", "node", "loop", "array"];
+const WORDS_HARD = ["synchronization", "infrastructure", "authentication", "cryptography", "decentralized", "architecture", "implementation", "polymorphism", "encapsulation", "asynchronous", "middleware"];
+
+const generateCampaignText = (level) => {
+  // SECTOR 1: EASY (Row Training)
+  if (level <= 10) return generateRowString(ROWS.middle, 15 + level);
+  if (level <= 20) return generateRowString(ROWS.top, 20 + (level-10));
+  if (level <= 30) return generateRowString(ROWS.bottom, 20 + (level-20));
+
+  // SECTOR 2: MEDIUM (Simple Paragraphs)
+  if (level <= 60) return generateParagraph(WORDS_MED, 10 + Math.ceil((level-30)/2));
+
+  // SECTOR 3: HARD (Complex Paragraphs)
+  return generateParagraph(WORDS_HARD, 10 + Math.ceil((level-60)/2));
 };
 
-const KEYBOARD_ROWS = [
-  ['1', '2', '3', '4', '5', '6', '7', '8', '9', '0', '-', '='],
-  ['q', 'w', 'e', 'r', 't', 'y', 'u', 'i', 'o', 'p', '[', ']'],
-  ['a', 's', 'd', 'f', 'g', 'h', 'j', 'k', 'l', ';', "'"],
-  ['z', 'x', 'c', 'v', 'b', 'n', 'm', ',', '.', '/']
-];
-
-// --- LEVEL CONTENT GENERATOR ---
-const WORDS_EASY = ["node", "grid", "data", "code", "sync", "flux", "core", "byte", "neon", "link"];
-const WORDS_MED = ["network", "system", "neural", "access", "protocol", "encrypt", "server", "matrix", "vector", "signal"];
-const WORDS_HARD = ["synchronization", "infrastructure", "authentication", "cryptography", "decentralized", "architecture", "implementation", "functionality"];
-
-const generateLevelText = (level) => {
-  const difficulty = Math.ceil(level / 10); 
-  let words = [];
-  const length = 10 + difficulty * 2; 
-
-  for (let i = 0; i < length; i++) {
-    if (level <= 10) words.push(WORDS_EASY[Math.floor(Math.random() * WORDS_EASY.length)]);
-    else if (level <= 40) words.push(WORDS_MED[Math.floor(Math.random() * WORDS_MED.length)]);
-    else words.push(WORDS_HARD[Math.floor(Math.random() * WORDS_HARD.length)]);
+const generateRowString = (chars, length) => {
+  let res = "";
+  for(let i=0; i<length; i++) {
+    res += chars[Math.floor(Math.random() * chars.length)];
+    if (i % 5 === 4 && i !== length-1) res += " "; // Add space every 5 chars
   }
-  return words.join(" ");
+  return res;
 };
 
+const generateParagraph = (wordList, count) => {
+  let res = [];
+  for(let i=0; i<count; i++) res.push(wordList[Math.floor(Math.random() * wordList.length)]);
+  return res.join(" ");
+};
+
+// --- COMPONENT START ---
 export default function TypingMaster({ user }) {
-  // Game State
-  const [mode, setMode] = useState('campaign'); // 'campaign' or 'mock'
+  // GLOBAL STATE
+  const [mode, setMode] = useState('campaign'); // 'campaign', 'games'
+  const [gameType, setGameType] = useState(null); // 'balloon', 'infinite'
+  const [soundEnabled, setSoundEnabled] = useState(true);
+  
+  // CAMPAIGN STATE
   const [level, setLevel] = useState(user.typing_level || 1);
+  const [perfectStreak, setPerfectStreak] = useState(0); // Tracks 100% acc streak
+  
+  // TYPING ENGINE STATE
   const [text, setText] = useState('');
   const [input, setInput] = useState('');
   const [startTime, setStartTime] = useState(null);
   const [wpm, setWpm] = useState(0);
   const [accuracy, setAccuracy] = useState(100);
   const [isFinished, setIsFinished] = useState(false);
-  const [mockLoading, setMockLoading] = useState(false);
-  const [soundEnabled, setSoundEnabled] = useState(true);
-  const [activeKey, setActiveKey] = useState(null); // For visual keyboard
   
+  // BALLOON GAME STATE
+  const [balloons, setBalloons] = useState([]);
+  const [balloonScore, setBalloonScore] = useState(0);
+  const [balloonLives, setBalloonLives] = useState(3);
+  const [gameActive, setGameActive] = useState(false);
+  const requestRef = useRef();
+
   const inputRef = useRef(null);
-  
-  // Audio Refs (Preloaded)
   const audioCorrect = useRef(new Audio(SOUND_PATHS.correct));
   const audioError = useRef(new Audio(SOUND_PATHS.error));
 
-  // --- INITIALIZATION ---
-  const loadContent = useCallback(async () => {
-    setIsFinished(false);
-    setInput('');
-    setStartTime(null);
-    setWpm(0);
-    setAccuracy(100);
-    setActiveKey(null);
-
-    if (mode === 'campaign') {
-      setText(generateLevelText(level));
-    } else {
-      setMockLoading(true);
-      const { data } = await supabase.from('mocks').select('questions').limit(5);
-      
-      if (data && data.length > 0) {
-        const randomMock = data[Math.floor(Math.random() * data.length)];
-        let questions = typeof randomMock.questions === 'string' ? JSON.parse(randomMock.questions) : randomMock.questions;
-        if (questions && questions.length > 0) {
-          const q = questions[Math.floor(Math.random() * questions.length)];
-          const cleanText = (q.questionText || "Neural sync failed.").replace(/<[^>]*>?/gm, '');
-          setText(cleanText);
-        }
-      } else {
-        setText("No mock data available. Please initialize database content.");
-      }
-      setMockLoading(false);
-    }
-    
+  // --- INIT & LOADERS ---
+  const loadCampaign = useCallback(() => {
+    setIsFinished(false); setInput(''); setStartTime(null); setWpm(0); setAccuracy(100);
+    setText(generateCampaignText(level));
     setTimeout(() => inputRef.current?.focus(), 100);
-  }, [mode, level]);
+  }, [level]);
+
+  const loadInfiniteMock = async () => {
+    setIsFinished(false); setInput(''); setStartTime(null); setWpm(0); setAccuracy(100);
+    const { data } = await supabase.from('mocks').select('questions').limit(10);
+    if (data && data.length > 0) {
+      const randomMock = data[Math.floor(Math.random() * data.length)];
+      let questions = typeof randomMock.questions === 'string' ? JSON.parse(randomMock.questions) : randomMock.questions;
+      if (questions && questions.length > 0) {
+        const q = questions[Math.floor(Math.random() * questions.length)];
+        const cleanText = (q.questionText || "Neural sync failed.").replace(/<[^>]*>?/gm, '');
+        setText(cleanText);
+      }
+    } else {
+      setText("No mock data found. Using backup protocol.");
+    }
+    setTimeout(() => inputRef.current?.focus(), 100);
+  };
 
   useEffect(() => {
-    loadContent();
-  }, [loadContent]);
+    if (mode === 'campaign') loadCampaign();
+    else if (mode === 'games' && gameType === 'infinite') loadInfiniteMock();
+  }, [mode, gameType, level, loadCampaign]);
 
-  // --- PLAY SOUND HELPER ---
+  // --- AUDIO ---
   const playSound = (type) => {
     if (!soundEnabled) return;
     const audio = type === 'correct' ? audioCorrect.current : audioError.current;
-    audio.currentTime = 0; // Reset to allow rapid fire
-    audio.play().catch(e => console.log("Audio play prevented:", e));
+    audio.currentTime = 0; audio.play().catch(()=>{});
   };
 
-  // --- TYPING LOGIC ---
-  const handleChange = async (e) => {
+  // --- CAMPAIGN & INFINITE TYPING HANDLER ---
+  const handleTyping = async (e) => {
     if (isFinished) return;
     const val = e.target.value;
     const lastChar = val.slice(-1);
     const expectedChar = text[val.length - 1];
 
-    // Visual Keyboard Feedback
-    setActiveKey(lastChar.toLowerCase());
-    setTimeout(() => setActiveKey(null), 150);
-
-    // Audio Feedback
-    if (val.length > input.length) { // Only on adding char
+    if (val.length > input.length) {
       if (lastChar === expectedChar) playSound('correct');
       else playSound('error');
     }
-    
-    // Start Timer
-    if (!startTime && val.length === 1) setStartTime(Date.now());
 
+    if (!startTime && val.length === 1) setStartTime(Date.now());
     setInput(val);
 
     // Metrics
-    const timeElapsed = (Date.now() - startTime) / 60000;
-    const wordCount = val.length / 5;
-    const currentWpm = Math.round(wordCount / (timeElapsed || 0.001));
-    setWpm(currentWpm > 999 ? 999 : currentWpm);
-
+    const time = (Date.now() - startTime) / 60000;
+    const words = val.length / 5;
+    setWpm(Math.round(words / (time || 0.001)));
+    
     let correct = 0;
     for (let i = 0; i < val.length; i++) if (val[i] === text[i]) correct++;
     const acc = Math.round((correct / val.length) * 100) || 100;
     setAccuracy(acc);
 
-    // Completion
     if (val === text) {
       setIsFinished(true);
-      await handleCompletion(currentWpm, acc);
+      if (mode === 'campaign') await handleCampaignComplete(acc);
+      else if (gameType === 'infinite') await handleInfiniteComplete();
     }
   };
 
-  // --- REWARDS SYSTEM ---
-  const handleCompletion = async (finalWpm, finalAcc) => {
-    if (typeof confetti === 'function') confetti({ particleCount: 100, spread: 70, origin: { y: 0.6 } });
-
-    await supabase.from('typing_scores').insert([{ 
-      username: user.username, wpm: finalWpm, accuracy: finalAcc 
-    }]);
-
-    if (mode === 'campaign' && finalAcc >= 90) {
-      const nextLevel = level + 1;
-      const pointsReward = 10;
-      await supabase.from('profiles').update({ 
-        typing_level: nextLevel,
-        total_percentage_points: (user.total_percentage_points || 0) + pointsReward
-      }).eq('id', user.id);
-      setLevel(nextLevel);
+  // --- REWARD LOGIC (STREAK FREEZE) ---
+  const handleCampaignComplete = async (finalAcc) => {
+    if (finalAcc === 100) {
+      const newStreak = perfectStreak + 1;
+      setPerfectStreak(newStreak);
+      
+      if (newStreak >= 5) {
+        // AWARD STREAK FREEZE POINT
+        confetti({ particleCount: 200, spread: 100, origin: { y: 0.6 }, colors: ['#F97316', '#FFFFFF'] });
+        await supabase.from('profiles').update({ 
+          streak_points: (user.streak_points || 0) + 1 
+        }).eq('id', user.id);
+        alert("🔥 REWARD: +1 Streak Freeze Point Acquired!");
+        setPerfectStreak(0); // Reset after reward
+      } else {
+        confetti({ particleCount: 50, spread: 50 });
+      }
+    } else {
+      setPerfectStreak(0); // Reset on imperfect run
     }
+
+    // Level Up
+    const nextLevel = level + 1;
+    await supabase.from('profiles').update({ typing_level: nextLevel }).eq('id', user.id);
+    // Wait a bit then load next
+    setTimeout(() => setLevel(nextLevel), 1500);
   };
 
-  // --- VISUAL HELPERS ---
-  const getFingerClass = (keyChar) => {
-    const zone = KEY_ZONES[keyChar.toLowerCase()];
-    if (!zone) return 'border-slate-700 text-slate-500'; // Default
+  const handleInfiniteComplete = async () => {
+    // Just reset instantly for "Flow State"
+    setTimeout(loadInfiniteMock, 500);
+  };
+
+  // --- BALLOON GAME LOGIC ---
+  const startBalloonGame = () => {
+    setGameActive(true);
+    setBalloonScore(0);
+    setBalloonLives(3);
+    setBalloons([]);
+    setInput('');
+    requestRef.current = requestAnimationFrame(gameLoop);
+  };
+
+  const gameLoop = () => {
+    if (!gameActive) return;
+
+    setBalloons(prev => {
+      // 1. Add new balloon randomly
+      if (Math.random() < 0.02) { // Spawn rate
+        const word = WORDS_MED[Math.floor(Math.random() * WORDS_MED.length)];
+        return [...prev, { id: Date.now(), word, x: Math.random() * 80 + 10, y: -10 }];
+      }
+
+      // 2. Move balloons down
+      const moved = prev.map(b => ({ ...b, y: b.y + 0.3 + (balloonScore * 0.01) })); // Speed increases with score
+
+      // 3. Check collisions
+      const missed = moved.filter(b => b.y > 90);
+      if (missed.length > 0) {
+        setBalloonLives(l => {
+          if (l - missed.length <= 0) {
+             setGameActive(false); // Game Over
+             alert(`Mission Failed. Final Score: ${balloonScore}`);
+             return 0;
+          }
+          return l - missed.length;
+        });
+        playSound('error');
+        return moved.filter(b => b.y <= 90);
+      }
+      return moved;
+    });
+
+    if (balloonLives > 0) requestRef.current = requestAnimationFrame(gameLoop);
+  };
+
+  const handleBalloonInput = (e) => {
+    const val = e.target.value;
+    setInput(val);
     
-    // Highlight next expected key
-    const nextChar = text[input.length]?.toLowerCase();
-    const isNext = nextChar === keyChar.toLowerCase();
-
-    if (isNext) {
-      if (zone.includes('pinky')) return 'bg-pink-500 text-white shadow-[0_0_15px_rgba(236,72,153,0.5)] border-pink-400 scale-110';
-      if (zone.includes('ring')) return 'bg-blue-500 text-white shadow-[0_0_15px_rgba(59,130,246,0.5)] border-blue-400 scale-110';
-      if (zone.includes('middle')) return 'bg-emerald-500 text-white shadow-[0_0_15px_rgba(16,185,129,0.5)] border-emerald-400 scale-110';
-      return 'bg-orange-500 text-white shadow-[0_0_15px_rgba(249,115,22,0.5)] border-orange-400 scale-110';
+    // Check if any balloon matches the typed word
+    const match = balloons.find(b => b.word === val);
+    if (match) {
+      playSound('correct');
+      setBalloons(prev => prev.filter(b => b.id !== match.id)); // Pop it
+      setBalloonScore(s => s + 1);
+      setInput(''); // Reset input
     }
-
-    // Active Pressed State
-    if (activeKey === keyChar.toLowerCase()) return 'bg-white text-slate-900 scale-95';
-
-    return 'border-slate-700 text-slate-400 dark:bg-slate-800/50';
   };
+
+  useEffect(() => {
+    return () => cancelAnimationFrame(requestRef.current);
+  }, []);
+
+
+  // --- RENDERERS ---
 
   const renderText = () => {
     return text.split('').map((char, index) => {
@@ -209,115 +257,158 @@ export default function TypingMaster({ user }) {
     });
   };
 
+  // --- MAIN UI ---
   return (
-    <div className="max-w-5xl mx-auto space-y-8 animate-in fade-in slide-in-from-bottom-8 duration-700 pb-20">
+    <div className="max-w-6xl mx-auto space-y-8 pb-20 animate-in fade-in slide-in-from-bottom-8">
       
-      {/* HEADER & CONTROLS */}
+      {/* HEADER & TABS */}
       <div className="flex flex-col md:flex-row gap-6 items-center justify-between">
         <div className="flex items-center gap-4">
-          <div className="p-4 bg-gradient-to-br from-pink-500 to-rose-600 rounded-2xl shadow-lg shadow-pink-500/20 text-white">
+          <div className="p-4 bg-gradient-to-br from-cyan-500 to-blue-600 rounded-2xl shadow-lg shadow-cyan-500/20 text-white">
             <Keyboard size={32} />
           </div>
           <div>
-            <h2 className="text-4xl font-black uppercase tracking-tighter text-transparent bg-clip-text bg-gradient-to-r from-pink-500 to-purple-600 drop-shadow-sm">
-              Neural Typer
+            <h2 className="text-4xl font-black uppercase tracking-tighter text-transparent bg-clip-text bg-gradient-to-r from-cyan-500 to-blue-600">
+              Neural Typer 2.0
             </h2>
             <p className="text-[10px] font-bold text-slate-400 uppercase tracking-[0.3em]">
-              Level {level} • Haptic Feedback Active
+              Level {level} • {perfectStreak}/5 Perfect Streak
             </p>
           </div>
         </div>
 
-        <div className="flex items-center gap-4">
-          <button onClick={() => setSoundEnabled(!soundEnabled)} className={`p-3 rounded-xl transition-all ${soundEnabled ? 'bg-indigo-600 text-white' : 'bg-slate-800 text-slate-500'}`}>
-            {soundEnabled ? <Volume2 size={20} /> : <VolumeX size={20} />}
-          </button>
-          
-          <div className="flex bg-white dark:bg-slate-900 p-1.5 rounded-2xl shadow-sm border border-slate-200 dark:border-slate-800">
-            <button onClick={() => setMode('campaign')} className={`px-6 py-2 rounded-xl font-black text-xs uppercase tracking-widest transition-all ${mode === 'campaign' ? 'bg-pink-600 text-white shadow-lg' : 'text-slate-400 hover:text-slate-600'}`}>Campaign</button>
-            <button onClick={() => setMode('mock')} className={`px-6 py-2 rounded-xl font-black text-xs uppercase tracking-widest transition-all ${mode === 'mock' ? 'bg-cyan-600 text-white shadow-lg' : 'text-slate-400 hover:text-slate-600'}`}>Mock Injector</button>
+        <div className="flex gap-4">
+           <button onClick={() => setSoundEnabled(!soundEnabled)} className={`p-3 rounded-xl ${soundEnabled ? 'bg-indigo-600 text-white' : 'bg-slate-800 text-slate-500'}`}>
+             {soundEnabled ? <Volume2 size={20} /> : <VolumeX size={20} />}
+           </button>
+           <div className="bg-white dark:bg-slate-900 p-1.5 rounded-2xl border border-slate-200 dark:border-slate-800 flex">
+             <button onClick={() => { setMode('campaign'); setGameType(null); }} className={`px-6 py-2 rounded-xl font-black text-xs uppercase tracking-widest transition-all ${mode === 'campaign' ? 'bg-cyan-600 text-white shadow-lg' : 'text-slate-400'}`}>Campaign</button>
+             <button onClick={() => { setMode('games'); setGameType('balloon'); }} className={`px-6 py-2 rounded-xl font-black text-xs uppercase tracking-widest transition-all ${mode === 'games' ? 'bg-pink-600 text-white shadow-lg' : 'text-slate-400'}`}>Games</button>
+           </div>
+        </div>
+      </div>
+
+      {/* --- CAMPAIGN & INFINITE MODE --- */}
+      {(mode === 'campaign' || (mode === 'games' && gameType === 'infinite')) && (
+        <>
+          {/* STATS */}
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+            <div className="bg-white/80 dark:bg-slate-900/80 p-6 rounded-3xl border border-slate-200 dark:border-slate-800">
+              <p className="text-slate-400 font-black uppercase text-[10px] tracking-widest">WPM</p>
+              <p className="text-4xl font-black text-slate-800 dark:text-white">{wpm}</p>
+            </div>
+            <div className="bg-white/80 dark:bg-slate-900/80 p-6 rounded-3xl border border-slate-200 dark:border-slate-800">
+              <p className="text-slate-400 font-black uppercase text-[10px] tracking-widest">Precision</p>
+              <p className={`text-4xl font-black ${accuracy===100?'text-green-500':'text-orange-500'}`}>{accuracy}%</p>
+            </div>
+            <div className="md:col-span-2 bg-gradient-to-r from-orange-500 to-red-600 p-6 rounded-3xl text-white relative overflow-hidden">
+               <div className="relative z-10">
+                 <p className="font-bold opacity-70 uppercase text-[10px] tracking-widest">Streak Freeze Progress</p>
+                 <div className="flex items-center gap-2 mt-2">
+                   {[1,2,3,4,5].map(i => (
+                     <div key={i} className={`h-3 flex-1 rounded-full transition-all ${i <= perfectStreak ? 'bg-white shadow-[0_0_10px_white]' : 'bg-white/20'}`} />
+                   ))}
+                 </div>
+                 <p className="text-[10px] mt-2 font-bold uppercase">{perfectStreak}/5 Perfect runs to earn Freeze Point</p>
+               </div>
+               <Flame className="absolute right-[-10px] bottom-[-10px] text-white/20 rotate-12" size={80} />
+            </div>
           </div>
-        </div>
-      </div>
 
-      {/* STATS */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-        <div className="bg-white/80 dark:bg-slate-900/80 backdrop-blur-xl p-6 rounded-3xl border border-slate-200 dark:border-slate-800 flex items-center justify-between group hover:border-pink-500/50 transition-all">
-          <div><p className="text-slate-400 font-black uppercase text-[10px] tracking-widest">Velocity</p><p className="text-4xl font-black text-slate-800 dark:text-white group-hover:text-pink-500 transition-colors">{wpm} <span className="text-sm text-slate-400">WPM</span></p></div>
-          <Activity className="text-slate-300 group-hover:text-pink-500 transition-colors" size={32} />
-        </div>
-        <div className="bg-white/80 dark:bg-slate-900/80 backdrop-blur-xl p-6 rounded-3xl border border-slate-200 dark:border-slate-800 flex items-center justify-between group hover:border-cyan-500/50 transition-all">
-          <div><p className="text-slate-400 font-black uppercase text-[10px] tracking-widest">Precision</p><p className={`text-4xl font-black ${accuracy >= 95 ? 'text-green-500' : 'text-orange-500'}`}>{accuracy}%</p></div>
-          <Target className="text-slate-300 group-hover:text-cyan-500 transition-colors" size={32} />
-        </div>
-        <div className="bg-gradient-to-br from-indigo-600 to-purple-700 p-6 rounded-3xl shadow-xl shadow-indigo-600/20 text-white relative overflow-hidden">
-          <div className="relative z-10"><p className="font-bold opacity-70 uppercase text-[10px] tracking-widest">Next Reward</p><p className="text-3xl font-black flex items-center gap-2 mt-1">+10 <span className="text-sm bg-white/20 px-2 py-0.5 rounded text-[10px]">POINTS</span></p></div>
-          <Award className="absolute right-[-10px] bottom-[-10px] text-white/20 rotate-12" size={80} />
-        </div>
-      </div>
-
-      {/* TYPING ARENA */}
-      <div className="relative group">
-        <div className={`absolute -inset-1 rounded-[3rem] blur opacity-25 group-hover:opacity-50 transition duration-1000 group-hover:duration-200 ${mode === 'campaign' ? 'bg-pink-600' : 'bg-cyan-600'}`}></div>
-        <div className="relative bg-white dark:bg-[#0f172a] p-10 md:p-14 rounded-[2.5rem] shadow-2xl border border-slate-200 dark:border-slate-800 min-h-[250px] flex flex-col justify-center">
-          
-          {mockLoading ? (
-            <div className="flex flex-col items-center justify-center space-y-4 animate-pulse">
-              <Database className="text-cyan-500" size={48} />
-              <p className="text-cyan-500 font-black uppercase tracking-widest text-xs">Injecting Data from Mock DB...</p>
-            </div>
-          ) : isFinished ? (
-            <div className="text-center space-y-6 animate-in zoom-in duration-300">
-              <div className="inline-flex p-6 rounded-full bg-green-100 dark:bg-green-900/30 text-green-600 dark:text-green-400 mb-2"><CheckCircle size={64} /></div>
-              <div>
-                <h3 className="text-3xl font-black uppercase text-slate-800 dark:text-white">{mode === 'campaign' ? 'Level Complete' : 'Practice Sync Complete'}</h3>
-                <p className="text-slate-500 dark:text-slate-400 font-bold mt-2">Stats uploaded to Neural Grid. {mode === 'campaign' && accuracy >= 90 && <span className="text-pink-500">+10 Leaderboard Points Awarded.</span>}</p>
-              </div>
-              <button onClick={loadContent} className={`mx-auto px-10 py-4 rounded-2xl font-black text-white uppercase tracking-widest shadow-xl hover:scale-105 active:scale-95 transition-all flex items-center gap-3 ${mode === 'campaign' ? 'bg-pink-600 hover:bg-pink-500' : 'bg-cyan-600 hover:bg-cyan-500'}`}>
-                <FastForward size={20} fill="currentColor" /> {mode === 'campaign' ? 'Next Level' : 'Next Question'}
-              </button>
-            </div>
-          ) : (
-            <>
-              <div className="font-mono text-2xl md:text-3xl leading-relaxed tracking-wide mb-8 break-words select-none pointer-events-none">{renderText()}</div>
-              <textarea ref={inputRef} value={input} onChange={handleChange} className="absolute inset-0 w-full h-full opacity-0 cursor-text resize-none" autoFocus spellCheck="false" />
-              {!startTime && <div className="absolute bottom-8 left-1/2 -translate-x-1/2 text-slate-400 font-bold text-xs uppercase tracking-widest animate-bounce">Type to Initialize</div>}
-            </>
+          {/* GAME SELECTION (Only if mode is Games) */}
+          {mode === 'games' && (
+             <div className="flex justify-center gap-4 mb-4">
+                <button onClick={() => setGameType('balloon')} className={`px-8 py-3 rounded-xl font-black uppercase text-xs tracking-widest ${gameType === 'balloon' ? 'bg-pink-600 text-white' : 'bg-slate-800 text-slate-500'}`}>🎈 Balloon Pop</button>
+                <button onClick={() => setGameType('infinite')} className={`px-8 py-3 rounded-xl font-black uppercase text-xs tracking-widest ${gameType === 'infinite' ? 'bg-cyan-600 text-white' : 'bg-slate-800 text-slate-500'}`}>♾️ Infinite Mock</button>
+             </div>
           )}
-        </div>
-      </div>
 
-      {/* VIRTUAL KEYBOARD (VISUAL AID) */}
-      <div className="hidden md:flex flex-col items-center gap-2 mt-8 opacity-80 select-none">
-        {KEYBOARD_ROWS.map((row, rIdx) => (
-          <div key={rIdx} className="flex gap-1.5">
-            {row.map((key) => (
-              <div 
-                key={key} 
-                className={`
-                  w-10 h-10 flex items-center justify-center rounded-lg border-b-4 font-bold text-sm uppercase transition-all duration-75
-                  ${getFingerClass(key)}
-                `}
-              >
-                {key}
-              </div>
-            ))}
+          {/* TYPING AREA */}
+          <div className="relative bg-white dark:bg-[#0f172a] p-10 md:p-14 rounded-[2.5rem] shadow-2xl border border-slate-200 dark:border-slate-800 min-h-[300px] flex flex-col justify-center text-center">
+            {isFinished ? (
+               <div className="animate-in zoom-in">
+                 <CheckCircle size={64} className="mx-auto text-green-500 mb-4" />
+                 <h3 className="text-3xl font-black uppercase dark:text-white">Complete</h3>
+                 <p className="text-slate-400 font-bold mb-6">Processing results...</p>
+               </div>
+            ) : (
+              <>
+                 <div className="font-mono text-2xl md:text-3xl leading-relaxed tracking-wide mb-8 break-words select-none pointer-events-none">{renderText()}</div>
+                 <textarea ref={inputRef} value={input} onChange={handleTyping} className="absolute inset-0 w-full h-full opacity-0 cursor-text resize-none" autoFocus spellCheck="false" />
+                 {!startTime && <div className="absolute bottom-8 left-1/2 -translate-x-1/2 text-slate-400 font-bold text-xs uppercase tracking-widest animate-bounce">Type to Initialize</div>}
+              </>
+            )}
           </div>
-        ))}
-        
-        {/* Spacebar */}
-        <div className="flex gap-1.5 w-full justify-center">
-           <div className={`w-64 h-10 rounded-lg border-b-4 transition-all duration-75 ${text[input.length] === ' ' ? 'bg-orange-500 border-orange-400' : 'border-slate-700 dark:bg-slate-800/50'}`}></div>
-        </div>
+          
+          {/* CAMPAIGN MAP (Visual Only) */}
+          {mode === 'campaign' && (
+            <div className="grid grid-cols-3 gap-4 text-center">
+               <div className={`p-4 rounded-xl border-2 ${level<=30 ? 'border-cyan-500 bg-cyan-500/10' : 'border-slate-800 opacity-50'}`}>
+                 <p className="font-black uppercase text-xs">Sector 1: Basics</p>
+                 <p className="text-[10px] text-slate-400">Rows & Fundamentals</p>
+               </div>
+               <div className={`p-4 rounded-xl border-2 ${level>30 && level<=60 ? 'border-blue-500 bg-blue-500/10' : 'border-slate-800 opacity-50'}`}>
+                 <p className="font-black uppercase text-xs">Sector 2: Fluency</p>
+                 <p className="text-[10px] text-slate-400">Standard English</p>
+               </div>
+               <div className={`p-4 rounded-xl border-2 ${level>60 ? 'border-purple-500 bg-purple-500/10' : 'border-slate-800 opacity-50'}`}>
+                 <p className="font-black uppercase text-xs">Sector 3: Mastery</p>
+                 <p className="text-[10px] text-slate-400">Technical Data</p>
+               </div>
+            </div>
+          )}
+        </>
+      )}
 
-        {/* Finger Legend */}
-        <div className="flex gap-6 mt-4 text-[9px] font-black uppercase tracking-widest text-slate-500">
-          <div className="flex items-center gap-2"><div className="w-3 h-3 bg-pink-500 rounded-full"></div> Pinky</div>
-          <div className="flex items-center gap-2"><div className="w-3 h-3 bg-blue-500 rounded-full"></div> Ring</div>
-          <div className="flex items-center gap-2"><div className="w-3 h-3 bg-emerald-500 rounded-full"></div> Middle</div>
-          <div className="flex items-center gap-2"><div className="w-3 h-3 bg-orange-500 rounded-full"></div> Index</div>
+      {/* --- BALLOON GAME UI --- */}
+      {mode === 'games' && gameType === 'balloon' && (
+        <div className="bg-slate-900 rounded-[2.5rem] p-4 h-[600px] relative overflow-hidden border-4 border-pink-500/30 shadow-2xl">
+           {/* GAME OVERLAY */}
+           {!gameActive ? (
+             <div className="absolute inset-0 z-20 bg-slate-900/80 backdrop-blur-sm flex flex-col items-center justify-center">
+               <Gamepad2 size={64} className="text-pink-500 mb-4" />
+               <h3 className="text-4xl font-black uppercase text-white mb-2">Aerial Defense</h3>
+               <p className="text-slate-400 font-bold text-xs uppercase tracking-widest mb-8">Type falling words to intercept</p>
+               <button onClick={startBalloonGame} className="bg-pink-600 text-white px-10 py-4 rounded-2xl font-black uppercase tracking-widest hover:scale-105 transition-all">Start Mission</button>
+             </div>
+           ) : (
+             <>
+               {/* SCORE HUD */}
+               <div className="absolute top-4 left-4 z-10 bg-slate-900/50 backdrop-blur px-4 py-2 rounded-xl border border-white/10">
+                 <p className="text-white font-black text-xl">Score: {balloonScore}</p>
+                 <div className="flex gap-1 text-red-500">{[...Array(balloonLives)].map((_,i) => <span key={i}>❤️</span>)}</div>
+               </div>
+               
+               {/* INPUT HUD */}
+               <div className="absolute bottom-4 left-1/2 -translate-x-1/2 z-10 w-1/2">
+                 <input 
+                   autoFocus
+                   value={input}
+                   onChange={handleBalloonInput}
+                   className="w-full bg-slate-800/80 text-white text-center font-bold uppercase p-4 rounded-2xl border-2 border-pink-500/50 outline-none placeholder-slate-600"
+                   placeholder="TYPE TO INTERCEPT..." 
+                 />
+               </div>
+
+               {/* BALLOONS */}
+               {balloons.map(b => (
+                 <div 
+                   key={b.id}
+                   className="absolute bg-white text-slate-900 px-3 py-1 rounded-full font-bold text-xs shadow-[0_0_15px_rgba(255,255,255,0.5)] border-2 border-pink-500"
+                   style={{ left: `${b.x}%`, top: `${b.y}%` }}
+                 >
+                   {b.word}
+                   {/* Balloon String Visual */}
+                   <div className="absolute left-1/2 top-full h-4 w-[1px] bg-white/50"></div>
+                 </div>
+               ))}
+               
+               {/* GROUND */}
+               <div className="absolute bottom-0 w-full h-2 bg-pink-500/50 shadow-[0_0_20px_#ec4899]"></div>
+             </>
+           )}
         </div>
-      </div>
+      )}
 
     </div>
   );
