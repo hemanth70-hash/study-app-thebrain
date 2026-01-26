@@ -11,12 +11,13 @@ import GoalTracker from './components/GoalTracker';
 import StudyChat from './components/StudyChat';
 import InviteButton from './components/InviteButton';
 import StudyHub from './components/StudyHub'; 
-import TypingMaster from './components/TypingMaster'; // 🔥 IMPORTED
+import TypingMaster from './components/TypingMaster'; 
+import RailwayDreamTunnel from './components/RailwayDreamTunnel'; // 🔥 IMPORTED
 
 // 🔥 STABILIZED IMPORTS: All required icons for Dashboard & Engine included
 import { 
   Lock, Megaphone, ShieldAlert, Key, Youtube, 
-  Layout, Zap, Award, Database, ListFilter, Skull 
+  Layout, Zap, Award, Database, ListFilter, Skull, TrainFront // 🔥 Added Train Icon
 } from 'lucide-react';
 
 export default function App() {
@@ -28,27 +29,25 @@ export default function App() {
   const [globalMsg, setGlobalMsg] = useState(null);
   const [isExamLocked, setIsExamLocked] = useState(false); 
   const [loginError, setLoginError] = useState('');
+  const [isTunnelOpen, setIsTunnelOpen] = useState(false); // 🔥 NEW TUNNEL STATE
 
   // --- 1. THE REAPER (AUTO-DELETE LOGIC) ---
   const runTheReaper = async () => {
-    // Only The Brain runs the cleanup to save resources
     const today = new Date();
     const sixtyDaysAgo = new Date(today);
     sixtyDaysAgo.setDate(today.getDate() - 60);
     const dateStr = sixtyDaysAgo.toISOString().split('T')[0];
 
-    // Find Inactive Users (> 60 days)
     const { data: deadNodes } = await supabase
       .from('profiles')
       .select('id, username')
       .lt('last_mock_date', dateStr)
-      .neq('username', 'TheBrain'); // Never delete yourself
+      .neq('username', 'TheBrain');
 
     if (deadNodes && deadNodes.length > 0) {
       console.log("💀 THE REAPER: Purging inactive nodes...", deadNodes);
       
       for (const node of deadNodes) {
-        // Cascade delete related data
         await supabase.from('scores').delete().eq('user_id', node.id);
         await supabase.from('subject_notes').delete().eq('user_id', node.id);
         await supabase.from('profiles').delete().eq('id', node.id);
@@ -75,13 +74,13 @@ export default function App() {
         .eq('active', true)
         .order('created_at', { ascending: false })
         .limit(1)
-        .maybeSingle(); // 🔥 FIXED: Changed from .single() to .maybeSingle() to avoid 406 error
+        .maybeSingle();
       if (data) setGlobalMsg(data.message);
     };
     if (user) fetchAnnouncement();
   }, [user?.id]);
 
-  // --- 3. REFINED STREAK LOGIC (PROTECTION VS COLLAPSE) ---
+  // --- 3. REFINED STREAK LOGIC ---
   const handleStreakCheck = async (profile) => {
     if (!profile?.last_mock_date) return;
     
@@ -99,16 +98,13 @@ export default function App() {
 
     if (lastDate.getTime() < yesterday.getTime()) {
       if (profile.streak_points > 0) {
-        // 🔥 STREAK FREEZE: Consume point to save count
         await supabase.from('profiles').update({ 
           streak_points: profile.streak_points - 1,
           last_mock_date: yesterday.toISOString().split('T')[0] 
         }).eq('id', profile.id);
-        
         alert("🔥 STREAK PROTECTED: 1 Streak Point consumed to maintain your grid connection.");
         refreshUser(profile.id);
       } else {
-        // ❄️ STREAK COLLAPSE: Points are 0, reset count
         await supabase.from('profiles').update({ streak_count: 0 }).eq('id', profile.id);
         refreshUser(profile.id);
       }
@@ -122,8 +118,6 @@ export default function App() {
 
     try {
       const inputName = username.trim();
-
-      // A. CHECK IF USER EXISTS
       const { data: existingUser } = await supabase
         .from('profiles')
         .select('*')
@@ -131,18 +125,14 @@ export default function App() {
         .maybeSingle();
 
       if (existingUser) {
-        // User exists -> Log them in
         setUser(existingUser);
         handleStreakCheck(existingUser);
-        
-        // If "The Brain" logs in, run The Reaper
         if (existingUser.username.toLowerCase() === 'thebrain') {
           runTheReaper();
         }
         return;
       }
 
-      // B. IF USER DOES NOT EXIST -> CHECK INVITE CODES
       const { data: invite } = await supabase
         .from('invite_codes')
         .select('*')
@@ -151,19 +141,17 @@ export default function App() {
         .maybeSingle();
 
       if (invite) {
-        // Valid Code Found -> Create Account using the Code as Username
         const { data: newUser, error: createError } = await supabase
           .from('profiles')
           .insert([{ 
-            username: inputName, // The code becomes the username
-            is_verified: true,   // Auto-verified
-            last_mock_date: new Date().toISOString().split('T')[0] // Mark active today
+            username: inputName, 
+            is_verified: true,   
+            last_mock_date: new Date().toISOString().split('T')[0] 
           }])
           .select()
           .single();
 
         if (newUser && !createError) {
-          // Mark invite as used
           await supabase.from('invite_codes').update({ is_used: true }).eq('id', invite.id);
           setUser(newUser);
         } else {
@@ -179,7 +167,6 @@ export default function App() {
     }
   };
 
-  // Admin Request (for regular users)
   const sendAdminRequest = async () => {
     const msg = window.prompt("Transmission to The Brain:");
     if (!msg) return;
@@ -189,10 +176,14 @@ export default function App() {
     alert("Signal transmitted to The Brain.");
   };
 
+  // --- 🔥 VIEW: TUNNEL OVERRIDE (LOCO PILOT MODE) ---
+  if (user && isTunnelOpen) {
+    return <RailwayDreamTunnel user={user} onClose={() => setIsTunnelOpen(false)} />;
+  }
+
   // --- VIEW: LOGIN ---
   if (!user) {
     return (
-      // 🔥 THEME FIX: Using 'bg-slate-950' for Deep Cyber Blue
       <div className={`flex items-center justify-center min-h-screen ${isDarkMode ? 'bg-slate-950' : 'bg-blue-50'}`}>
         <div className="bg-white dark:bg-slate-900 p-10 rounded-[3rem] shadow-2xl border-2 border-blue-500/20 w-full max-w-md text-center animate-in fade-in zoom-in duration-500">
           <div className="w-20 h-20 bg-blue-600 rounded-3xl flex items-center justify-center mx-auto mb-6 shadow-xl rotate-3">
@@ -208,10 +199,9 @@ export default function App() {
     );
   }
 
-  // Admin Check
   const isAdmin = user.username.toLowerCase() === 'thebrain' || user.is_moderator;
 
-  // 🔥 THEME FIX: Main container now uses 'bg-slate-950'
+  // --- VIEW: MAIN DASHBOARD ---
   return (
     <div className={isDarkMode ? 'dark' : ''}>
       <div className={`flex min-h-screen transition-colors duration-300 ${isDarkMode ? 'bg-slate-950 text-slate-100' : 'bg-blue-50 text-gray-800'}`}>
@@ -253,7 +243,17 @@ export default function App() {
                           <h3 className="text-4xl font-black uppercase tracking-tighter dark:text-white">Welcome, {user.username}</h3>
                           <p className="text-blue-600 font-black text-[10px] uppercase tracking-[0.3em] mt-2 italic">Identity: {user.education || 'Neural Aspirant'}</p>
                         </div>
-                        <InviteButton />
+                        {/* 🔥 COCKPIT TRIGGER BUTTON */}
+                        <div className="flex gap-2">
+                          <button 
+                            onClick={() => setIsTunnelOpen(true)}
+                            className="bg-slate-900 dark:bg-slate-800 text-white p-3 rounded-xl border border-slate-700 hover:border-cyan-500 hover:text-cyan-400 transition-all shadow-lg group/btn"
+                            title="Enter Loco Pilot Mode"
+                          >
+                            <TrainFront size={24} className="group-hover/btn:animate-bounce" />
+                          </button>
+                          <InviteButton />
+                        </div>
                       </div>
                       <div className="bg-blue-50 dark:bg-blue-900/20 p-6 rounded-3xl border border-blue-100 dark:border-blue-800 backdrop-blur-sm">
                         <p className="text-sm font-bold text-gray-600 dark:text-slate-300">
@@ -273,8 +273,6 @@ export default function App() {
             
             {activeTab === 'study' && <StudyHub user={user} />}
             {activeTab === 'subjects' && <SubjectNotes user={user} />}
-            
-            {/* 🔥 ADDED: Neural Typer Rendering Logic */}
             {activeTab === 'typing' && <TypingMaster user={user} />}
             
             {activeTab === 'mocks' && (
@@ -291,10 +289,7 @@ export default function App() {
             )}
 
             {activeTab === 'ranking' && <Leaderboard />}
-            
-            {/* 🔥 FIXED: Passing user prop for Tiered Admin Access */}
             {activeTab === 'admin' && <AdminPanel user={user} />}
-            
             {activeTab === 'profile' && <Profile user={user} />}
           </div>
 
@@ -308,7 +303,3 @@ export default function App() {
     </div>
   );
 }
-{/* 🔥 FIXED: Passing user prop for Tiered Admin Access */}
-{/* 🔥 FIXED: Passing user prop for Tiered Admin Access */}
-{/* 🔥 FIXED: Passing user prop for Tiered Admin Access */}
-{/* 🔥 FIXED: Passing user prop for Tiered Admin Access */}
