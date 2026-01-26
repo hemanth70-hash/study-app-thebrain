@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
-  ChevronDown, ChevronUp, Coffee, Zap, TrainFront, Home, Users, Ticket, Shield, BookOpen, Gauge 
+  ChevronDown, ChevronUp, Coffee, Zap, TrainFront, Home, Users, Ticket, Shield, BookOpen, Gauge, Activity 
 } from 'lucide-react';
 import StudyChat from './StudyChat';
 
@@ -10,12 +10,12 @@ export default function RailwayDreamTunnel({ user, globalMsg, isDarkMode }) {
   const [displayedSpeed, setDisplayedSpeed] = useState(0);
   const [progress, setProgress] = useState(0);
   
-  // Cap progress at 100%
-  const actualScore = Math.min(user?.total_percentage_points || 0, 100);
+  const gpa = user?.total_percentage_points || 0;
+  const actualScore = Math.min(gpa, 100);
 
-  // 🚂 ACCELERATION PHYSICS
+  // 🚂 COCKPIT PHYSICS ENGINE
   useEffect(() => {
-    // 1. Progress Bar
+    // 1. Progress Bar Sync
     const interval = setInterval(() => {
       setProgress(p => {
         if (p >= actualScore) {
@@ -26,272 +26,222 @@ export default function RailwayDreamTunnel({ user, globalMsg, isDarkMode }) {
       });
     }, 50);
 
-    // 2. Speedometer Needle (Simulated lag)
-    const speedTarget = Math.floor(actualScore * 3.5); // Max 350 km/h
+    // 2. Speedometer (Vande Bharat Max 180-350 range)
+    const speedTarget = Math.floor(actualScore * 3.5); 
     const speedInterval = setInterval(() => {
       setDisplayedSpeed(s => {
         if (s >= speedTarget) {
           clearInterval(speedInterval);
           return speedTarget;
         }
-        return s + 4; // Accelerate
+        return s + 5;
       });
     }, 30);
 
     return () => { clearInterval(interval); clearInterval(speedInterval); };
   }, [actualScore]);
 
-  // 🛤️ NEON DREAM MILESTONES
+  // 🛤️ DREAM MILESTONES (The Targets)
   const dreams = [
-    { id: 1, val: 5, icon: <BookOpen size={90} />, label: "SYLLABUS", color: "text-white", border: "border-white", glow: "shadow-white" },
-    { id: 2, val: 25, icon: <Ticket size={90} />, label: "FREE PASS", color: "text-green-400", border: "border-green-500", glow: "shadow-green-500" },
-    { id: 3, val: 50, icon: <Home size={90} />, label: "QUARTERS", color: "text-yellow-400", border: "border-yellow-500", glow: "shadow-yellow-500" },
-    { id: 4, val: 75, icon: <Users size={90} />, label: "RESPECT", color: "text-pink-400", border: "border-pink-500", glow: "shadow-pink-500" },
-    { id: 5, val: 95, icon: <TrainFront size={90} />, label: "OFFICER", color: "text-cyan-400", border: "border-cyan-500", glow: "shadow-cyan-500" },
+    { id: 1, val: 10, icon: <BookOpen size={60} />, label: "SYLLABUS", color: "text-white", glow: "shadow-white" },
+    { id: 2, val: 30, icon: <Ticket size={60} />, label: "RAILWAY PASS", color: "text-green-400", glow: "shadow-green-500" },
+    { id: 3, val: 55, icon: <Home size={60} />, label: "GOVT QUARTERS", color: "text-yellow-400", glow: "shadow-yellow-500" },
+    { id: 4, val: 80, icon: <Users size={60} />, label: "PARENTS' PRIDE", color: "text-pink-400", glow: "shadow-pink-500" },
+    { id: 5, val: 98, icon: <TrainFront size={60} />, label: "OFFICER STATUS", color: "text-cyan-400", glow: "shadow-cyan-500" },
   ];
 
-  // ☕ STREAK LIQUID
   const liquidHeight = Math.min((user.streak_count / 365) * 100, 100);
 
   return (
-    <div className="relative w-full h-[90vh] rounded-[2rem] overflow-hidden border-4 border-[#111] shadow-[0_0_50px_rgba(0,255,255,0.1)] flex flex-col bg-black font-mono select-none">
+    <div className="relative w-full h-[88vh] rounded-[3rem] overflow-hidden border-4 border-slate-800 shadow-[0_0_50px_rgba(0,0,0,1)] flex flex-col bg-black font-mono select-none">
       
       {/* ==============================
-          1. TOP LED BROADCAST BAR
+          1. TOP LED BROADCAST (Bus Style)
       ============================== */}
-      <div className="z-50 bg-[#080808] border-b-2 border-[#333] h-16 flex items-center justify-between relative shadow-2xl">
-        {/* Coffee Capacitor */}
-        <div className="pl-6 flex items-center">
-           <div className="relative w-10 h-10 bg-[#1a1a1a] rounded border border-[#333] overflow-hidden flex items-end shadow-[0_0_15px_rgba(255,100,0,0.4)]">
-              <div className="w-full bg-gradient-to-t from-orange-600 to-yellow-500 transition-all duration-1000" style={{ height: `${liquidHeight}%` }}>
-                <div className="w-full h-1 bg-white/50 animate-pulse"></div>
-              </div>
-              <Coffee className="absolute inset-0 w-full h-full text-white/40 p-2" />
-              <div className="absolute -top-1 -right-1 bg-red-600 text-[9px] px-1.5 py-0.5 rounded-bl-lg font-black text-white">{user.streak_count}</div>
-           </div>
-        </div>
-
-        {/* Scrolling LED Matrix */}
-        <div className="flex-1 mx-6 h-10 bg-[#1a0505] border-2 border-[#521] rounded-sm overflow-hidden relative flex items-center shadow-[inset_0_0_20px_rgba(255,0,0,0.2)]">
-           <div className="absolute inset-0 bg-[url('https://www.transparenttextures.com/patterns/pixel-weave.png')] opacity-20 pointer-events-none"></div>
-           {/* Scanline */}
-           <div className="absolute inset-0 bg-gradient-to-b from-transparent via-red-500/10 to-transparent h-[5px] w-full animate-[scan_2s_linear_infinite] pointer-events-none"></div>
+      <div className="z-50 bg-[#050505] border-b-2 border-white/5 h-14 flex items-center justify-between relative">
+        <div className="flex-1 mx-10 h-8 bg-[#100202] border border-red-900/30 rounded flex items-center overflow-hidden relative">
+           <div className="absolute inset-0 bg-[url('https://www.transparenttextures.com/patterns/pixel-weave.png')] opacity-20 z-20"></div>
            <motion.div 
              animate={{ x: ["100%", "-100%"] }} 
-             transition={{ repeat: Infinity, duration: 12, ease: "linear" }}
-             className="whitespace-nowrap text-red-500 font-bold text-xl tracking-[0.2em] drop-shadow-[0_0_10px_red]"
+             transition={{ repeat: Infinity, duration: 25, ease: "linear" }}
+             className="whitespace-nowrap text-red-600 font-bold text-lg tracking-[0.4em] drop-shadow-[0_0_5px_red]"
            >
-             {globalMsg || `/// NEURAL EXPRESS /// SPEED: ${displayedSpeed} KM/H /// NEXT STATION: NTPC 2026 /// FOCUS MODE ACTIVE ///`}
+             {globalMsg || `LOCO PILOT: ${user.username} /// STATUS: EN ROUTE TO RRB 2026 /// SPEED: ${displayedSpeed} KM/H ///`}
            </motion.div>
         </div>
 
-        {/* Sunshield Toggle */}
-        <div className="pr-6">
-           <button 
-             onClick={() => setIsChatOpen(!isChatOpen)}
-             className={`p-2 rounded-full border-2 transition-all hover:scale-110 active:scale-95 ${isChatOpen ? 'bg-cyan-900/80 text-cyan-400 border-cyan-400 shadow-[0_0_20px_cyan]' : 'bg-[#111] text-gray-500 border-[#333]'}`}
-           >
-             {isChatOpen ? <ChevronUp size={20} /> : <ChevronDown size={20} />}
-           </button>
-        </div>
+        {/* Retractable Sunshield Trigger */}
+        <button 
+          onClick={() => setIsChatOpen(!isChatOpen)}
+          className="mr-10 p-2 bg-cyan-500/10 border border-cyan-500/50 rounded-full text-cyan-400 shadow-[0_0_15px_rgba(6,182,212,0.3)] hover:scale-110 transition-all"
+        >
+          {isChatOpen ? <ChevronUp size={24} /> : <ChevronDown size={24} />}
+        </button>
       </div>
 
       {/* ==============================
-          2. THE NEON 3D ENGINE
+          2. THE 3D TUNNEL (Vande Bharat View)
       ============================== */}
-      <div className="flex-1 relative overflow-hidden bg-black perspective-[800px]">
+      <div className="flex-1 relative overflow-hidden bg-[#020202] perspective-[1000px]">
          
-         {/* THE TRACK (Moving Floor) */}
-         <div 
-            className="absolute inset-0 w-full h-full flex items-end justify-center"
-            style={{ perspective: '500px' }} // Tighter FOV = Faster Speed Feeling
-         >
-            {/* HEADLIGHT BEAM (Brighter) */}
-            <div className="absolute top-[20%] left-1/2 -translate-x-1/2 w-[50vw] h-[100vh] bg-gradient-to-b from-cyan-500/10 via-cyan-900/5 to-transparent blur-2xl pointer-events-none"></div>
-
-            {/* THE MOVING NEON TRACK */}
+         {/* TRACK PLANE */}
+         <div className="absolute inset-0 flex items-end justify-center pointer-events-none">
             <div 
-               className="relative w-[800px] h-[200%] origin-bottom transform-style-3d bg-[#020202]"
-               style={{ transform: 'rotateX(60deg) translateY(0px)' }}
+               className="relative w-[1200px] h-[300%] origin-bottom transform-style-3d bg-[#050505]"
+               style={{ transform: 'rotateX(80deg) translateY(50px)' }}
             >
-               {/* ANIMATED TEXTURE */}
+               {/* HEADLIGHT BEAM */}
+               <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_100%,rgba(6,182,212,0.15)_0%,transparent_70%)] z-10"></div>
+
+               {/* MOVING RAILS & SLEEPERS */}
                <motion.div 
                  animate={{ translateY: [0, 200] }} 
-                 transition={{ repeat: Infinity, duration: 0.12, ease: "linear" }}
-                 className="absolute inset-0 w-full h-full opacity-100"
+                 transition={{ repeat: Infinity, duration: 0.1, ease: "linear" }}
+                 className="absolute inset-0 w-full h-full"
                  style={{
-                   // 🔥 NEON GRADIENT LOGIC
                    backgroundImage: `
                      linear-gradient(90deg, 
-                       #000 15%, 
-                       #0891b2 15%, #22d3ee 17%, #0891b2 19%, /* LEFT NEON RAIL */
-                       #0a0a0a 19%, #0a0a0a 81%,             /* Dark Ballast */
-                       #0891b2 81%, #22d3ee 83%, #0891b2 85%, /* RIGHT NEON RAIL */
-                       #000 85%
+                       transparent 20%, 
+                       #22d3ee 20%, #22d3ee 21%, /* Rail Neon */
+                       transparent 21%, transparent 79%, 
+                       #22d3ee 79%, #22d3ee 80%, /* Rail Neon */
+                       transparent 80%
                      ),
                      repeating-linear-gradient(180deg, 
-                       transparent 0px, 
-                       transparent 80px, 
-                       rgba(6, 182, 212, 0.1) 80px,  /* Faint Neon Sleeper Glow */
-                       rgba(6, 182, 212, 0.1) 120px
+                       rgba(255,255,255,0.02) 0px, 
+                       rgba(255,255,255,0.02) 90px, 
+                       #111 90px, 
+                       #111 110px
                      )
                    `,
-                   backgroundBlendMode: 'screen',
                    backgroundSize: '100% 200px'
                  }}
                />
                
-               {/* CENTER ELECTRIC LINE (Pulse) */}
-               <motion.div 
-                 animate={{ opacity: [0.5, 1, 0.5] }}
-                 transition={{ repeat: Infinity, duration: 0.5 }}
-                 className="absolute left-1/2 top-0 bottom-0 w-1 -translate-x-1/2 bg-cyan-400 shadow-[0_0_30px_cyan]" 
-               />
-            </div>
-
-            {/* TUNNEL WALL LIGHTS (Passing Brighter) */}
-            <div className="absolute inset-0 pointer-events-none">
-                <motion.div 
-                  animate={{ scale: [0.1, 1.5], opacity: [0, 0.8, 0], x: [-100, -600], y: [0, 200] }}
-                  transition={{ repeat: Infinity, duration: 1.2, ease: "linear" }}
-                  className="absolute top-[40%] left-1/2 w-4 h-64 bg-cyan-400 blur-xl rounded-full mix-blend-screen" 
-                />
-                <motion.div 
-                  animate={{ scale: [0.1, 1.5], opacity: [0, 0.8, 0], x: [100, 600], y: [0, 200] }}
-                  transition={{ repeat: Infinity, duration: 1.2, delay: 0.6, ease: "linear" }}
-                  className="absolute top-[40%] left-1/2 w-4 h-64 bg-purple-400 blur-xl rounded-full mix-blend-screen" 
-                />
+               {/* THE NEON GLOW ON TRACK */}
+               <div className="absolute left-[20%] right-[20%] top-0 bottom-0 shadow-[0_0_100px_rgba(6,182,212,0.2)]"></div>
             </div>
          </div>
 
-         {/* 3. DREAM OBJECTS (Stationary Logic with Neon Borders) */}
-         <div className="absolute inset-0 pointer-events-none flex items-center justify-center">
+         {/* DREAM STATIONARY TARGETS */}
+         <div className="absolute inset-0 flex items-center justify-center pointer-events-none z-10">
             {dreams.map((item, i) => {
-               const isUnlocked = progress >= item.val;
-               
+               const isReached = progress >= item.val;
                return (
                  <motion.div
                    key={item.id}
-                   initial={{ scale: 0.1, y: -50, opacity: 0.2 }} 
+                   initial={{ scale: 0.1, z: -100, opacity: 0, y: 0 }}
                    animate={
-                     isUnlocked 
-                       ? { 
-                           scale: [0.1, 15], 
-                           y: [-50, 1500],   
-                           opacity: [1, 0],
-                           filter: ["blur(0px)", "blur(10px)"]
-                         }
-                       : { 
-                           scale: 0.15, 
-                           y: -50,
-                           opacity: 0.8, // Brighter when locked so you can see it
-                           filter: "blur(0px)"
-                         }
+                     isReached 
+                       ? { scale: [0.1, 20], opacity: [1, 0], y: [0, 800], z: [0, 500] }
+                       : { scale: 0.15, opacity: 0.5, y: 0, z: 0 }
                    }
-                   transition={
-                     isUnlocked
-                       ? { duration: 1.2, ease: "easeIn" } // Flyby
-                       : { duration: 0 } // Static
-                   }
-                   className={`absolute flex flex-col items-center z-10`}
+                   transition={isReached ? { duration: 1, ease: "easeIn" } : { duration: 0 }}
+                   className="absolute flex flex-col items-center"
                  >
-                    {/* 🔥 THE NEON BORDER CONTAINER */}
-                    <div className={`
-                      p-8 rounded-full border-[6px] bg-black 
-                      ${item.color} ${item.border} ${item.glow} 
-                      shadow-[0_0_80px_currentColor] 
-                      relative
-                    `}>
-                      <div className="absolute inset-0 bg-white/10 rounded-full animate-pulse"></div>
+                    <div className={`p-8 rounded-2xl border-4 bg-black/90 ${item.color} border-current shadow-[0_0_50px_currentColor] transition-all`}>
                       {item.icon}
                     </div>
-                    
-                    {/* LABEL */}
-                    <div className={`
-                      mt-6 px-6 py-2 bg-black border-2 ${item.border} text-white 
-                      text-lg font-black tracking-widest uppercase shadow-2xl
-                      ${!isUnlocked ? 'opacity-70 scale-90' : 'opacity-100 scale-110'}
-                    `}>
-                      {item.label} <span className="text-xs ml-2 text-gray-400">{item.val}%</span>
+                    <div className="mt-4 px-6 py-1 bg-black/80 border border-white/20 text-white text-xl font-black italic tracking-widest uppercase">
+                      {item.label}
                     </div>
                  </motion.div>
                );
             })}
          </div>
 
+         {/* OVERHEAD CABLE LIGHTS */}
+         <div className="absolute inset-0 pointer-events-none">
+            <motion.div 
+               animate={{ y: [-100, 1000], opacity: [0, 1, 0] }}
+               transition={{ repeat: Infinity, duration: 0.8, ease: "linear" }}
+               className="absolute top-0 left-1/4 w-1 h-40 bg-cyan-500/20 blur-md" 
+            />
+            <motion.div 
+               animate={{ y: [-100, 1000], opacity: [0, 1, 0] }}
+               transition={{ repeat: Infinity, duration: 0.8, delay: 0.4, ease: "linear" }}
+               className="absolute top-0 right-1/4 w-1 h-40 bg-cyan-500/20 blur-md" 
+            />
+         </div>
       </div>
 
       {/* ==============================
-          4. THE COCKPIT (Bullet Train Frame)
+          3. THE VANDE BHARAT DASHBOARD
       ============================== */}
       <div className="absolute inset-0 z-30 pointer-events-none">
          
-         {/* WINDSHIELD FRAME */}
-         <svg className="absolute inset-0 w-full h-full" preserveAspectRatio="none">
-            <defs>
-               <linearGradient id="frameGrad" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="0%" stopColor="#111" />
-                  <stop offset="100%" stopColor="#000" />
-               </linearGradient>
-            </defs>
-            <path 
-               fill="url(#frameGrad)"
-               d="M0,0 L1000,0 L1000,1000 L0,1000 Z M50,50 Q500,-50 950,50 L950,600 Q500,650 50,600 Z" 
-               transform="scale(1, 1)"
-               className="opacity-95"
-            />
-         </svg>
-         
-         {/* CSS Bezel Glow */}
-         <div className="absolute inset-0 border-[50px] border-transparent rounded-[3rem] shadow-[inset_0_0_50px_rgba(0,255,255,0.05)]"></div>
-         
-         {/* DASHBOARD CONSOLE */}
-         <div className="absolute bottom-0 w-full h-48 bg-[#050505] border-t-4 border-[#222] flex items-center justify-between px-12 pb-4 shadow-[0_-10px_50px_black] rounded-t-[40%]">
+         {/* Panoramic Windshield Curve */}
+         <div className="absolute inset-0 border-[60px] border-black rounded-[3rem] shadow-[inset_0_0_100px_black] opacity-90"></div>
+         <div className="absolute top-0 left-0 w-full h-20 bg-gradient-to-b from-black to-transparent"></div>
+
+         {/* MAIN DASH CONSOLE */}
+         <div className="absolute bottom-0 w-full h-56 bg-slate-100 border-t-8 border-blue-600 flex items-center justify-between px-16 pb-6 shadow-[0_-20px_60px_rgba(0,0,0,0.8)] rounded-t-[10rem]">
             
-            {/* Left Diagnostics */}
-            <div className="hidden md:flex flex-col gap-2 opacity-80">
-               <div className="flex gap-1">
-                  <div className="w-10 h-2 bg-cyan-500 rounded-sm animate-pulse shadow-[0_0_10px_cyan]"></div>
-                  <div className="w-4 h-2 bg-cyan-800 rounded-sm"></div>
-                  <div className="w-4 h-2 bg-cyan-800 rounded-sm"></div>
+            {/* LEFT: COFFEE STREAK CUP (Physical object on dash) */}
+            <div className="relative w-28 h-32 flex flex-col items-center justify-end">
+               <div className="relative w-16 h-20 bg-white/10 border-2 border-slate-300 rounded-b-xl overflow-hidden shadow-inner">
+                  {/* The Liquid */}
+                  <motion.div 
+                    initial={{ height: 0 }}
+                    animate={{ height: `${liquidHeight}%` }}
+                    className="absolute bottom-0 w-full bg-gradient-to-t from-orange-800 to-orange-500 shadow-[inset_0_0_10px_rgba(0,0,0,0.5)]"
+                  />
+                  {/* 365 Markings */}
+                  <div className="absolute inset-0 flex flex-col justify-between p-1 opacity-20">
+                     {[...Array(5)].map((_,i) => <div key={i} className="w-full h-[1px] bg-black"></div>)}
+                  </div>
                </div>
-               <p className="text-[9px] text-cyan-600 font-bold uppercase tracking-widest">Hydraulics</p>
+               <div className="mt-2 text-center">
+                  <p className="text-[10px] text-slate-500 font-black tracking-widest">STREAK FUEL</p>
+                  <span className="text-sm font-black text-blue-600">{user.streak_count}d</span>
+               </div>
+               <Coffee className="absolute top-0 text-slate-200 opacity-20" size={48} />
             </div>
 
-            {/* CENTER SPEEDOMETER */}
-            <div className="relative w-44 h-44 -mt-16 bg-[#080808] rounded-full border-8 border-[#1a1a1a] shadow-[0_0_50px_rgba(0,0,0,0.8)] flex items-center justify-center">
-               <div className="absolute inset-0 rounded-full border-[2px] border-cyan-500/30"></div>
-               {/* Tick Marks */}
-               {[...Array(12)].map((_,i) => (
-                  <div key={i} className="absolute w-1 h-3 bg-gray-600 top-2" style={{ transform: `rotate(${i * 30}deg)`, transformOrigin: '50% 78px' }}></div>
-               ))}
+            {/* CENTER: SPEED CLUSTER */}
+            <div className="relative w-56 h-56 -mt-28 bg-[#0a0a0a] rounded-full border-[12px] border-slate-200 shadow-2xl flex items-center justify-center overflow-hidden">
+               {/* Digital Ring */}
+               <div className="absolute inset-0 rounded-full border-t-4 border-cyan-400 animate-spin duration-[3s]"></div>
                
-               <div className="text-center z-10 mt-6">
-                  <span className="text-6xl font-black text-cyan-400 font-mono tracking-tighter drop-shadow-[0_0_15px_cyan]">{displayedSpeed}</span>
-                  <div className="text-[10px] text-gray-500 font-bold mt-1">KM/H</div>
+               <div className="text-center z-10">
+                  <p className="text-[10px] text-cyan-500/50 font-bold tracking-[0.3em] mb-1">NEURAL VELOCITY</p>
+                  <span className="text-7xl font-black text-white font-mono tracking-tighter drop-shadow-[0_0_15px_cyan]">{displayedSpeed}</span>
+                  <div className="flex items-center justify-center gap-2 mt-2">
+                     <span className="text-xs text-cyan-400 font-bold">KM/H</span>
+                     <div className="w-12 h-1.5 bg-slate-800 rounded-full overflow-hidden">
+                        <motion.div animate={{ width: `${progress}%` }} className="h-full bg-red-500 shadow-[0_0_5px_red]" />
+                     </div>
+                  </div>
                </div>
-               
-               {/* RPM Ring */}
-               <div 
-                 className="absolute inset-3 rounded-full border-b-[6px] border-cyan-500 opacity-80 blur-[1px]"
-                 style={{ transform: `rotate(${progress * 2.4}deg)`, transition: 'transform 0.1s linear' }}
-               ></div>
             </div>
 
-            {/* Right Diagnostics */}
-            <div className="hidden md:flex flex-col text-right">
-               <div className="flex items-center justify-end gap-3 text-yellow-400">
-                  <Zap size={24} className="fill-current animate-bounce" />
-                  <span className="text-3xl font-black">{progress}%</span>
+            {/* RIGHT: SYSTEM TELEMETRY */}
+            <div className="flex flex-col items-end gap-4 pr-4">
+               <div className="flex items-center gap-3">
+                  <div className="text-right">
+                     <p className="text-[10px] text-slate-400 font-black uppercase tracking-widest">Efficiency</p>
+                     <p className="text-3xl font-black text-blue-700 italic">{progress}%</p>
+                  </div>
+                  <div className="p-3 bg-blue-600 rounded-2xl text-white shadow-lg shadow-blue-500/30">
+                     <Zap size={24} className="animate-pulse" />
+                  </div>
                </div>
-               <p className="text-[9px] text-gray-500 font-bold uppercase tracking-widest">Neural Load</p>
+               
+               <div className="flex gap-2">
+                  <div className="w-10 h-10 bg-slate-200 rounded-xl border border-slate-300 flex items-center justify-center shadow-inner">
+                     <Shield size={20} className="text-blue-500" />
+                  </div>
+                  <div className="w-10 h-10 bg-slate-200 rounded-xl border border-slate-300 flex items-center justify-center shadow-inner">
+                     <Activity size={20} className="text-green-500" />
+                  </div>
+               </div>
             </div>
 
          </div>
       </div>
 
       {/* ==============================
-          5. THE SUNSHIELD (Chat)
+          4. RETRACTABLE CHAT VISOR
       ============================== */}
       <AnimatePresence>
         {isChatOpen && (
@@ -299,16 +249,18 @@ export default function RailwayDreamTunnel({ user, globalMsg, isDarkMode }) {
             initial={{ y: "-100%" }}
             animate={{ y: 0 }}
             exit={{ y: "-100%" }}
-            transition={{ type: "spring", stiffness: 120, damping: 20 }}
-            className="absolute top-0 right-4 md:right-20 w-[90%] md:w-[400px] h-[70%] bg-[#0a0f18] border-x-4 border-b-4 border-cyan-800 rounded-b-3xl shadow-[0_0_100px_black] z-40 flex flex-col pointer-events-auto"
+            transition={{ type: "spring", stiffness: 100, damping: 18 }}
+            className="absolute top-0 right-10 w-[420px] h-[75%] bg-[#080b12] border-x-4 border-b-4 border-cyan-600 rounded-b-[2rem] shadow-[0_0_100px_black] z-[60] flex flex-col pointer-events-auto"
           >
-             {/* Hinge */}
-             <div className="h-8 bg-[#111] w-full border-b border-[#333] flex items-center justify-center gap-2">
-                <div className="w-16 h-1.5 bg-[#333] rounded-full"></div>
+             {/* Visor Hinge Visual */}
+             <div className="h-10 bg-[#1a1a1a] w-full border-b border-white/10 flex items-center justify-center gap-20">
+                <div className="w-2 h-full bg-black/50"></div>
+                <div className="w-20 h-1.5 bg-cyan-900/50 rounded-full"></div>
+                <div className="w-2 h-full bg-black/50"></div>
              </div>
 
              <div className="flex-1 overflow-hidden relative">
-                {/* Chat Interface */}
+                <div className="absolute inset-0 bg-cyan-500/5 pointer-events-none z-10 mix-blend-overlay"></div>
                 <StudyChat user={user} isTunnel={true} />
              </div>
           </motion.div>
