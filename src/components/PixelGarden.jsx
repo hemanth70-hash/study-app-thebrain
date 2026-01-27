@@ -1,70 +1,87 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { MessageSquare, Lock, X } from 'lucide-react';
+import { MessageSquare, Send, X } from 'lucide-react';
 
 // --- 1. CHARACTER DATABASE ---
 const CHARACTERS = [
-  { 
-    id: 'shinchan', 
-    name: 'Shinchan', 
-    sprite: '👦🏻', 
-    pet: '🐶', // Shiro
+  {
+    id: 'shinchan',
+    name: 'Shinchan',
+    img: 'https://upload.wikimedia.org/wikipedia/en/4/4c/Shin_Chan_search_for_balls.png',
+    width: 45,
     unlock: { type: 'default' },
-    personalities: {
-      happy: ["Oho! Beautiful lady!", "Choco chips time!", "Action Kamen is starting!"],
-      sad: ["Miss Matsuzaka is scolding me...", "No choco chips?", "Mom is angry..."],
-      troll: ["To be or not to be, that is not the question.", "Are you studying or sleeping?", "Hehe!"]
+    brain: (text, score) => {
+      if (score < 40) return "Mom will kill me... hide the report card!";
+      if (score > 80) return "Oho! I'm a genius! Chocobi time!";
+      return "To be or not to be... Hey, is Action Kamen on?";
     }
   },
-  { 
-    id: 'doraemon', 
-    name: 'Doraemon', 
-    sprite: '🐱🤖', 
-    pet: '👓', // Nobita (lol)
-    unlock: { type: 'gpa', val: 60, desc: 'Unlock at 60% GPA' },
-    personalities: {
-      happy: ["Dorayaki time!", "I have a gadget for this!", "Great job, Nobita... I mean user!"],
-      sad: ["My gadgets are broken...", "I saw a mouse!", "Don't give up!"],
-      troll: ["Do you want the 'Instant Study' bread?", "Anywhere Door to success is hard work."]
+  {
+    id: 'doraemon',
+    name: 'Doraemon',
+    img: 'https://upload.wikimedia.org/wikipedia/en/c/c8/Doraemon_volume_1_cover.jpg',
+    width: 50,
+    unlock: { type: 'gpa', val: 60, desc: 'Unlock: 60% GPA' },
+    brain: (text, score) => {
+      if (score < 40) return "Nobita!! ...I mean User! Don't give up! Use the 'Focus Headband'!";
+      if (score > 80) return "I knew you could do it! Let's eat Dorayaki!";
+      return "I'm polishing my gadgets. Do you need help?";
     }
   },
-  { 
-    id: 'ben10', 
-    name: 'Ben 10', 
-    sprite: '⌚💚', 
-    pet: '🛸', // Ship
-    unlock: { type: 'streak', val: 7, desc: 'Unlock at 7 Day Streak' },
-    personalities: {
-      happy: ["It's Hero Time!", "Going XLR8 on this syllabus!", "Upgrade complete!"],
-      sad: ["Omnitrix is recharging...", "Grandpa Max is disappointed.", "Vilgax is winning."],
-      troll: ["Did you just use Grey Matter?", "I don't need Four Arms to finish this chapter."]
-    }
-  },
-  { 
-    id: 'tomjerry', 
-    name: 'Tom & Jerry', 
-    sprite: '🐱🐭', 
-    pet: '🧀', 
-    unlock: { type: 'gpa', val: 80, desc: 'Unlock at 80% GPA' },
-    personalities: {
-      happy: ["Peace treaty signed!", "Cheese for everyone!", "*Chase sequence paused*"],
-      sad: ["Ouch! My tail!", "Spike is awake...", "Trap failed."],
-      troll: ["*Bonk*", "Catch me if you can!", "Jerry stole your pen."]
+  {
+    id: 'ben10',
+    name: 'Ben 10',
+    img: 'https://upload.wikimedia.org/wikipedia/en/c/c6/Ben_Tennyson.png',
+    width: 35,
+    unlock: { type: 'streak', val: 7, desc: 'Unlock: 7 Day Streak' },
+    brain: (text, score) => {
+      if (score < 40) return "We took a hit! Omnitrix needs a recharge. Retreat and study!";
+      if (score > 80) return "Hero Time! You went totally Alien X on that test!";
+      return "Vilgax is plotting something. Stay sharp.";
     }
   }
 ];
 
-export default function PixelGarden({ gpa, streak }) {
-  const [activeChars, setActiveChars] = useState([]);
-  const [plants, setPlants] = useState([]);
-  const [chatBubble, setChatBubble] = useState(null); // { charId, text, mood }
-  const [inputMode, setInputMode] = useState(false); // If user wants to type back
-  const [userMsg, setUserMsg] = useState("");
-  const containerRef = useRef(null);
+export default function PixelGarden({ gpa, streak, dailyScore }) {
+  const [chars, setChars] = useState([]);
+  const [chatTarget, setChatTarget] = useState(null);
+  const [chatHistory, setChatHistory] = useState([]);
+  const [userVal, setUserVal] = useState("");
+  
+  // --- SKY ENGINE STATE ---
+  const [timeOfDay, setTimeOfDay] = useState('day'); // 'day' or 'night'
+  const [weather, setWeather] = useState('clear'); // 'clear', 'rain', 'storm'
+  const [stars, setStars] = useState([]);
 
-  // --- 2. INITIALIZE & UNLOCK CHECKER ---
+  // --- 1. INITIALIZE WORLD & WEATHER ---
   useEffect(() => {
-    // Determine unlocked characters
+    // A. Check Time
+    const hour = new Date().getHours();
+    const isNight = hour < 6 || hour >= 18;
+    setTimeOfDay(isNight ? 'night' : 'day');
+
+    // B. Check Weather (Driven by Daily Score)
+    // If dailyScore is null (no test today), default to clear
+    if (dailyScore !== null) {
+      if (dailyScore < 40) setWeather('storm');
+      else if (dailyScore < 60) setWeather('rain');
+      else setWeather('clear');
+    } else {
+      setWeather('clear');
+    }
+
+    // C. Generate Stars (Only needed if night or storm)
+    const starCount = 30;
+    const starArray = Array.from({ length: starCount }).map((_, i) => ({
+      id: i,
+      x: Math.random() * 100,
+      y: Math.random() * 60, // Top 60% of screen
+      size: Math.random() * 2 + 1,
+      blink: Math.random() * 2 + 1
+    }));
+    setStars(starArray);
+
+    // D. Spawn Characters
     const unlocked = CHARACTERS.filter(c => {
       if (c.unlock.type === 'default') return true;
       if (c.unlock.type === 'gpa') return gpa >= c.unlock.val;
@@ -72,191 +89,206 @@ export default function PixelGarden({ gpa, streak }) {
       return false;
     });
 
-    // Spawn them
-    const spawned = unlocked.map((char, i) => ({
-      ...char,
-      instanceId: i,
-      x: 20 + (i * 60), // Spread them out
-      y: 80,
-      dir: 1,
-      mood: gpa > 70 ? 'happy' : gpa < 40 ? 'sad' : 'troll'
-    }));
-    setActiveChars(spawned);
-  }, [gpa, streak]);
+    setChars(unlocked.map((c, i) => ({
+      ...c, instanceId: i, x: 10 + (i * 25), y: 80, dir: 1, state: 'WALK', stateTimer: Math.random() * 100
+    })));
 
-  // --- 3. MOVEMENT LOOP ---
+  }, [gpa, streak, dailyScore]);
+
+  // --- 2. AI BEHAVIOR LOOP ---
   useEffect(() => {
-    const interval = setInterval(() => {
-      setActiveChars(prev => prev.map(char => {
-        // If chatting, don't move
-        if (chatBubble && chatBubble.charId === char.id) return char;
+    const loop = setInterval(() => {
+      setChars(prev => prev.map(char => {
+        if (chatTarget && chatTarget.instanceId === char.instanceId) return { ...char, state: 'IDLE' };
 
-        let newX = char.x + (char.dir * 1); // Slower, chill walk
-        let newDir = char.dir;
-        
-        // Boundaries (0 to 90% width)
-        if (newX > 90) newDir = -1;
-        if (newX < 2) newDir = 1;
-        
-        // Random stop/turn
-        if (Math.random() > 0.98) newDir = Math.random() > 0.5 ? 1 : -1;
+        let { x, dir, state, stateTimer } = char;
+        let newState = state;
+        let newTimer = stateTimer - 1;
 
-        return { ...char, x: newX, dir: newDir };
+        // Forced State by Weather
+        if (weather === 'storm' && Math.random() > 0.95) newState = 'SAD';
+
+        if (newTimer <= 0) {
+          const roll = Math.random();
+          if (roll < 0.4) newState = 'WALK';
+          else if (roll < 0.7) newState = 'IDLE';
+          else if (roll < 0.9) newState = 'SIT';
+          
+          newTimer = 20 + Math.random() * 50;
+          if (Math.random() > 0.5) dir *= -1;
+        }
+
+        if (newState === 'WALK') {
+          x += (dir * 0.3); // Speed
+          if (x > 90) { x = 90; dir = -1; }
+          if (x < 0) { x = 0; dir = 1; }
+        }
+
+        return { ...char, x, dir, state: newState, stateTimer: newTimer };
       }));
-    }, 100);
-    return () => clearInterval(interval);
-  }, [chatBubble]);
+    }, 50);
+    return () => clearInterval(loop);
+  }, [chatTarget, weather]);
 
-  // --- 4. INTERACTION: TALK TO CHAR ---
-  const handleCharClick = (char) => {
-    // Pick a random line based on current mood
-    const lines = char.personalities[char.mood];
-    const text = lines[Math.floor(Math.random() * lines.length)];
+  // --- 3. CHAT LOGIC ---
+  const sendMessage = () => {
+    if (!userVal.trim()) return;
+    const newHistory = [...chatHistory, { sender: 'user', text: userVal }];
+    setChatHistory(newHistory);
+    const input = userVal; 
+    setUserVal("");
     
-    setChatBubble({ charId: char.id, text, mood: char.mood });
+    // Pass dailyScore to brain if available, else GPA
+    const scoreToUse = dailyScore !== null ? dailyScore : gpa;
+
     setTimeout(() => {
-        if(!inputMode) setChatBubble(null); // Auto-close if user doesn't start typing
-    }, 4000);
-  };
-
-  // --- 5. INTERACTION: PLANTING ---
-  const handlePlant = (e) => {
-    if (chatBubble) return; // Don't plant if chatting
-    const rect = e.currentTarget.getBoundingClientRect();
-    const xPct = ((e.clientX - rect.left) / rect.width) * 100;
-    
-    // Plant emoji array
-    const flora = ['🌲', '🌳', '🌻', '🌷', '🍄', '🌾'];
-    const plant = flora[Math.floor(Math.random() * flora.length)];
-    
-    setPlants(prev => [...prev, { id: Date.now(), x: xPct, plant }]);
+      const response = chatTarget.brain(input, scoreToUse);
+      setChatHistory(prev => [...prev, { sender: 'bot', text: response }]);
+    }, 1000);
   };
 
   return (
-    <div 
-      ref={containerRef}
-      className="relative w-full h-40 bg-[#0d1b2a] rounded-xl overflow-hidden border border-slate-800 cursor-crosshair group mt-6 select-none"
-      onClick={handlePlant}
-    >
-      {/* --- ENVIRONMENT LAYER --- */}
+    <div className="relative w-full h-64 rounded-xl overflow-hidden border-2 border-slate-800 mt-6 font-mono select-none group transition-all duration-1000">
       
-      {/* Sky & Weather */}
-      <div className={`absolute inset-0 transition-colors duration-1000 ${gpa > 50 ? 'bg-gradient-to-b from-sky-900/40 to-[#0d1b2a]' : 'bg-[#050505]'}`}></div>
-      
-      {/* Sun/Moon */}
-      <motion.div 
-        animate={{ y: [0, -5, 0], rotate: 360 }}
-        transition={{ duration: 20, repeat: Infinity, ease: "linear" }}
-        className={`absolute top-4 right-8 w-10 h-10 rounded-full blur-md transition-all duration-1000 flex items-center justify-center text-xl
-          ${gpa > 50 ? 'bg-yellow-400/20 shadow-[0_0_30px_orange]' : 'bg-slate-400/10 shadow-[0_0_15px_white]'}`}
-      >
-        {gpa > 50 ? '☀️' : '🌙'}
-      </motion.div>
+      {/* ==============================
+          LAYER 1: CELESTIAL SKY
+      ============================== */}
+      <div className={`absolute inset-0 transition-colors duration-2000
+        ${timeOfDay === 'day' && weather === 'clear' ? 'bg-gradient-to-b from-sky-400 to-blue-200' : ''}
+        ${timeOfDay === 'night' && weather === 'clear' ? 'bg-gradient-to-b from-[#0b1026] to-[#2b3266]' : ''}
+        ${weather === 'rain' ? 'bg-gradient-to-b from-slate-700 to-slate-900' : ''}
+        ${weather === 'storm' ? 'bg-[#1a1a1a]' : ''}
+      `}>
+         {/* LIGHTNING FLASH */}
+         {weather === 'storm' && (
+           <div className="absolute inset-0 bg-white opacity-0 animate-[flash_5s_infinite]"></div>
+         )}
+      </div>
 
-      {/* Rain (Low GPA) */}
-      {gpa < 40 && <div className="absolute inset-0 bg-[url('https://www.transparenttextures.com/patterns/diagmonds-light.png')] opacity-10 animate-pulse"></div>}
-
-      {/* Ground */}
-      <div className="absolute bottom-0 w-full h-10 bg-gradient-to-t from-[#143620] to-[#1a4d2e] border-t-4 border-[#2d6a4f]"></div>
-
-      {/* Plants */}
-      {plants.map(p => (
-        <motion.div key={p.id} initial={{ scale: 0, y: 10 }} animate={{ scale: 1, y: 0 }} className="absolute bottom-4 pointer-events-none text-xl" style={{ left: `${p.x}%` }}>
-          {p.plant}
-        </motion.div>
+      {/* STARS (Only visible at Night or during Storms) */}
+      {(timeOfDay === 'night' || weather === 'storm') && stars.map(star => (
+        <div 
+          key={star.id}
+          className="absolute bg-white rounded-full"
+          style={{
+            left: `${star.x}%`,
+            top: `${star.y}%`,
+            width: `${star.size}px`,
+            height: `${star.size}px`,
+            opacity: Math.random(), // Twinkle
+            animation: `twinkle ${star.blink}s infinite ease-in-out`
+          }}
+        ></div>
       ))}
 
-      {/* --- CHARACTERS LAYER --- */}
-      {activeChars.map(char => (
-        <motion.div 
-          key={char.id}
-          animate={{ left: `${char.x}%` }}
-          transition={{ duration: 0.1, ease: "linear" }}
-          className="absolute bottom-6 flex flex-col items-center cursor-pointer z-10 hover:scale-110 transition-transform"
-          onClick={(e) => { e.stopPropagation(); handleCharClick(char); }}
-        >
-           {/* Character Sprite */}
-           <div className={`text-3xl filter drop-shadow-lg ${char.dir === -1 ? 'scale-x-[-1]' : ''}`}>
-             {char.sprite}
-           </div>
-           
-           {/* Pet Follower */}
+      {/* HEAVENLY BODIES (Sun / Moon) */}
+      <div className="absolute top-0 left-0 w-full h-full pointer-events-none overflow-hidden">
+         {/* SUN */}
+         <motion.div 
+           animate={{ 
+             y: timeOfDay === 'day' ? 20 : 200, 
+             x: timeOfDay === 'day' ? [0, 50] : 0 
+           }} 
+           transition={{ duration: 10 }}
+           className={`absolute top-4 right-10 w-16 h-16 rounded-full bg-yellow-400 shadow-[0_0_60px_orange] blur-sm transition-opacity duration-1000 ${weather !== 'clear' ? 'opacity-20' : 'opacity-100'}`}
+         ></motion.div>
+
+         {/* MOON */}
+         <motion.div 
+           animate={{ 
+             y: timeOfDay === 'night' ? 30 : 200 
+           }} 
+           className="absolute top-4 right-16 w-12 h-12 rounded-full bg-slate-200 shadow-[0_0_20px_white]"
+         >
+            {/* Craters */}
+            <div className="absolute top-2 left-3 w-2 h-2 bg-slate-300 rounded-full opacity-50"></div>
+            <div className="absolute bottom-3 right-4 w-3 h-3 bg-slate-300 rounded-full opacity-50"></div>
+         </motion.div>
+      </div>
+
+      {/* CLOUDS (Moving) */}
+      <div className="absolute top-10 left-0 w-full h-20 opacity-80 pointer-events-none">
+         <motion.div 
+           animate={{ x: ["-100%", "100%"] }} 
+           transition={{ repeat: Infinity, duration: 60, ease: "linear" }}
+           className="absolute top-0 w-32 h-12 bg-white/20 rounded-full blur-xl"
+         ></motion.div>
+         {weather !== 'clear' && (
            <motion.div 
-             animate={{ x: char.dir * -20 }} // Pet follows behind
-             className={`absolute bottom-0 text-lg opacity-80 ${char.dir === -1 ? 'scale-x-[-1]' : ''}`}
-           >
-             {char.pet}
-           </motion.div>
+             animate={{ x: ["-100%", "100%"] }} 
+             transition={{ repeat: Infinity, duration: 30, ease: "linear" }}
+             className="absolute top-4 w-full h-32 bg-slate-900/50 blur-2xl"
+           ></motion.div>
+         )}
+      </div>
 
-           {/* Name Tag (Hover) */}
-           <div className="opacity-0 group-hover:opacity-100 absolute -top-4 text-[8px] bg-black/50 text-white px-1 rounded whitespace-nowrap pointer-events-none">
-             {char.name}
-           </div>
+      {/* RAIN PARTICLES */}
+      {(weather === 'rain' || weather === 'storm') && (
+        <div className="absolute inset-0 bg-[url('https://www.transparenttextures.com/patterns/diagmonds-light.png')] opacity-20 animate-[slide_0.5s_linear_infinite]"></div>
+      )}
+
+      {/* GROUND */}
+      <div className="absolute bottom-0 w-full h-16 bg-[#2d6a4f] border-t-8 border-[#40916c] relative z-20">
+         {/* Grass Texture */}
+         <div className="absolute inset-0 opacity-30 bg-[radial-gradient(circle,rgba(0,0,0,0.2)_1px,transparent_1px)] bg-[length:4px_4px]"></div>
+      </div>
+
+      {/* ==============================
+          LAYER 2: CHARACTERS
+      ============================== */}
+      {chars.map(char => (
+        <motion.div 
+          key={char.instanceId}
+          animate={{ left: `${char.x}%` }}
+          transition={{ duration: 0.05, ease: "linear" }}
+          className="absolute bottom-12 flex flex-col items-center cursor-pointer z-30 hover:scale-110 transition-transform"
+          onClick={() => { setChatTarget(char); setChatHistory([{sender:'bot', text: char.brain("hello", dailyScore)}]); }}
+        >
+           {/* Emotion Bubble */}
+           {weather === 'storm' && <div className="absolute -top-8 text-xl animate-bounce">😨</div>}
+           {dailyScore > 80 && <div className="absolute -top-8 text-xl animate-bounce">🥳</div>}
+
+           {/* Sprite */}
+           <img 
+             src={char.img} 
+             alt={char.name}
+             style={{ height: `${char.width}px` }}
+             className={`drop-shadow-2xl transition-transform duration-200 
+               ${char.dir === -1 ? 'scale-x-[-1]' : ''}
+               ${char.state === 'WALK' ? 'animate-bounce' : ''}
+               ${char.state === 'SIT' ? 'translate-y-4' : ''}
+             `}
+           />
         </motion.div>
       ))}
 
-      {/* --- CHAT BUBBLE SYSTEM --- */}
+      {/* ==============================
+          LAYER 3: CHAT UI
+      ============================== */}
       <AnimatePresence>
-        {chatBubble && (
-          <motion.div 
-            initial={{ scale: 0, opacity: 0 }}
-            animate={{ scale: 1, opacity: 1 }}
-            exit={{ scale: 0, opacity: 0 }}
-            className="absolute top-4 left-1/2 -translate-x-1/2 max-w-[90%] bg-white/10 backdrop-blur-md border border-white/20 p-3 rounded-xl z-50 text-center shadow-2xl"
-            onClick={(e) => e.stopPropagation()} // Prevent planting click through
-          >
-             <div className="text-white text-xs font-bold mb-1 flex items-center justify-center gap-2">
-               {CHARACTERS.find(c => c.id === chatBubble.charId)?.sprite} SAYS:
+        {chatTarget && (
+          <motion.div initial={{ y: 100 }} animate={{ y: 0 }} exit={{ y: 100 }} className="absolute inset-0 bg-black/90 z-50 flex flex-col p-4">
+             <div className="flex justify-between items-center border-b border-white/20 pb-2 mb-2">
+                <div className="flex items-center gap-2">
+                   <img src={chatTarget.img} className="w-8 h-8 object-contain bg-white/10 rounded-full" />
+                   <span className="text-white font-bold">{chatTarget.name}</span>
+                </div>
+                <button onClick={() => setChatTarget(null)} className="text-red-400"><X size={18}/></button>
              </div>
-             <p className="text-sm text-white font-medium mb-2">"{chatBubble.text}"</p>
-             
-             {/* Reply Input */}
-             {!inputMode ? (
-               <button 
-                 onClick={() => setInputMode(true)}
-                 className="text-[10px] bg-blue-600 hover:bg-blue-500 text-white px-3 py-1 rounded-full flex items-center gap-1 mx-auto"
-               >
-                 <MessageSquare size={10} /> Reply
-               </button>
-             ) : (
-               <div className="flex gap-1">
-                 <input 
-                   autoFocus
-                   value={userMsg}
-                   onChange={(e) => setUserMsg(e.target.value)}
-                   className="bg-black/50 text-white text-xs rounded px-2 py-1 outline-none w-32"
-                   placeholder="Say something..."
-                   onKeyDown={(e) => {
-                     if (e.key === 'Enter') {
-                       setChatBubble({ ...chatBubble, text: "Oho! Nice to talk to you!" }); // Simple mock response
-                       setInputMode(false);
-                       setUserMsg("");
-                       setTimeout(() => setChatBubble(null), 2000);
-                     }
-                   }}
-                 />
-                 <button onClick={() => setInputMode(false)} className="text-red-400"><X size={12}/></button>
-               </div>
-             )}
+             <div className="flex-1 overflow-y-auto custom-scrollbar space-y-2 mb-2">
+                {chatHistory.map((m, i) => (
+                  <div key={i} className={`flex ${m.sender === 'user' ? 'justify-end' : 'justify-start'}`}>
+                     <div className={`p-2 rounded-lg text-xs max-w-[80%] ${m.sender === 'user' ? 'bg-blue-600' : 'bg-slate-700 text-white'}`}>{m.text}</div>
+                  </div>
+                ))}
+             </div>
+             <div className="flex gap-2">
+                <input autoFocus value={userVal} onChange={(e) => setUserVal(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && sendMessage()} className="flex-1 bg-slate-800 rounded px-3 py-2 text-xs text-white outline-none" placeholder="Type..." />
+                <button onClick={sendMessage} className="bg-blue-600 p-2 rounded text-white"><Send size={14} /></button>
+             </div>
           </motion.div>
         )}
       </AnimatePresence>
-
-      {/* --- LOCKED CHARACTERS PREVIEW (Bottom Right) --- */}
-      <div className="absolute bottom-2 right-2 flex gap-1 opacity-50 hover:opacity-100 transition-opacity">
-        {CHARACTERS.filter(c => !activeChars.find(a => a.id === c.id)).map(locked => (
-          <div key={locked.id} className="relative group/lock">
-             <div className="w-6 h-6 bg-black/50 rounded flex items-center justify-center text-sm grayscale">
-               {locked.sprite}
-             </div>
-             <div className="absolute -top-1 -right-1 text-red-500 bg-black rounded-full p-[1px]"><Lock size={8} /></div>
-             {/* Tooltip */}
-             <div className="absolute bottom-full right-0 mb-1 w-max bg-black text-white text-[9px] px-2 py-1 rounded hidden group-hover/lock:block z-50">
-               {locked.unlock.desc}
-             </div>
-          </div>
-        ))}
-      </div>
 
     </div>
   );
