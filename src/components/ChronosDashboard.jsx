@@ -1,259 +1,404 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
-  Calendar, CheckCircle, TrendingUp, Trophy, Target, Clock, Plus, Flame, Newspaper, Quote
+  Calendar, CheckCircle, TrendingUp, Trophy, Target, Plus, 
+  Flame, Download, ChevronRight, AlertTriangle, FileText, X
 } from 'lucide-react';
-import { supabase } from '../supabaseClient';
 
 export default function ChronosDashboard({ user }) {
+  // --- STATE ---
   const [currentDate, setCurrentDate] = useState(new Date());
-  const [goals, setGoals] = useState([
-    { id: 1, title: "Finish Algebra Syllabus", date: "2026-02-15", completed: false },
-    { id: 2, title: "Mock Test 50 Marks", date: "2026-02-20", completed: false }
-  ]);
+  const [goals, setGoals] = useState([]);
+  const [monthlyPlan, setMonthlyPlan] = useState(null);
+  const [showPlanModal, setShowPlanModal] = useState(false);
+  const [showReportModal, setShowReportModal] = useState(false);
   const [newGoal, setNewGoal] = useState("");
-  
-  // 🧠 CORE DATA
+  const [examDate, setExamDate] = useState("2026-08-01"); // Default Target
+
+  // --- PERSISTENCE ENGINE (Local Storage) ---
+  useEffect(() => {
+    const storedGoals = localStorage.getItem('chronos_goals');
+    const storedPlan = localStorage.getItem(`chronos_plan_${currentDate.getMonth()}_${currentDate.getFullYear()}`);
+    
+    if (storedGoals) setGoals(JSON.parse(storedGoals));
+    
+    if (storedPlan) {
+      setMonthlyPlan(JSON.parse(storedPlan));
+    } else {
+      // 🚨 TRIGGER NEW MONTH PROTOCOL
+      setShowPlanModal(true);
+    }
+  }, []);
+
+  useEffect(() => {
+    localStorage.setItem('chronos_goals', JSON.stringify(goals));
+  }, [goals]);
+
+  // --- CALCULATIONS ENGINE ---
   const currentGPA = parseFloat((user?.total_percentage_points || 0).toFixed(1));
-  const targetGPA = 95.0; // The "Safe Score" for RRB
-  const daysRemaining = 180; // Example countdown to Exam
-  const gap = targetGPA - currentGPA;
-  const requiredRate = gap > 0 ? (gap / daysRemaining).toFixed(2) : 0;
+  const targetGPA = 95.0;
+  const daysToExam = Math.max(1, Math.ceil((new Date(examDate) - new Date()) / (1000 * 60 * 60 * 24)));
+  const gap = Math.max(0, targetGPA - currentGPA);
+  const requiredDailyGrowth = (gap / daysToExam).toFixed(3); // High precision
+  
+  // Monthly Stats
+  const completedGoals = goals.filter(g => g.completed).length;
+  const totalGoals = goals.length;
+  const monthlyEfficiency = totalGoals === 0 ? 0 : Math.round((completedGoals / totalGoals) * 100);
 
-  // 📰 MOCK NEWS FEED (Victory Feed)
-  const newsFeed = [
-    { type: "news", text: "RRB NTPC Notification expected next month. 5000+ Seats." },
-    { type: "win", text: "Aspirant 'Ravi_99' cleared Station Master cutoff with 89%!" },
-    { type: "quote", text: "The pain of discipline is far less than the pain of regret." },
-    { type: "news", text: "General Awareness weighting increased in Mains." },
-    { type: "win", text: "User 'SpeedDemon' maintained a 100-day streak!" }
-  ];
-
-  // 📅 CALENDAR GENERATION
-  const daysInMonth = new Date(currentDate.getFullYear(), currentDate.getMonth() + 1, 0).getDate();
-  const calendarDays = Array.from({ length: daysInMonth }, (_, i) => i + 1);
+  // --- ACTIONS ---
+  const saveMonthlyPlan = (planData) => {
+    const key = `chronos_plan_${currentDate.getMonth()}_${currentDate.getFullYear()}`;
+    localStorage.setItem(key, JSON.stringify(planData));
+    setMonthlyPlan(planData);
+    setShowPlanModal(false);
+  };
 
   const addGoal = () => {
     if (!newGoal.trim()) return;
-    setGoals([...goals, { id: Date.now(), title: newGoal, date: new Date().toISOString().split('T')[0], completed: false }]);
+    const g = { 
+      id: Date.now(), 
+      title: newGoal, 
+      date: new Date().toISOString().split('T')[0], 
+      completed: false,
+      impact: "+0.5%" // Mock impact calc
+    };
+    setGoals([...goals, g]);
     setNewGoal("");
   };
 
+  const toggleGoal = (id) => {
+    setGoals(goals.map(g => g.id === id ? { ...g, completed: !g.completed } : g));
+  };
+
+  // --- PDF GENERATOR (Native Print) ---
+  const downloadReport = () => {
+    const printContent = document.getElementById('printable-report');
+    const windowUrl = 'about:blank';
+    const uniqueName = new Date();
+    const windowName = 'Print' + uniqueName.getTime();
+    const printWindow = window.open(windowUrl, windowName, 'left=50000,top=50000,width=0,height=0');
+
+    printWindow.document.write(`
+      <html>
+        <head>
+          <title>Monthly Performance Report - ${user.username}</title>
+          <style>
+            body { font-family: 'Courier New', monospace; padding: 40px; color: #000; }
+            .header { border-bottom: 2px solid #000; padding-bottom: 20px; margin-bottom: 30px; }
+            .title { font-size: 24px; font-weight: bold; text-transform: uppercase; }
+            .stat-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-bottom: 40px; }
+            .stat-box { border: 1px solid #ccc; padding: 15px; }
+            .stat-label { font-size: 10px; text-transform: uppercase; color: #666; }
+            .stat-value { font-size: 20px; font-weight: bold; }
+            .footer { margin-top: 50px; font-size: 10px; text-align: center; border-top: 1px solid #ccc; padding-top: 10px; }
+          </style>
+        </head>
+        <body>
+          <div class="header">
+            <div class="title">Chronos Protocol // Monthly Report</div>
+            <div>Agent: ${user.username} | Date: ${new Date().toLocaleDateString()}</div>
+          </div>
+          <div class="stat-grid">
+            <div class="stat-box">
+              <div class="stat-label">Current GPA</div>
+              <div class="stat-value">${currentGPA}%</div>
+            </div>
+            <div class="stat-box">
+              <div class="stat-label">Monthly Efficiency</div>
+              <div class="stat-value">${monthlyEfficiency}%</div>
+            </div>
+            <div class="stat-box">
+              <div class="stat-label">Missions Completed</div>
+              <div class="stat-value">${completedGoals} / ${totalGoals}</div>
+            </div>
+            <div class="stat-box">
+              <div class="stat-label">Projected Selection Probability</div>
+              <div class="stat-value">${(currentGPA * 0.9).toFixed(1)}%</div>
+            </div>
+          </div>
+          <h3>Mission Log</h3>
+          <ul>
+            ${goals.map(g => `<li>[${g.completed ? 'X' : ' '}] ${g.title}</li>`).join('')}
+          </ul>
+          <div class="footer">GENERATED BY NEURAL PORTAL SYSTEM</div>
+        </body>
+      </html>
+    `);
+    printWindow.document.close();
+    printWindow.focus();
+    printWindow.print();
+    printWindow.close();
+  };
+
   return (
-    <div className="w-full min-h-screen p-2 md:p-6 font-sans text-slate-100 grid grid-cols-1 md:grid-cols-12 gap-6 animate-in fade-in duration-700">
+    <div className="w-full min-h-screen p-4 md:p-8 font-sans text-slate-100 animate-in fade-in zoom-in duration-500">
       
-      {/* =======================================================
-          BLOCK 1: THE TARGET CALCULATOR (Top Left - Large)
-          "The Mathematical Path to Victory"
-      ======================================================= */}
-      <div className="md:col-span-8 bg-[#0f1014] border border-slate-800 rounded-[2rem] p-8 shadow-2xl relative overflow-hidden group">
-        <div className="absolute top-0 right-0 w-64 h-64 bg-blue-600/10 blur-[100px] rounded-full group-hover:bg-blue-600/20 transition-all"></div>
-        
-        <div className="relative z-10 flex flex-col h-full justify-between">
-          <div className="flex justify-between items-start">
-             <div>
-               <h2 className="text-3xl font-black text-white tracking-tight">TRAJECTORY ANALYSIS</h2>
-               <p className="text-slate-500 font-medium">Projected path to Government Selection</p>
-             </div>
-             <div className="bg-blue-900/30 border border-blue-500/50 px-4 py-2 rounded-full flex items-center gap-2">
-                <Target size={18} className="text-blue-400" />
-                <span className="text-blue-200 font-bold">Target: {targetGPA}%</span>
-             </div>
-          </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-8 mt-8">
-             {/* STAT 1: CURRENT */}
-             <div className="p-6 bg-slate-900/50 rounded-2xl border border-slate-800">
-                <p className="text-xs text-slate-500 uppercase font-bold tracking-widest mb-2">Current Capacity</p>
-                <div className="text-5xl font-black text-white">{currentGPA}<span className="text-lg text-slate-600">%</span></div>
-             </div>
-             {/* STAT 2: THE GAP */}
-             <div className="p-6 bg-slate-900/50 rounded-2xl border border-slate-800 relative overflow-hidden">
-                <div className="absolute inset-0 bg-red-500/5 animate-pulse"></div>
-                <p className="text-xs text-red-400 uppercase font-bold tracking-widest mb-2">Deficit (Gap)</p>
-                <div className="text-5xl font-black text-red-500">-{gap.toFixed(1)}<span className="text-lg text-red-900">%</span></div>
-             </div>
-             {/* STAT 3: REQUIRED EFFORT */}
-             <div className="p-6 bg-gradient-to-br from-blue-900/50 to-slate-900 rounded-2xl border border-blue-500/30">
-                <p className="text-xs text-blue-300 uppercase font-bold tracking-widest mb-2">Required Daily Growth</p>
-                <div className="flex items-end gap-2">
-                   <TrendingUp size={32} className="text-green-400 mb-2" />
-                   <div className="text-5xl font-black text-green-400">+{requiredRate}</div>
-                   <span className="text-sm text-green-700 font-bold mb-2">pts/day</span>
-                </div>
-             </div>
-          </div>
-
-          <div className="mt-8">
-             <div className="flex justify-between text-xs font-bold text-slate-500 uppercase mb-2">
-                <span>Progress Bar</span>
-                <span>{daysRemaining} Days Remaining</span>
-             </div>
-             <div className="w-full h-4 bg-slate-800 rounded-full overflow-hidden">
-                <motion.div 
-                  initial={{ width: 0 }} 
-                  animate={{ width: `${currentGPA}%` }} 
-                  className="h-full bg-gradient-to-r from-blue-600 to-cyan-400 shadow-[0_0_20px_cyan]"
-                />
-             </div>
-          </div>
+      {/* HEADER ACTION BAR */}
+      <div className="flex justify-between items-center mb-8 max-w-7xl mx-auto">
+        <div>
+          <h1 className="text-3xl font-black uppercase tracking-tighter text-white">Chronos Command</h1>
+          <p className="text-slate-500 text-xs font-mono tracking-widest">
+            {currentDate.toLocaleDateString('default', { month: 'long', year: 'numeric' })} CYCLE
+          </p>
+        </div>
+        <div className="flex gap-4">
+           <button 
+             onClick={() => setShowReportModal(true)}
+             className="flex items-center gap-2 bg-slate-900 hover:bg-slate-800 text-white px-5 py-2 rounded-lg border border-slate-700 transition-all shadow-lg"
+           >
+             <FileText size={16} /> <span className="text-xs font-bold uppercase">Performance Report</span>
+           </button>
         </div>
       </div>
 
-      {/* =======================================================
-          BLOCK 2: THE VICTORY FEED (Right Side - Tall)
-          "Instant Dopamine & News"
-      ======================================================= */}
-      <div className="md:col-span-4 bg-[#0f1014] border border-slate-800 rounded-[2rem] p-6 shadow-xl flex flex-col relative overflow-hidden">
-         <div className="flex items-center gap-3 mb-6 pb-4 border-b border-slate-800">
-            <div className="p-2 bg-yellow-500/10 rounded-lg text-yellow-500"><Trophy size={20} /></div>
-            <h3 className="font-black text-lg text-slate-200 uppercase tracking-widest">Victory Feed</h3>
-         </div>
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 max-w-7xl mx-auto">
 
-         <div className="flex-1 overflow-hidden relative space-y-4">
-            {/* Auto Scrolling Content */}
-            <div className="space-y-4">
-               {newsFeed.map((item, idx) => (
-                 <motion.div 
-                   key={idx}
-                   initial={{ opacity: 0, x: 50 }}
-                   animate={{ opacity: 1, x: 0 }}
-                   transition={{ delay: idx * 0.2 }}
-                   className={`p-4 rounded-xl border-l-4 ${
-                      item.type === 'win' ? 'border-green-500 bg-green-500/5' : 
-                      item.type === 'news' ? 'border-blue-500 bg-blue-500/5' : 
-                      'border-purple-500 bg-purple-500/5'
+        {/* =======================================================
+            1. BALLISTICS COMPUTER (Trajectory)
+        ======================================================= */}
+        <div className="lg:col-span-8 bg-[#0a0a0f] border border-slate-800 rounded-[2rem] p-8 shadow-2xl relative overflow-hidden group">
+           <div className="absolute top-0 right-0 w-96 h-96 bg-blue-600/5 blur-[100px] rounded-full"></div>
+           <div className="relative z-10">
+              
+              {/* Target Input */}
+              <div className="flex justify-between items-start mb-8">
+                 <div>
+                    <h2 className="text-2xl font-bold text-white mb-1">Victory Ballistics</h2>
+                    <p className="text-slate-500 text-xs">Mathematical Probability of Selection</p>
+                 </div>
+                 <div className="flex flex-col items-end">
+                    <label className="text-[9px] text-slate-500 uppercase font-bold mb-1">Exam Date Target</label>
+                    <input 
+                      type="date" 
+                      value={examDate} 
+                      onChange={(e) => setExamDate(e.target.value)}
+                      className="bg-slate-900 border border-slate-700 text-white text-xs px-3 py-1 rounded focus:border-blue-500 outline-none"
+                    />
+                 </div>
+              </div>
+
+              {/* The Numbers */}
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                 <div className="p-5 bg-slate-900/50 rounded-2xl border border-slate-800">
+                    <p className="text-[9px] text-slate-500 uppercase font-bold tracking-widest mb-2">Current GPA</p>
+                    <div className="text-5xl font-black text-white">{currentGPA}<span className="text-lg text-slate-600">%</span></div>
+                 </div>
+                 
+                 <div className="p-5 bg-slate-900/50 rounded-2xl border border-red-900/30 relative overflow-hidden">
+                    <div className="absolute inset-0 bg-red-500/5 animate-pulse"></div>
+                    <p className="text-[9px] text-red-400 uppercase font-bold tracking-widest mb-2">Gap to 95%</p>
+                    <div className="text-5xl font-black text-red-500">-{gap.toFixed(1)}</div>
+                 </div>
+
+                 <div className="p-5 bg-blue-900/10 rounded-2xl border border-blue-500/30">
+                    <p className="text-[9px] text-blue-300 uppercase font-bold tracking-widest mb-2">Required Daily Gain</p>
+                    <div className="flex items-end gap-2">
+                       <TrendingUp size={32} className="text-green-400 mb-2" />
+                       <div className="text-5xl font-black text-green-400">+{requiredDailyGrowth}</div>
+                    </div>
+                 </div>
+              </div>
+
+              {/* Progress Bar */}
+              <div className="mt-8">
+                 <div className="flex justify-between text-[10px] font-bold text-slate-500 uppercase mb-2">
+                    <span>Selection Probability</span>
+                    <span>{daysToExam} Days Remaining</span>
+                 </div>
+                 <div className="w-full h-2 bg-slate-800 rounded-full overflow-hidden">
+                    <motion.div 
+                      initial={{ width: 0 }}
+                      animate={{ width: `${currentGPA}%` }}
+                      className="h-full bg-gradient-to-r from-blue-600 to-cyan-400 shadow-[0_0_15px_cyan]"
+                    />
+                 </div>
+              </div>
+           </div>
+        </div>
+
+        {/* =======================================================
+            2. MONTHLY PLANNER (Right Column)
+        ======================================================= */}
+        <div className="lg:col-span-4 bg-[#0a0a0f] border border-slate-800 rounded-[2rem] p-6 shadow-xl flex flex-col relative">
+           <div className="flex justify-between items-center mb-6 pb-4 border-b border-slate-800">
+              <h3 className="font-black text-lg text-slate-200 uppercase tracking-widest">
+                {currentDate.toLocaleString('default', { month: 'short' })} Protocol
+              </h3>
+              <button onClick={() => setShowPlanModal(true)} className="text-xs text-blue-400 hover:text-blue-300 underline">Edit Plan</button>
+           </div>
+
+           <div className="flex-1 overflow-y-auto space-y-4">
+              {monthlyPlan ? (
+                <>
+                  <div className="p-4 bg-slate-900 rounded-xl border border-slate-700">
+                    <p className="text-[10px] text-slate-500 uppercase font-bold mb-1">Primary Objective</p>
+                    <p className="text-sm font-bold text-white">"{monthlyPlan.focus}"</p>
+                  </div>
+                  <div className="space-y-2">
+                    {monthlyPlan.targets.map((t, i) => (
+                      <div key={i} className="flex items-center gap-3 p-3 bg-slate-900/50 rounded-lg border border-slate-800/50">
+                        <div className="w-2 h-2 rounded-full bg-blue-500"></div>
+                        <span className="text-xs text-slate-300">{t}</span>
+                      </div>
+                    ))}
+                  </div>
+                </>
+              ) : (
+                <div className="text-center text-slate-500 text-xs py-10">No protocol set for this month.</div>
+              )}
+           </div>
+        </div>
+
+        {/* =======================================================
+            3. EXECUTION LOG (Bottom Full)
+        ======================================================= */}
+        <div className="lg:col-span-12 bg-[#0a0a0f] border border-slate-800 rounded-[2rem] p-8 shadow-xl">
+           <div className="flex justify-between items-center mb-6">
+              <h3 className="font-black text-xl text-white flex items-center gap-2">
+                 <CheckCircle className="text-green-500" />
+                 <span>Daily Execution Log</span>
+              </h3>
+              
+              {/* Quick Input */}
+              <div className="flex gap-2 w-full max-w-md">
+                <input 
+                  value={newGoal}
+                  onChange={(e) => setNewGoal(e.target.value)}
+                  placeholder="Input daily objective..."
+                  className="flex-1 bg-slate-900 border border-slate-700 rounded-lg px-4 py-2 text-sm text-white focus:border-blue-500 outline-none"
+                />
+                <button onClick={addGoal} className="bg-blue-600 text-white p-2 rounded-lg hover:bg-blue-500"><Plus size={18} /></button>
+              </div>
+           </div>
+
+           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              {goals.map(goal => (
+                 <div 
+                   key={goal.id}
+                   onClick={() => toggleGoal(goal.id)}
+                   className={`group flex items-center gap-4 p-4 rounded-xl border cursor-pointer transition-all ${
+                      goal.completed ? 'bg-green-900/10 border-green-900/50 opacity-60' : 'bg-slate-900 border-slate-800 hover:border-slate-600'
                    }`}
                  >
-                    <div className="flex justify-between items-start mb-1">
-                       <span className={`text-[10px] font-black uppercase px-2 py-0.5 rounded ${
-                          item.type === 'win' ? 'bg-green-500 text-black' : 
-                          item.type === 'news' ? 'bg-blue-500 text-white' : 
-                          'bg-purple-500 text-white'
-                       }`}>
-                          {item.type === 'win' ? 'HALL OF FAME' : item.type === 'news' ? 'UPDATE' : 'WISDOM'}
-                       </span>
-                       <span className="text-[10px] text-slate-600">Just now</span>
+                    <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center transition-all ${
+                       goal.completed ? 'bg-green-500 border-green-500' : 'border-slate-600 group-hover:border-blue-500'
+                    }`}>
+                       {goal.completed && <CheckCircle size={12} className="text-black" />}
                     </div>
-                    <p className="text-sm font-medium text-slate-300 leading-relaxed">"{item.text}"</p>
-                 </motion.div>
-               ))}
-               
-               {/* Call to Action */}
-               <div className="p-4 rounded-xl border border-dashed border-slate-700 text-center opacity-50">
-                  <p className="text-xs text-slate-500">Your name will be here next.</p>
-               </div>
-            </div>
-         </div>
+                    <div>
+                       <p className={`text-sm font-bold ${goal.completed ? 'text-slate-500 line-through' : 'text-slate-200'}`}>{goal.title}</p>
+                       <p className="text-[10px] text-slate-500 font-mono">{goal.date}</p>
+                    </div>
+                 </div>
+              ))}
+           </div>
+        </div>
+
       </div>
 
       {/* =======================================================
-          BLOCK 3: THE STRATEGIC CALENDAR (Bottom Left)
-          "Daily Execution Grid"
+          MODAL 1: MONTHLY PLANNING BRIEFING
       ======================================================= */}
-      <div className="md:col-span-6 bg-[#0f1014] border border-slate-800 rounded-[2rem] p-8 shadow-xl">
-         <div className="flex justify-between items-center mb-6">
-            <h3 className="font-black text-xl text-white flex items-center gap-2">
-               <Calendar className="text-purple-500" /> 
-               <span>{currentDate.toLocaleString('default', { month: 'long' })} Protocol</span>
-            </h3>
-            <span className="text-xs font-bold bg-slate-800 px-3 py-1 rounded-full text-slate-400">2026</span>
-         </div>
-
-         {/* Calendar Grid */}
-         <div className="grid grid-cols-7 gap-2">
-            {['S','M','T','W','T','F','S'].map(d => (
-               <div key={d} className="text-center text-xs font-bold text-slate-600 py-2">{d}</div>
-            ))}
-            {calendarDays.map(day => {
-               // Heatmap Logic: Randomize some activity for visual effect
-               const intensity = Math.random() > 0.7 ? 'bg-green-500' : Math.random() > 0.5 ? 'bg-green-900' : 'bg-slate-900';
-               const isToday = day === currentDate.getDate();
-               return (
-                  <div 
-                    key={day} 
-                    className={`aspect-square rounded-lg flex items-center justify-center text-xs font-bold border transition-all hover:scale-110 cursor-pointer
-                      ${isToday ? 'border-white text-white shadow-[0_0_10px_white] bg-slate-800' : `border-transparent text-slate-500 ${intensity} hover:border-slate-600`}
-                    `}
-                  >
-                     {day}
-                  </div>
-               )
-            })}
-         </div>
-         
-         <div className="mt-4 flex items-center gap-4 text-[10px] text-slate-500 font-bold uppercase tracking-widest">
-            <div className="flex items-center gap-1"><div className="w-2 h-2 rounded bg-slate-900"></div> Lazy</div>
-            <div className="flex items-center gap-1"><div className="w-2 h-2 rounded bg-green-900"></div> Active</div>
-            <div className="flex items-center gap-1"><div className="w-2 h-2 rounded bg-green-500"></div> Beast Mode</div>
-         </div>
-      </div>
-
-      {/* =======================================================
-          BLOCK 4: MISSION LOG (Bottom Right)
-          "Import Goals & Execute"
-      ======================================================= */}
-      <div className="md:col-span-6 bg-[#0f1014] border border-slate-800 rounded-[2rem] p-8 shadow-xl flex flex-col">
-         <div className="flex justify-between items-center mb-6">
-            <h3 className="font-black text-xl text-white flex items-center gap-2">
-               <CheckCircle className="text-orange-500" /> 
-               <span>Mission Log</span>
-            </h3>
-            <div className="text-xs text-orange-500 font-bold bg-orange-500/10 px-3 py-1 rounded-full">
-               {goals.filter(g => g.completed).length}/{goals.length} Complete
-            </div>
-         </div>
-
-         {/* Goal Input */}
-         <div className="flex gap-2 mb-6">
-            <input 
-              value={newGoal}
-              onChange={(e) => setNewGoal(e.target.value)}
-              placeholder="Inject new directive..."
-              className="flex-1 bg-slate-900 border border-slate-700 rounded-xl px-4 py-3 text-sm text-white focus:outline-none focus:border-blue-500 transition-all placeholder:text-slate-600 font-medium"
-            />
-            <button 
-              onClick={addGoal}
-              className="bg-blue-600 hover:bg-blue-500 text-white p-3 rounded-xl transition-all shadow-lg shadow-blue-600/20"
+      <AnimatePresence>
+        {showPlanModal && (
+          <motion.div 
+            initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+            className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4"
+          >
+            <motion.div 
+              initial={{ scale: 0.9 }} animate={{ scale: 1 }}
+              className="bg-[#0f1014] border border-blue-500/50 w-full max-w-lg rounded-2xl p-8 shadow-2xl relative"
             >
-               <Plus size={20} />
-            </button>
-         </div>
+              <h2 className="text-2xl font-black text-white uppercase mb-1">Mission Briefing</h2>
+              <p className="text-blue-400 text-xs font-mono tracking-widest mb-6">INITIATE PROTOCOL: {currentDate.toLocaleString('default', { month: 'long' }).toUpperCase()}</p>
+              
+              <form onSubmit={(e) => {
+                e.preventDefault();
+                const formData = new FormData(e.target);
+                const plan = {
+                  focus: formData.get('focus'),
+                  targets: [formData.get('t1'), formData.get('t2'), formData.get('t3')]
+                };
+                saveMonthlyPlan(plan);
+              }}>
+                <div className="space-y-4">
+                  <div>
+                    <label className="text-xs text-slate-500 font-bold uppercase">Primary Focus</label>
+                    <input name="focus" required placeholder="e.g. Complete Geometry & Physics" className="w-full bg-slate-900 border border-slate-700 rounded p-3 text-white focus:border-blue-500 outline-none mt-1" />
+                  </div>
+                  <div>
+                    <label className="text-xs text-slate-500 font-bold uppercase">Top 3 Targets</label>
+                    <input name="t1" required placeholder="Target Alpha" className="w-full bg-slate-900 border border-slate-700 rounded p-2 text-white mt-1 mb-2 text-sm" />
+                    <input name="t2" required placeholder="Target Beta" className="w-full bg-slate-900 border border-slate-700 rounded p-2 text-white mb-2 text-sm" />
+                    <input name="t3" required placeholder="Target Gamma" className="w-full bg-slate-900 border border-slate-700 rounded p-2 text-white text-sm" />
+                  </div>
+                </div>
+                <button type="submit" className="w-full bg-blue-600 hover:bg-blue-500 text-white font-bold py-3 rounded-lg mt-6 shadow-[0_0_20px_blue]">
+                  INITIALIZE MONTH
+                </button>
+              </form>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
-         {/* Goal List */}
-         <div className="flex-1 space-y-3 overflow-y-auto max-h-[200px] pr-2 custom-scrollbar">
-            {goals.map(goal => (
-               <div 
-                 key={goal.id} 
-                 className={`group flex items-center gap-4 p-4 rounded-xl border transition-all cursor-pointer ${
-                   goal.completed 
-                   ? 'bg-green-900/10 border-green-900 opacity-50' 
-                   : 'bg-slate-900/50 border-slate-800 hover:border-slate-600'
-                 }`}
-                 onClick={() => {
-                    const newGoals = goals.map(g => g.id === goal.id ? { ...g, completed: !g.completed } : g);
-                    setGoals(newGoals);
-                 }}
-               >
-                  <div className={`w-6 h-6 rounded-full border-2 flex items-center justify-center transition-all ${
-                     goal.completed ? 'bg-green-500 border-green-500' : 'border-slate-600 group-hover:border-blue-500'
-                  }`}>
-                     {goal.completed && <CheckCircle size={14} className="text-white" />}
+      {/* =======================================================
+          MODAL 2: PERFORMANCE REPORT
+      ======================================================= */}
+      <AnimatePresence>
+        {showReportModal && (
+          <motion.div 
+            initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+            className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4"
+          >
+            <div className="bg-white text-black w-full max-w-2xl rounded-xl p-8 relative shadow-2xl" id="printable-report">
+               <button onClick={() => setShowReportModal(false)} className="absolute top-4 right-4 text-gray-500 hover:text-black"><X /></button>
+               
+               <div className="border-b-2 border-black pb-4 mb-6 flex justify-between items-end">
+                  <div>
+                    <h2 className="text-3xl font-black uppercase tracking-tighter">Performance Report</h2>
+                    <p className="text-xs font-mono text-gray-600">CHRONOS ANALYTICS DIV // {new Date().toLocaleDateString()}</p>
                   </div>
-                  <div className="flex-1">
-                     <p className={`text-sm font-bold ${goal.completed ? 'text-slate-500 line-through' : 'text-slate-200'}`}>
-                        {goal.title}
-                     </p>
-                     <p className="text-[10px] text-slate-500 font-mono mt-1">Deadline: {goal.date}</p>
-                  </div>
-                  {/* Calculation Tag */}
-                  <div className="text-[10px] font-bold bg-slate-800 text-slate-400 px-2 py-1 rounded">
-                     +2.5% Gain
+                  <div className="text-right">
+                    <p className="text-4xl font-black">{currentGPA}%</p>
+                    <p className="text-xs font-bold uppercase">Current Rating</p>
                   </div>
                </div>
-            ))}
-         </div>
-      </div>
+
+               <div className="grid grid-cols-2 gap-4 mb-8">
+                  <div className="bg-gray-100 p-4 rounded">
+                     <p className="text-xs text-gray-500 uppercase font-bold">Monthly Efficiency</p>
+                     <p className="text-2xl font-bold">{monthlyEfficiency}%</p>
+                  </div>
+                  <div className="bg-gray-100 p-4 rounded">
+                     <p className="text-xs text-gray-500 uppercase font-bold">Goals Executed</p>
+                     <p className="text-2xl font-bold">{completedGoals} / {totalGoals}</p>
+                  </div>
+               </div>
+
+               <div className="mb-8">
+                  <h3 className="font-bold uppercase text-sm border-b border-gray-300 pb-2 mb-2">Objective Log</h3>
+                  <ul className="text-sm space-y-1">
+                     {goals.map(g => (
+                       <li key={g.id} className="flex justify-between">
+                         <span className={g.completed ? "font-bold" : "text-gray-500"}>{g.title}</span>
+                         <span>{g.completed ? "COMPLETED" : "PENDING"}</span>
+                       </li>
+                     ))}
+                  </ul>
+               </div>
+
+               <button 
+                 onClick={downloadReport} 
+                 className="w-full bg-black text-white font-bold py-3 rounded flex items-center justify-center gap-2 hover:bg-gray-800"
+               >
+                 <Download size={18} /> DOWNLOAD OFFICIAL PDF
+               </button>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
     </div>
   );
