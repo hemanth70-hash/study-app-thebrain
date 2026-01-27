@@ -1,290 +1,262 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { MessageSquare, Send, X } from 'lucide-react';
+import { Send, X } from 'lucide-react';
 
-// --- 1. CHARACTER DATABASE ---
+// ==========================================
+// 1. ASSETS & SCRIPT DATABASE
+// ==========================================
+// Using reliable cartoon scenery assets. Replace these URLs with specific Shinchan/Doraemon backgrounds if you have them.
+const ENV_ASSETS = {
+  sky: 'https://img.freepik.com/free-vector/cartoon-blue-sky-with-clouds-background_107791-17571.jpg?w=1380&t=st=1706625000~exp=1706625600~hmac=5f50000000000000000000000000000000000000000000000000000000000000',
+  town: 'https://png.pngtree.com/png-clipart/20220719/ourmid/pngtree-cartoon-houses-town-village-png-image_6005340.png', // Distant town
+  grassPath: 'https://png.pngtree.com/png-clipart/20210711/original/pngtree-cartoon-grass-road-png-image_6526670.jpg', // Foreground
+  tree: 'https://cdn-icons-png.flaticon.com/512/11411/11411528.png',
+  bush: 'https://cdn-icons-png.flaticon.com/512/9683/9683071.png'
+};
+
 const CHARACTERS = [
+  { id: 'shinchan', name: 'Shinchan', img: 'https://cdn-icons-png.flaticon.com/512/3408/3408545.png', width: 55 },
+  { id: 'doraemon', name: 'Doraemon', img: 'https://cdn-icons-png.flaticon.com/512/802/802363.png', width: 60 },
+  { id: 'ben10', name: 'Ben 10', img: 'https://cdn-icons-png.flaticon.com/512/1674/1674291.png', width: 45 },
+  { id: 'shiro', name: 'Shiro', img: 'https://cdn-icons-png.flaticon.com/512/616/616430.png', width: 35 }
+];
+
+const BANTER_SCRIPTS = [
   {
-    id: 'shinchan',
-    name: 'Shinchan',
-    img: 'https://upload.wikimedia.org/wikipedia/en/4/4c/Shin_Chan_search_for_balls.png',
-    width: 45,
-    unlock: { type: 'default' },
-    brain: (text, score) => {
-      if (score < 40) return "Mom will kill me... hide the report card!";
-      if (score > 80) return "Oho! I'm a genius! Chocobi time!";
-      return "To be or not to be... Hey, is Action Kamen on?";
-    }
+    actors: ['shinchan', 'doraemon'],
+    lines: [
+      { s: 'shinchan', t: 'Yo, Blue Ballon! Take me to the future!', a: 'jump' },
+      { s: 'doraemon', t: 'I am a CAT ROBOT! And no, go do your homework.', a: 'angry' }
+    ]
   },
   {
-    id: 'doraemon',
-    name: 'Doraemon',
-    img: 'https://upload.wikimedia.org/wikipedia/en/c/c8/Doraemon_volume_1_cover.jpg',
-    width: 50,
-    unlock: { type: 'gpa', val: 60, desc: 'Unlock: 60% GPA' },
-    brain: (text, score) => {
-      if (score < 40) return "Nobita!! ...I mean User! Don't give up! Use the 'Focus Headband'!";
-      if (score > 80) return "I knew you could do it! Let's eat Dorayaki!";
-      return "I'm polishing my gadgets. Do you need help?";
-    }
-  },
-  {
-    id: 'ben10',
-    name: 'Ben 10',
-    img: 'https://upload.wikimedia.org/wikipedia/en/c/c6/Ben_Tennyson.png',
-    width: 35,
-    unlock: { type: 'streak', val: 7, desc: 'Unlock: 7 Day Streak' },
-    brain: (text, score) => {
-      if (score < 40) return "We took a hit! Omnitrix needs a recharge. Retreat and study!";
-      if (score > 80) return "Hero Time! You went totally Alien X on that test!";
-      return "Vilgax is plotting something. Stay sharp.";
-    }
+    actors: ['ben10', 'shinchan'],
+    lines: [
+      { s: 'shinchan', t: 'Cool watch. Does it tell time or just look ugly?', a: 'idle' },
+      { s: 'ben10', t: 'It\'s the most powerful weapon in the universe, kid.', a: 'heroic' },
+      { s: 'shinchan', t: 'So... it doesn\'t tell time. Lame.', a: 'troll' }
+    ]
   }
 ];
 
-export default function PixelGarden({ gpa, streak, dailyScore }) {
+export default function PixelGarden({ dailyScore }) {
   const [chars, setChars] = useState([]);
-  const [chatTarget, setChatTarget] = useState(null);
-  const [chatHistory, setChatHistory] = useState([]);
-  const [userVal, setUserVal] = useState("");
+  const [bubbles, setBubbles] = useState({});
+  const [directorState, setDirectorState] = useState('idle');
   
-  // --- SKY ENGINE STATE ---
-  const [timeOfDay, setTimeOfDay] = useState('day'); // 'day' or 'night'
-  const [weather, setWeather] = useState('clear'); // 'clear', 'rain', 'storm'
-  const [stars, setStars] = useState([]);
+  // User Chat State
+  const [userChatTarget, setUserChatTarget] = useState(null);
+  const [chatLog, setChatLog] = useState([]);
+  const [userVal, setUserVal] = useState("");
 
-  // --- 1. INITIALIZE WORLD & WEATHER ---
+  // Weather
+  const [weather, setWeather] = useState('clear');
+
+  // --- 1. INITIALIZE WORLD ---
   useEffect(() => {
-    // A. Check Time
-    const hour = new Date().getHours();
-    const isNight = hour < 6 || hour >= 18;
-    setTimeOfDay(isNight ? 'night' : 'day');
+    if (dailyScore !== null && dailyScore < 40) setWeather('storm');
+    else if (dailyScore !== null && dailyScore > 80) setWeather('party');
+    else setWeather('clear');
 
-    // B. Check Weather (Driven by Daily Score)
-    // If dailyScore is null (no test today), default to clear
-    if (dailyScore !== null) {
-      if (dailyScore < 40) setWeather('storm');
-      else if (dailyScore < 60) setWeather('rain');
-      else setWeather('clear');
-    } else {
-      setWeather('clear');
-    }
-
-    // C. Generate Stars (Only needed if night or storm)
-    const starCount = 30;
-    const starArray = Array.from({ length: starCount }).map((_, i) => ({
-      id: i,
-      x: Math.random() * 100,
-      y: Math.random() * 60, // Top 60% of screen
-      size: Math.random() * 2 + 1,
-      blink: Math.random() * 2 + 1
+    // Spawn Characters facing right
+    const initialChars = CHARACTERS.map((c, i) => ({
+      ...c,
+      x: 15 + (i * 20), // Spread them out
+      dir: 1,
+      action: 'idle',
+      targetX: null
     }));
-    setStars(starArray);
+    setChars(initialChars);
+  }, [dailyScore]);
 
-    // D. Spawn Characters
-    const unlocked = CHARACTERS.filter(c => {
-      if (c.unlock.type === 'default') return true;
-      if (c.unlock.type === 'gpa') return gpa >= c.unlock.val;
-      if (c.unlock.type === 'streak') return streak >= c.unlock.val;
-      return false;
-    });
-
-    setChars(unlocked.map((c, i) => ({
-      ...c, instanceId: i, x: 10 + (i * 25), y: 80, dir: 1, state: 'WALK', stateTimer: Math.random() * 100
-    })));
-
-  }, [gpa, streak, dailyScore]);
-
-  // --- 2. AI BEHAVIOR LOOP ---
+  // --- 2. DIRECTOR AI (Manages Scenes) ---
   useEffect(() => {
-    const loop = setInterval(() => {
-      setChars(prev => prev.map(char => {
-        if (chatTarget && chatTarget.instanceId === char.instanceId) return { ...char, state: 'IDLE' };
+    if (directorState === 'user_interact') return;
 
-        let { x, dir, state, stateTimer } = char;
-        let newState = state;
-        let newTimer = stateTimer - 1;
+    const directorLoop = setInterval(() => {
+      if (directorState === 'idle' && Math.random() > 0.90) { // 10% chance per second
+        startRandomScene();
+      } else if (directorState === 'idle') {
+        moveCharactersRandomly();
+      }
+    }, 1000);
 
-        // Forced State by Weather
-        if (weather === 'storm' && Math.random() > 0.95) newState = 'SAD';
+    return () => clearInterval(directorLoop);
+  }, [directorState, chars]);
 
-        if (newTimer <= 0) {
-          const roll = Math.random();
-          if (roll < 0.4) newState = 'WALK';
-          else if (roll < 0.7) newState = 'IDLE';
-          else if (roll < 0.9) newState = 'SIT';
-          
-          newTimer = 20 + Math.random() * 50;
-          if (Math.random() > 0.5) dir *= -1;
+  // --- 3. PHYSICS ENGINE (Movement) ---
+  useEffect(() => {
+    const physicsLoop = setInterval(() => {
+      setChars(prev => prev.map(c => {
+        if (directorState === 'user_interact' && userChatTarget?.id === c.id) return c; // Paused for chat
+
+        let { x, dir, action, targetX } = c;
+        
+        if (targetX !== null) {
+          const dist = targetX - x;
+          if (Math.abs(dist) < 1) {
+            action = 'idle'; targetX = null; // Arrived
+          } else {
+            dir = dist > 0 ? 1 : -1; action = 'walk'; x += dir * 0.4;
+          }
+        } else if (action === 'walk') {
+          x += dir * 0.2;
+          if (x > 85 || x < 5) dir *= -1;
         }
-
-        if (newState === 'WALK') {
-          x += (dir * 0.3); // Speed
-          if (x > 90) { x = 90; dir = -1; }
-          if (x < 0) { x = 0; dir = 1; }
-        }
-
-        return { ...char, x, dir, state: newState, stateTimer: newTimer };
+        return { ...c, x, dir, action, targetX };
       }));
     }, 50);
-    return () => clearInterval(loop);
-  }, [chatTarget, weather]);
+    return () => clearInterval(physicsLoop);
+  }, [directorState, userChatTarget]);
 
-  // --- 3. CHAT LOGIC ---
-  const sendMessage = () => {
-    if (!userVal.trim()) return;
-    const newHistory = [...chatHistory, { sender: 'user', text: userVal }];
-    setChatHistory(newHistory);
-    const input = userVal; 
-    setUserVal("");
+  // --- HELPER FUNCTIONS ---
+  const startRandomScene = async () => {
+    setDirectorState('staging');
+    const script = BANTER_SCRIPTS[Math.floor(Math.random() * BANTER_SCRIPTS.length)];
+    const actor1 = chars.find(c => c.id === script.actors[0]);
+    const actor2 = chars.find(c => c.id === script.actors[1]);
+    if (!actor1 || !actor2) { setDirectorState('idle'); return; }
+
+    // Stage positions
+    setChars(prev => prev.map(c => c.id === actor1.id ? { ...c, targetX: 35 } : c.id === actor2.id ? { ...c, targetX: 55 } : c));
+    await new Promise(r => setTimeout(r, 1500)); // Wait for arrival
     
-    // Pass dailyScore to brain if available, else GPA
-    const scoreToUse = dailyScore !== null ? dailyScore : gpa;
+    setDirectorState('acting');
+    // Face each other
+    setChars(prev => prev.map(c => c.id === actor1.id ? { ...c, dir: 1 } : c.id === actor2.id ? { ...c, dir: -1 } : c));
 
+    for (let line of script.lines) {
+      if (directorState === 'user_interact') break;
+      setChars(prev => prev.map(c => c.id === line.s ? { ...c, action: line.a } : c));
+      setBubbles({ [line.s]: line.t });
+      await new Promise(r => setTimeout(r, 2500)); // Read time
+      setBubbles({});
+    }
+    setDirectorState('idle');
+    setChars(prev => prev.map(c => ({ ...c, action: 'idle', targetX: null })));
+  };
+
+  const moveCharactersRandomly = () => {
+    setChars(prev => prev.map(c => {
+      if (c.targetX !== null) return c;
+      if (Math.random() > 0.97) {
+        const actions = ['idle', 'walk', 'idle'];
+        const next = actions[Math.floor(Math.random() * actions.length)];
+        return { ...c, action: next, dir: Math.random() > 0.5 ? 1 : -1 };
+      }
+      return c;
+    }));
+  };
+
+  const handleUserClick = (char) => {
+    setDirectorState('user_interact'); setBubbles({}); setUserChatTarget(char);
+    setChatLog([{ sender: 'bot', text: `Oho? Talking to me?` }]);
+    setChars(prev => prev.map(c => ({ ...c, action: c.id === char.id ? 'jump' : 'idle', targetX: null })));
+  };
+
+  const sendUserMessage = () => {
+    if(!userVal.trim()) return;
+    setChatLog(prev => [...prev, { sender: 'user', text: userVal }]); setUserVal("");
     setTimeout(() => {
-      const response = chatTarget.brain(input, scoreToUse);
-      setChatHistory(prev => [...prev, { sender: 'bot', text: response }]);
+      setChatLog(prev => [...prev, { sender: 'bot', text: "Funny! Now go study." }]); // Simple mock reply
     }, 1000);
   };
 
   return (
-    <div className="relative w-full h-64 rounded-xl overflow-hidden border-2 border-slate-800 mt-6 font-mono select-none group transition-all duration-1000">
+    // Container: Increased height for better scene view, rounded corners, border
+    <div className="relative w-full h-72 bg-sky-300 rounded-2xl overflow-hidden border-4 border-slate-800 mt-6 font-mono select-none group shadow-2xl">
       
       {/* ==============================
-          LAYER 1: CELESTIAL SKY
+          LAYER 1: ENVIRONMENT BACKGROUND
       ============================== */}
-      <div className={`absolute inset-0 transition-colors duration-2000
-        ${timeOfDay === 'day' && weather === 'clear' ? 'bg-gradient-to-b from-sky-400 to-blue-200' : ''}
-        ${timeOfDay === 'night' && weather === 'clear' ? 'bg-gradient-to-b from-[#0b1026] to-[#2b3266]' : ''}
-        ${weather === 'rain' ? 'bg-gradient-to-b from-slate-700 to-slate-900' : ''}
-        ${weather === 'storm' ? 'bg-[#1a1a1a]' : ''}
-      `}>
-         {/* LIGHTNING FLASH */}
-         {weather === 'storm' && (
-           <div className="absolute inset-0 bg-white opacity-0 animate-[flash_5s_infinite]"></div>
-         )}
-      </div>
+      
+      {/* Sky Layer */}
+      <div className="absolute inset-0 bg-cover bg-center z-0" style={{ backgroundImage: `url('${ENV_ASSETS.sky}')` }}></div>
+      
+      {/* Weather Overlays */}
+      {weather === 'storm' && <div className="absolute inset-0 bg-slate-900/70 z-10 animate-pulse"></div>}
+      {weather === 'party' && <div className="absolute inset-0 bg-purple-500/20 z-10 mix-blend-overlay"></div>}
 
-      {/* STARS (Only visible at Night or during Storms) */}
-      {(timeOfDay === 'night' || weather === 'storm') && stars.map(star => (
-        <div 
-          key={star.id}
-          className="absolute bg-white rounded-full"
-          style={{
-            left: `${star.x}%`,
-            top: `${star.y}%`,
-            width: `${star.size}px`,
-            height: `${star.size}px`,
-            opacity: Math.random(), // Twinkle
-            animation: `twinkle ${star.blink}s infinite ease-in-out`
-          }}
-        ></div>
-      ))}
+      {/* Midground: Distant Town/Houses */}
+      <div className="absolute bottom-[50px] left-0 w-full h-40 bg-contain bg-repeat-x z-10 opacity-90" style={{ backgroundImage: `url('${ENV_ASSETS.town}')`, backgroundPosition: 'bottom' }}></div>
 
-      {/* HEAVENLY BODIES (Sun / Moon) */}
-      <div className="absolute top-0 left-0 w-full h-full pointer-events-none overflow-hidden">
-         {/* SUN */}
-         <motion.div 
-           animate={{ 
-             y: timeOfDay === 'day' ? 20 : 200, 
-             x: timeOfDay === 'day' ? [0, 50] : 0 
-           }} 
-           transition={{ duration: 10 }}
-           className={`absolute top-4 right-10 w-16 h-16 rounded-full bg-yellow-400 shadow-[0_0_60px_orange] blur-sm transition-opacity duration-1000 ${weather !== 'clear' ? 'opacity-20' : 'opacity-100'}`}
-         ></motion.div>
+      {/* Props: Trees & Bushes */}
+      <img src={ENV_ASSETS.tree} className="absolute bottom-[60px] left-10 w-24 z-10" alt="tree" />
+      <img src={ENV_ASSETS.tree} className="absolute bottom-[70px] right-20 w-20 z-10 scale-x-[-1]" alt="tree" />
+      <img src={ENV_ASSETS.bush} className="absolute bottom-[60px] left-40 w-16 z-10" alt="bush" />
 
-         {/* MOON */}
-         <motion.div 
-           animate={{ 
-             y: timeOfDay === 'night' ? 30 : 200 
-           }} 
-           className="absolute top-4 right-16 w-12 h-12 rounded-full bg-slate-200 shadow-[0_0_20px_white]"
-         >
-            {/* Craters */}
-            <div className="absolute top-2 left-3 w-2 h-2 bg-slate-300 rounded-full opacity-50"></div>
-            <div className="absolute bottom-3 right-4 w-3 h-3 bg-slate-300 rounded-full opacity-50"></div>
-         </motion.div>
-      </div>
+      {/* Foreground: Grass Path */}
+      <div className="absolute bottom-0 left-0 w-full h-[60px] bg-cover bg-bottom z-20 border-t-2 border-[#4a8f3c]" style={{ backgroundImage: `url('${ENV_ASSETS.grassPath}')` }}></div>
 
-      {/* CLOUDS (Moving) */}
-      <div className="absolute top-10 left-0 w-full h-20 opacity-80 pointer-events-none">
-         <motion.div 
-           animate={{ x: ["-100%", "100%"] }} 
-           transition={{ repeat: Infinity, duration: 60, ease: "linear" }}
-           className="absolute top-0 w-32 h-12 bg-white/20 rounded-full blur-xl"
-         ></motion.div>
-         {weather !== 'clear' && (
-           <motion.div 
-             animate={{ x: ["-100%", "100%"] }} 
-             transition={{ repeat: Infinity, duration: 30, ease: "linear" }}
-             className="absolute top-4 w-full h-32 bg-slate-900/50 blur-2xl"
-           ></motion.div>
-         )}
-      </div>
-
-      {/* RAIN PARTICLES */}
-      {(weather === 'rain' || weather === 'storm') && (
-        <div className="absolute inset-0 bg-[url('https://www.transparenttextures.com/patterns/diagmonds-light.png')] opacity-20 animate-[slide_0.5s_linear_infinite]"></div>
-      )}
-
-      {/* GROUND */}
-      <div className="absolute bottom-0 w-full h-16 bg-[#2d6a4f] border-t-8 border-[#40916c] relative z-20">
-         {/* Grass Texture */}
-         <div className="absolute inset-0 opacity-30 bg-[radial-gradient(circle,rgba(0,0,0,0.2)_1px,transparent_1px)] bg-[length:4px_4px]"></div>
-      </div>
 
       {/* ==============================
           LAYER 2: CHARACTERS
       ============================== */}
       {chars.map(char => (
-        <motion.div 
-          key={char.instanceId}
+        <motion.div
+          key={char.id}
+          // Position them ON the grass path (bottom ~20px)
           animate={{ left: `${char.x}%` }}
-          transition={{ duration: 0.05, ease: "linear" }}
-          className="absolute bottom-12 flex flex-col items-center cursor-pointer z-30 hover:scale-110 transition-transform"
-          onClick={() => { setChatTarget(char); setChatHistory([{sender:'bot', text: char.brain("hello", dailyScore)}]); }}
+          transition={{ duration: 0.05, ease: 'linear' }}
+          className="absolute bottom-[25px] z-30 flex flex-col items-center cursor-pointer"
+          onClick={() => handleUserClick(char)}
         >
-           {/* Emotion Bubble */}
-           {weather === 'storm' && <div className="absolute -top-8 text-xl animate-bounce">😨</div>}
-           {dailyScore > 80 && <div className="absolute -top-8 text-xl animate-bounce">🥳</div>}
+          {/* DIALOGUE BUBBLE (Automatic Banter) */}
+          <AnimatePresence>
+            {bubbles[char.id] && (
+              <motion.div 
+                initial={{ opacity: 0, scale: 0, y: 10 }}
+                animate={{ opacity: 1, scale: 1, y: 0 }}
+                exit={{ opacity: 0, scale: 0 }}
+                className="absolute -top-28 w-36 bg-white text-black p-3 rounded-2xl text-[10px] font-bold text-center border-2 border-black shadow-xl z-50"
+              >
+                {bubbles[char.id]}
+                {/* Bubble tail */}
+                <div className="absolute top-full left-1/2 -translate-x-1/2 w-0 h-0 border-l-[8px] border-l-transparent border-r-[8px] border-r-transparent border-t-[8px] border-t-black"></div>
+              </motion.div>
+            )}
+          </AnimatePresence>
 
-           {/* Sprite */}
-           <img 
-             src={char.img} 
-             alt={char.name}
-             style={{ height: `${char.width}px` }}
-             className={`drop-shadow-2xl transition-transform duration-200 
-               ${char.dir === -1 ? 'scale-x-[-1]' : ''}
-               ${char.state === 'WALK' ? 'animate-bounce' : ''}
-               ${char.state === 'SIT' ? 'translate-y-4' : ''}
-             `}
-           />
+          {/* CHARACTER SPRITE & ANIMATIONS */}
+          <div className={`
+            relative transition-transform duration-300 filter drop-shadow-lg
+            ${char.dir === -1 ? 'scale-x-[-1]' : ''}
+            ${char.action === 'walk' ? 'animate-bounce' : ''}
+            ${char.action === 'jump' ? '-translate-y-6' : ''}
+            ${char.action === 'angry' ? 'animate-shake bg-red-500/30 rounded-full' : ''}
+          `}>
+             <img src={char.img} alt={char.name} style={{ height: `${char.width}px` }} className="image-pixelated" />
+             {char.action === 'angry' && <div className="absolute -top-4 right-0 text-xl animate-ping">💢</div>}
+          </div>
+          
+          {/* Shadow on grass */}
+          <div className="w-10 h-2 bg-black/30 rounded-full blur-sm mt-[-2px]"></div>
         </motion.div>
       ))}
 
       {/* ==============================
-          LAYER 3: CHAT UI
+          LAYER 3: USER CHAT OVERLAY
       ============================== */}
       <AnimatePresence>
-        {chatTarget && (
-          <motion.div initial={{ y: 100 }} animate={{ y: 0 }} exit={{ y: 100 }} className="absolute inset-0 bg-black/90 z-50 flex flex-col p-4">
+        {userChatTarget && (
+          <motion.div initial={{ y: '100%' }} animate={{ y: 0 }} exit={{ y: '100%' }} transition={{type: 'spring', damping: 20}} className="absolute inset-0 bg-black/80 z-50 flex flex-col p-4 backdrop-blur-sm">
              <div className="flex justify-between items-center border-b border-white/20 pb-2 mb-2">
                 <div className="flex items-center gap-2">
-                   <img src={chatTarget.img} className="w-8 h-8 object-contain bg-white/10 rounded-full" />
-                   <span className="text-white font-bold">{chatTarget.name}</span>
+                   <img src={userChatTarget.img} className="w-10 h-10 object-contain bg-white/10 rounded-full p-1" />
+                   <span className="text-white font-bold text-lg">{userChatTarget.name}</span>
                 </div>
-                <button onClick={() => setChatTarget(null)} className="text-red-400"><X size={18}/></button>
+                <button onClick={() => { setUserChatTarget(null); setDirectorState('idle'); }} className="text-red-400 bg-red-400/10 p-1 rounded-full"><X size={20}/></button>
              </div>
-             <div className="flex-1 overflow-y-auto custom-scrollbar space-y-2 mb-2">
-                {chatHistory.map((m, i) => (
+             <div className="flex-1 overflow-y-auto custom-scrollbar space-y-3 mb-2 p-2">
+                {chatLog.map((m, i) => (
                   <div key={i} className={`flex ${m.sender === 'user' ? 'justify-end' : 'justify-start'}`}>
-                     <div className={`p-2 rounded-lg text-xs max-w-[80%] ${m.sender === 'user' ? 'bg-blue-600' : 'bg-slate-700 text-white'}`}>{m.text}</div>
+                     <div className={`p-3 rounded-2xl text-sm max-w-[85%] shadow-md ${m.sender === 'user' ? 'bg-blue-600 text-white rounded-br-sm' : 'bg-slate-700 text-white rounded-bl-sm'}`}>{m.text}</div>
                   </div>
                 ))}
              </div>
-             <div className="flex gap-2">
-                <input autoFocus value={userVal} onChange={(e) => setUserVal(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && sendMessage()} className="flex-1 bg-slate-800 rounded px-3 py-2 text-xs text-white outline-none" placeholder="Type..." />
-                <button onClick={sendMessage} className="bg-blue-600 p-2 rounded text-white"><Send size={14} /></button>
+             <div className="flex gap-2 bg-slate-900/50 p-2 rounded-xl">
+                <input autoFocus value={userVal} onChange={(e) => setUserVal(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && sendUserMessage()} className="flex-1 bg-transparent px-3 py-2 text-sm text-white outline-none placeholder:text-slate-500" placeholder={`Message ${userChatTarget.name}...`} />
+                <button onClick={sendUserMessage} className="bg-blue-600 p-3 rounded-xl text-white hover:bg-blue-500 transition-colors"><Send size={18} /></button>
              </div>
           </motion.div>
         )}
