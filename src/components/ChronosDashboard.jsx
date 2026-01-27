@@ -165,7 +165,13 @@ export default function ChronosDashboard({ user }) {
                  <div className="w-full h-2 bg-slate-800 rounded-full overflow-hidden border border-slate-700"><motion.div initial={{ width: 0 }} animate={{ width: `${currentGPA}%` }} className="h-full bg-gradient-to-r from-blue-600 to-cyan-400 shadow-[0_0_15px_cyan]" /></div>
                  
                  {/* 🔥 PIXEL GARDEN CONFIRMED & INSERTED HERE */}
-                 <PixelGarden gpa={currentGPA} streak={user?.streak_count || 0} dailyScore={dailyScore} />
+                 <PixelGarden
+  gpa={currentGPA}
+  streak={user?.streak_count || 0}
+  dailyScore={dailyScore}
+  embed
+/>
+
               </div>
            </div>
         </div>
