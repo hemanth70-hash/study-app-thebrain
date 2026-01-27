@@ -187,9 +187,10 @@ export default function ChronosDashboard({ user }) {
               )}
 
               {/* MODE B: CHAT (FIXED FLEXBOX LAYOUT) */}
-              {/* 🔥 This container is key: h-full ensures it takes remaining space, flex-col organizes input at bottom */}
-              <div className={`absolute inset-0 flex flex-col ${commsMode === 'chat' ? 'visible' : 'invisible pointer-events-none'}`}>
-                 <div className="flex-1 min-h-0 bg-[#050508] rounded-xl border border-slate-800 overflow-hidden relative">
+              {/* 🔥 This container forces the StudyChat to respect the parent height */}
+              <div className={`absolute inset-0 flex flex-col bg-[#050508] ${commsMode === 'chat' ? 'visible' : 'invisible pointer-events-none'}`}>
+                 <div className="flex-1 min-h-0 relative">
+                    {/* Passing isTunnel=false usually renders chat in full mode, we might need a compact prop if available */}
                     <StudyChat user={user} isTunnel={false} />
                  </div>
               </div>
@@ -200,10 +201,10 @@ export default function ChronosDashboard({ user }) {
         <div className="lg:col-span-6 bg-[#0a0a0f] border border-slate-800 rounded-[2rem] p-8 shadow-xl">
            <div className="flex justify-between items-center mb-6">
               <h3 className="font-black text-lg text-white flex items-center gap-2"><Calendar className="text-purple-500" /><span>Execution Grid</span></h3>
-              {/* LEGEND RESTORED */}
+              {/* 🔥 LEGEND RESTORED HERE */}
               <div className="flex gap-3 text-[9px] font-bold uppercase text-slate-500">
                  <div className="flex items-center gap-1"><div className="w-2 h-2 rounded bg-green-900"></div> Active</div>
-                 <div className="flex items-center gap-1"><div className="w-2 h-2 rounded bg-blue-500"></div> Target</div>
+                 <div className="flex items-center gap-1"><div className="w-2 h-2 rounded bg-blue-500 animate-pulse"></div> Target</div>
                  <div className="flex items-center gap-1"><div className="w-2 h-2 rounded bg-white"></div> Today</div>
               </div>
            </div>
@@ -220,8 +221,8 @@ export default function ChronosDashboard({ user }) {
                     <div key={day} className={`aspect-square rounded-lg flex flex-col items-center justify-center text-xs font-bold border transition-all relative ${style}`}>
                        {day}
                        <div className="flex gap-0.5 mt-1">
-                          {hasTarget && <div className="w-1 h-1 rounded-full bg-blue-500 animate-pulse"></div>}
-                          {hasCompletedTarget && <div className="w-1 h-1 rounded-full bg-green-500"></div>}
+                          {hasTarget && <div className="w-1 h-1 rounded-full bg-blue-500 animate-pulse shadow-[0_0_5px_blue]"></div>}
+                          {hasCompletedTarget && <div className="w-1 h-1 rounded-full bg-green-500 shadow-[0_0_5px_green]"></div>}
                        </div>
                     </div>
                  )
