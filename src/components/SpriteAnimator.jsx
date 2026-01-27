@@ -1,22 +1,23 @@
-import { useEffect, useState } from "react";
+import React, { useEffect, useState } from "react"; // 🔥 FIXED: Added React import
 
 export default function SpriteAnimator({
   src,
   frameWidth,
   frameHeight,
-  frames,
+  frameCount, // Changed from 'frames' to match usage in PixelGarden
   fps = 8,
   scale = 1,
+  flip = false // Added flip support for direction
 }) {
   const [frame, setFrame] = useState(0);
 
   useEffect(() => {
     const id = setInterval(() => {
-      setFrame(f => (f + 1) % frames);
+      setFrame((f) => (f + 1) % frameCount);
     }, 1000 / fps);
 
     return () => clearInterval(id);
-  }, [frames, fps]);
+  }, [frameCount, fps]);
 
   return (
     <div
@@ -27,7 +28,7 @@ export default function SpriteAnimator({
         backgroundPosition: `-${frame * frameWidth}px 0px`,
         backgroundRepeat: "no-repeat",
         imageRendering: "pixelated",
-        transform: "translateZ(0)",
+        transform: flip ? "scaleX(-1)" : "none", // Handle flipping
       }}
     />
   );
