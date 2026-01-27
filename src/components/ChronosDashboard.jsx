@@ -6,6 +6,7 @@ import {
 } from 'lucide-react';
 import { supabase } from '../supabaseClient';
 import StudyChat from './StudyChat';
+import PixelGarden from './PixelGarden'; // 🔥 IMPORT ADDED
 
 export default function ChronosDashboard({ user }) {
   const [currentDate, setCurrentDate] = useState(new Date());
@@ -143,7 +144,7 @@ export default function ChronosDashboard({ user }) {
 
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 max-w-7xl mx-auto">
 
-        {/* BLOCK 1: BALLISTICS */}
+        {/* BLOCK 1: BALLISTICS & PIXEL GARDEN */}
         <div className="lg:col-span-8 bg-[#0a0a0f] border border-slate-800 rounded-[2rem] p-8 shadow-2xl relative overflow-hidden">
            <div className="absolute top-0 right-0 w-96 h-96 bg-blue-600/5 blur-[100px] rounded-full pointer-events-none"></div>
            <div className="relative z-10">
@@ -156,7 +157,12 @@ export default function ChronosDashboard({ user }) {
                  <div className="p-5 bg-slate-900/50 rounded-2xl border border-red-900/30"><p className="text-[9px] text-red-400 uppercase font-bold tracking-widest mb-2">Deficit</p><div className="text-5xl font-black text-red-500">-{gap.toFixed(1)}</div></div>
                  <div className="p-5 bg-blue-900/10 rounded-2xl border border-blue-500/30"><p className="text-[9px] text-blue-300 uppercase font-bold tracking-widest mb-2">Required Gain</p><div className="flex items-end gap-2"><TrendingUp size={32} className="text-green-400 mb-2" /><div className="text-5xl font-black text-green-400">+{requiredDailyGrowth}</div></div></div>
               </div>
-              <div className="mt-8"><div className="w-full h-2 bg-slate-800 rounded-full overflow-hidden border border-slate-700"><motion.div initial={{ width: 0 }} animate={{ width: `${currentGPA}%` }} className="h-full bg-gradient-to-r from-blue-600 to-cyan-400 shadow-[0_0_15px_cyan]" /></div></div>
+              <div className="mt-8">
+                 <div className="w-full h-2 bg-slate-800 rounded-full overflow-hidden border border-slate-700"><motion.div initial={{ width: 0 }} animate={{ width: `${currentGPA}%` }} className="h-full bg-gradient-to-r from-blue-600 to-cyan-400 shadow-[0_0_15px_cyan]" /></div>
+                 
+                 {/* 🔥 PIXEL GARDEN ADDED HERE */}
+                 <PixelGarden gpa={currentGPA} streak={user?.streak_count || 0} />
+              </div>
            </div>
         </div>
 
@@ -187,10 +193,8 @@ export default function ChronosDashboard({ user }) {
               )}
 
               {/* MODE B: CHAT (FIXED FLEXBOX LAYOUT) */}
-              {/* 🔥 This container forces the StudyChat to respect the parent height */}
               <div className={`absolute inset-0 flex flex-col bg-[#050508] ${commsMode === 'chat' ? 'visible' : 'invisible pointer-events-none'}`}>
-                 <div className="flex-1 min-h-0 relative">
-                    {/* Passing isTunnel=false usually renders chat in full mode, we might need a compact prop if available */}
+                 <div className="flex-1 min-h-0 bg-[#050508] rounded-xl border border-slate-800 overflow-hidden relative">
                     <StudyChat user={user} isTunnel={false} />
                  </div>
               </div>
@@ -201,10 +205,9 @@ export default function ChronosDashboard({ user }) {
         <div className="lg:col-span-6 bg-[#0a0a0f] border border-slate-800 rounded-[2rem] p-8 shadow-xl">
            <div className="flex justify-between items-center mb-6">
               <h3 className="font-black text-lg text-white flex items-center gap-2"><Calendar className="text-purple-500" /><span>Execution Grid</span></h3>
-              {/* 🔥 LEGEND RESTORED HERE */}
               <div className="flex gap-3 text-[9px] font-bold uppercase text-slate-500">
                  <div className="flex items-center gap-1"><div className="w-2 h-2 rounded bg-green-900"></div> Active</div>
-                 <div className="flex items-center gap-1"><div className="w-2 h-2 rounded bg-blue-500 animate-pulse"></div> Target</div>
+                 <div className="flex items-center gap-1"><div className="w-2 h-2 rounded bg-blue-500"></div> Target</div>
                  <div className="flex items-center gap-1"><div className="w-2 h-2 rounded bg-white"></div> Today</div>
               </div>
            </div>
@@ -230,7 +233,7 @@ export default function ChronosDashboard({ user }) {
            </div>
         </div>
 
-        {/* BLOCK 4: GOALS (Unchanged) */}
+        {/* BLOCK 4: GOALS */}
         <div className="lg:col-span-6 bg-[#0a0a0f] border border-slate-800 rounded-[2rem] p-8 shadow-xl flex flex-col">
            <div className="flex justify-between items-center mb-6">
               <h3 className="font-black text-lg text-white flex items-center gap-2"><Target className="text-orange-500" /><span>Tactical Objectives</span></h3>
@@ -252,7 +255,7 @@ export default function ChronosDashboard({ user }) {
 
       </div>
 
-      {/* MODALS UNCHANGED */}
+      {/* MODALS */}
       <AnimatePresence>
         {showPlanModal && (<motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 z-50 bg-black/90 backdrop-blur-sm flex items-center justify-center p-4"><motion.div initial={{ scale: 0.9 }} animate={{ scale: 1 }} className="bg-[#0a0a0f] border border-blue-500/50 w-full max-w-lg rounded-2xl p-8 shadow-2xl relative"><h2 className="text-2xl font-black text-white uppercase mb-4">Mission Briefing</h2><form onSubmit={(e) => { e.preventDefault(); saveMonthlyPlan({ focus: new FormData(e.target).get('focus') }); }}><input name="focus" required placeholder="Primary Monthly Objective" className="w-full bg-slate-900 border border-slate-700 rounded p-3 text-white focus:border-blue-500 outline-none mb-6" /><button type="submit" className="w-full bg-blue-600 hover:bg-blue-500 text-white font-bold py-3 rounded-lg">INITIALIZE</button></form></motion.div></motion.div>)}
       </AnimatePresence>
