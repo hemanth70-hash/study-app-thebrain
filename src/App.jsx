@@ -6,20 +6,23 @@ import AdminPanel from './components/AdminPanel';
 import { supabase } from './supabaseClient';
 import Profile from './components/Profile';
 import SubjectNotes from './components/SubjectNotes';
+import QuickQuiz from './components/QuickQuiz';
+import GoalTracker from './components/GoalTracker';
+import StudyChat from './components/StudyChat';
+import InviteButton from './components/InviteButton';
 import StudyHub from './components/StudyHub'; 
-import TypingMaster from './components/TypingMaster';
-import RailwayDreamTunnel from './components/RailwayDreamTunnel'; // 🔥 THE CORE
+import TypingMaster from './components/TypingMaster'; 
 
-// 🔥 STABILIZED IMPORTS: Required icons
 import { 
-  Megaphone, ShieldAlert, Zap, Layout, TrainFront 
+  Lock, Megaphone, ShieldAlert, Key, Youtube, 
+  Layout, Zap, Award, Database, ListFilter, Skull 
 } from 'lucide-react';
 
 export default function App() {
   const [user, setUser] = useState(null);
   const [username, setUsername] = useState('');
   const [activeTab, setActiveTab] = useState('dashboard');
-  const [isDarkMode, setIsDarkMode] = useState(true); // Default Dark Mode
+  const [isDarkMode, setIsDarkMode] = useState(false);
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
   const [globalMsg, setGlobalMsg] = useState(null);
   const [isExamLocked, setIsExamLocked] = useState(false); 
@@ -67,7 +70,7 @@ export default function App() {
         .eq('active', true)
         .order('created_at', { ascending: false })
         .limit(1)
-        .maybeSingle(); 
+        .maybeSingle();
       if (data) setGlobalMsg(data.message);
     };
     if (user) fetchAnnouncement();
@@ -171,14 +174,50 @@ export default function App() {
             <h2 className="text-4xl font-black capitalize text-blue-600 dark:text-blue-400">
               {activeTab === 'ranking' ? 'Leaderboard' : activeTab === 'study' ? 'Study Hub' : activeTab === 'typing' ? 'Neural Typer' : activeTab}
             </h2>
+            <div className="flex-1 min-w-[300px]">
+              {globalMsg && (
+                <div className="bg-gradient-to-r from-blue-600 to-indigo-700 text-white px-6 py-3 rounded-3xl shadow-lg flex items-center border border-white/20 relative overflow-hidden">
+                  <div className="flex-1 overflow-hidden"><marquee className="font-bold text-sm whitespace-nowrap">{globalMsg}</marquee></div>
+                  <button onClick={() => setGlobalMsg(null)} className="ml-4 hover:text-white/70 transition-colors shrink-0 z-10">✕</button>
+                </div>
+              )}
+            </div>
+            <div className="flex items-center gap-3 bg-white dark:bg-slate-800 px-6 py-2 rounded-2xl shadow-sm border-2 border-orange-50 dark:border-slate-700">
+              <span className="text-2xl animate-pulse">🔥</span>
+              <span className="font-black text-xl text-orange-500">{user.streak_count || 0}</span>
+            </div>
           </header>
 
           <div className="max-w-7xl mx-auto space-y-8">
-            {/* 🔥 DASHBOARD REPLACED WITH RAILWAY DREAM TUNNEL */}
+            
+            {/* 🔥 STANDARD DASHBOARD RESTORED */}
             {activeTab === 'dashboard' && (
-               <div className="animate-in fade-in zoom-in duration-700">
-                  <RailwayDreamTunnel user={user} globalMsg={globalMsg} isDarkMode={isDarkMode} />
-               </div>
+              <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-700">
+                <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+                  <div className="lg:col-span-2 bg-white dark:bg-slate-900 p-10 rounded-[2.5rem] shadow-xl border-b-8 border-blue-500 flex flex-col justify-between relative overflow-hidden group">
+                    <div className="absolute top-0 right-0 p-10 opacity-5 group-hover:rotate-12 transition-transform duration-700"><Layout size={160} /></div>
+                    <div className="relative z-10">
+                      <div className="flex justify-between items-start mb-6">
+                        <div>
+                          <h3 className="text-4xl font-black uppercase tracking-tighter dark:text-white">Welcome, {user.username}</h3>
+                          <p className="text-blue-600 font-black text-[10px] uppercase tracking-[0.3em] mt-2 italic">Identity: {user.education || 'Neural Aspirant'}</p>
+                        </div>
+                        <InviteButton />
+                      </div>
+                      <div className="bg-blue-50 dark:bg-blue-900/20 p-6 rounded-3xl border border-blue-100 dark:border-blue-800 backdrop-blur-sm">
+                        <p className="text-sm font-bold text-gray-600 dark:text-slate-300">
+                          Synchronization Active. Global Performance Index: <span className="text-blue-600 font-black">{(user.total_percentage_points / (user.total_exams_completed || 1)).toFixed(1)}%</span>
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                  <div className="lg:col-span-1 min-h-[250px]"><GoalTracker user={user} /></div>
+                </div>
+                <div className="grid grid-cols-1 lg:grid-cols-5 gap-8">
+                  <div className="lg:col-span-3"><QuickQuiz /></div>
+                  <div className="lg:col-span-2 flex flex-col min-h-[400px]"><StudyChat user={user} /></div>
+                </div>
+              </div>
             )}
             
             {activeTab === 'study' && <StudyHub user={user} />}
