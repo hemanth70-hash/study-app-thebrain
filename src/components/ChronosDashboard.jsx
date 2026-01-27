@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
   Calendar, CheckCircle, TrendingUp, Trophy, Target, Plus, 
-  Flame, Download, FileText, X, Radio, ExternalLink, Globe, AlertTriangle
+  Flame, Download, FileText, X, AlertCircle, ArrowUpRight, Radio, ExternalLink, Globe, Loader2
 } from 'lucide-react';
 import { supabase } from '../supabaseClient';
 
@@ -14,9 +14,15 @@ export default function ChronosDashboard({ user }) {
   const [showReportModal, setShowReportModal] = useState(false);
   const [newGoal, setNewGoal] = useState("");
   const [examDate, setExamDate] = useState("2026-08-01");
-  const [hybridFeed, setHybridFeed] = useState([]);
+  
+  // 🔥 HYBRID FEED STATE (Init from Cache if available)
+  const [hybridFeed, setHybridFeed] = useState(() => {
+    const cached = localStorage.getItem('chronos_feed_cache');
+    return cached ? JSON.parse(cached) : [];
+  });
+  const [isFeedUpdating, setIsFeedUpdating] = useState(false);
 
-  // --- 1. PERSISTENCE & HYBRID FEED ENGINE ---
+  // --- 1. CORE DATA & PERSISTENCE ---
   useEffect(() => {
     const storedGoals = localStorage.getItem('chronos_goals');
     const storedPlan = localStorage.getItem(`chronos_plan_${currentDate.getMonth()}_${currentDate.getFullYear()}`);
@@ -25,32 +31,59 @@ export default function ChronosDashboard({ user }) {
     if (storedPlan) setMonthlyPlan(JSON.parse(storedPlan)); 
     else setShowPlanModal(true);
 
+    // --- LIVE FEED ENGINE ---
     const fetchHybridFeed = async () => {
-      // 1. Internal DB Feed
-      const { data: internalData } = await supabase.from('victory_feed').select('*').order('created_at', { ascending: false }).limit(10);
+      setIsFeedUpdating(true);
+      
+      // 1. Internal DB Feed (Victory Feed)
+      const { data: internalData } = await supabase
+        .from('victory_feed')
+        .select('*')
+        .order('created_at', { ascending: false })
+        .limit(10);
+      
       const internalLogs = internalData ? internalData.map(item => ({
         id: `int-${item.id}`, type: item.type, text: item.message, time: new Date(item.created_at).getTime(), source: 'INTERNAL'
       })) : [];
 
       // 2. External RSS (Times of India Education)
+      let externalLogs = [];
       try {
         const RSS_URL = "https://timesofindia.indiatimes.com/rssfeeds/913168846.cms"; 
         const res = await fetch(`https://api.rss2json.com/v1/api.json?rss_url=${encodeURIComponent(RSS_URL)}`);
         const json = await res.json();
-        const externalLogs = json.items ? json.items.slice(0, 5).map((item, idx) => ({
-          id: `ext-${idx}`, type: 'news', text: item.title, time: new Date(item.pubDate).getTime(), source: 'WEB', link: item.link
-        })) : [];
-        setHybridFeed([...internalLogs, ...externalLogs].sort((a, b) => b.time - a.time));
-      } catch (e) { console.error("RSS Error", e); setHybridFeed(internalLogs); }
+        if(json.items) {
+          externalLogs = json.items.slice(0, 6).map((item, idx) => ({
+            id: `ext-${idx}`, type: 'news', text: item.title, time: new Date(item.pubDate).getTime(), source: 'WEB', link: item.link
+          }));
+        }
+      } catch (e) { console.error("RSS Uplink Failed (Using Cache)", e); }
+
+      // 3. Merge, Sort, and Cache
+      const merged = [...internalLogs, ...externalLogs].sort((a, b) => b.time - a.time);
+      
+      // Only update if we actually got data (prevents wiping cache on error)
+      if (merged.length > 0) {
+        setHybridFeed(merged);
+        localStorage.setItem('chronos_feed_cache', JSON.stringify(merged));
+      }
+      
+      setIsFeedUpdating(false);
     };
+
     fetchHybridFeed();
 
+    // 4. Realtime Listener (Supabase Push)
     const channel = supabase.channel('victory_feed_updates')
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'victory_feed' }, (payload) => {
         const newItem = {
           id: `int-${payload.new.id}`, type: payload.new.type, text: payload.new.message, time: new Date(payload.new.created_at).getTime(), source: 'INTERNAL'
         };
-        setHybridFeed(prev => [newItem, ...prev].slice(0, 20));
+        setHybridFeed(prev => {
+          const updated = [newItem, ...prev].slice(0, 30);
+          localStorage.setItem('chronos_feed_cache', JSON.stringify(updated)); // Update cache instantly
+          return updated;
+        });
       }).subscribe();
 
     return () => { supabase.removeChannel(channel); };
@@ -58,51 +91,34 @@ export default function ChronosDashboard({ user }) {
 
   useEffect(() => { localStorage.setItem('chronos_goals', JSON.stringify(goals)); }, [goals]);
 
-  // --- 2. MATH ENGINE ---
+  // --- 2. PRECISE MATH ENGINE ---
   const totalPoints = user?.total_percentage_points || 0;
   const totalExams = user?.total_exams_completed || 1; 
-  const currentGPA = parseFloat(Math.min((totalExams > 0 ? (totalPoints / totalExams) : 0), 100).toFixed(1));
+  const rawGPA = totalExams > 0 ? (totalPoints / totalExams) : 0;
+  const currentGPA = parseFloat(Math.min(rawGPA, 100).toFixed(1));
+  
   const targetGPA = 95.0;
   const daysToExam = Math.max(1, Math.ceil((new Date(examDate) - new Date()) / (1000 * 60 * 60 * 24)));
   const gap = Math.max(0, targetGPA - currentGPA);
   const requiredDailyGrowth = (gap / daysToExam).toFixed(2);
+  
   const completedGoals = goals.filter(g => g.completed).length;
-  const monthlyEfficiency = goals.length === 0 ? 0 : Math.round((completedGoals / goals.length) * 100);
+  const totalGoals = goals.length;
+  const monthlyEfficiency = totalGoals === 0 ? 0 : Math.round((completedGoals / totalGoals) * 100);
 
-  // --- 3. ADVANCED CALENDAR LOGIC ---
+  // --- 3. TIME-LOCKED CALENDAR ---
   const todayDay = currentDate.getDate();
   const daysInMonth = new Date(currentDate.getFullYear(), currentDate.getMonth() + 1, 0).getDate();
   const calendarDays = Array.from({ length: daysInMonth }, (_, i) => i + 1);
-  
-  // Logic to calculate specific day status
-  const getDayStatus = (day) => {
-    const isToday = day === todayDay;
-    const isFuture = day > todayDay;
-    const dateStr = `${currentDate.getFullYear()}-${String(currentDate.getMonth() + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
-    
-    // Check if this date matches the Exam Date
-    if (dateStr === examDate) return { type: 'exam', label: 'TARGET DAY' };
-
-    if (isFuture) return { type: 'future', label: 'LOCKED' };
-    
-    // Simulate Streak History (Active for last N days based on streak count)
-    // In a real app, you'd check a daily_logs table. Here we approximate visually.
-    const streak = user?.streak_count || 0;
-    const dayDistance = todayDay - day;
-    
-    if (dayDistance >= 0 && dayDistance < streak) {
-      // High Performance Variation (Every 3rd day is a "Peak" day)
-      if (day % 3 === 0) return { type: 'peak', label: `HIGH SCORE: ${(currentGPA + Math.random()*5).toFixed(1)}%` };
-      return { type: 'active', label: `STREAK DAY` };
-    }
-
-    return { type: 'inactive', label: 'NO LOGIN' };
-  };
 
   // Actions
-  const saveMonthlyPlan = (plan) => { localStorage.setItem(`chronos_plan_${currentDate.getMonth()}_${currentDate.getFullYear()}`, JSON.stringify(plan)); setMonthlyPlan(plan); setShowPlanModal(false); };
+  const saveMonthlyPlan = (plan) => {
+    localStorage.setItem(`chronos_plan_${currentDate.getMonth()}_${currentDate.getFullYear()}`, JSON.stringify(plan));
+    setMonthlyPlan(plan); setShowPlanModal(false);
+  };
   const addGoal = () => { if(newGoal.trim()){ setGoals([...goals, { id: Date.now(), title: newGoal, date: new Date().toISOString().split('T')[0], completed: false }]); setNewGoal(""); }};
   const toggleGoal = (id) => { setGoals(goals.map(g => g.id === id ? { ...g, completed: !g.completed } : g)); };
+
   const downloadReport = () => {
     const w = window.open('', '', 'height=600,width=800');
     w.document.write(`<html><head><title>Report</title><style>body{font-family:monospace;padding:20px;}h1{border-bottom:2px solid black;}</style></head><body><h1>NEURAL REPORT: ${user.username}</h1><p>GPA: ${currentGPA}%</p><p>EFFICIENCY: ${monthlyEfficiency}%</p><hr/><h3>LOG</h3>${goals.map(g=>`<div>[${g.completed?'X':' '}] ${g.title}</div>`).join('')}</body></html>`);
@@ -144,12 +160,16 @@ export default function ChronosDashboard({ user }) {
            </div>
         </div>
 
-        {/* BLOCK 2: HYBRID FEED */}
+        {/* BLOCK 2: CACHED HYBRID FEED */}
         <div className="lg:col-span-4 bg-[#0a0a0f] border border-slate-800 rounded-[2rem] p-6 shadow-xl flex flex-col h-[420px] overflow-hidden relative">
            <div className="flex items-center justify-between mb-4 pb-4 border-b border-slate-800 bg-[#0a0a0f] z-10">
-              <div className="flex items-center gap-3"><Radio size={18} className="text-red-500 animate-pulse" /><h3 className="font-black text-sm text-slate-200 uppercase tracking-widest">Global Intel</h3></div>
-              <span className="text-[9px] text-slate-600 font-mono">LIVE UPLINK</span>
+              <div className="flex items-center gap-3"><Radio size={18} className={`text-red-500 ${isFeedUpdating ? 'animate-ping' : ''}`} /><h3 className="font-black text-sm text-slate-200 uppercase tracking-widest">Global Intel</h3></div>
+              <span className="text-[9px] text-slate-600 font-mono flex items-center gap-1">
+                {isFeedUpdating && <Loader2 size={8} className="animate-spin" />}
+                {isFeedUpdating ? "SYNCING..." : "LIVE UPLINK"}
+              </span>
            </div>
+           
            <div className="flex-1 overflow-y-auto custom-scrollbar pr-2 space-y-3">
               {hybridFeed.map((item) => (
                  <div key={item.id} className={`p-3 rounded-xl border-l-2 bg-slate-900/40 hover:bg-slate-800/60 transition-colors ${item.source === 'WEB' ? 'border-blue-500' : item.type === 'win' ? 'border-green-500' : item.type === 'streak' ? 'border-orange-500' : 'border-purple-500'}`}>
@@ -161,51 +181,36 @@ export default function ChronosDashboard({ user }) {
                     {item.source === 'WEB' && <a href={item.link} target="_blank" rel="noreferrer" className="text-[9px] text-blue-400 flex items-center gap-1 hover:underline">Read Source <ExternalLink size={8} /></a>}
                  </div>
               ))}
-              {hybridFeed.length === 0 && <div className="text-center text-xs text-slate-600 mt-10">Initializing Uplink...</div>}
+              {hybridFeed.length === 0 && !isFeedUpdating && <div className="text-center text-xs text-slate-600 mt-10">No Intel Available. Check Network.</div>}
            </div>
         </div>
 
-        {/* BLOCK 3: INTERACTIVE CALENDAR */}
+        {/* BLOCK 3: STRICT EXECUTION GRID */}
         <div className="lg:col-span-6 bg-[#0a0a0f] border border-slate-800 rounded-[2rem] p-8 shadow-xl">
            <div className="flex justify-between items-center mb-6">
               <h3 className="font-black text-lg text-white flex items-center gap-2"><Calendar className="text-purple-500" /><span>Execution Grid</span></h3>
-              {/* LEGEND */}
               <div className="flex gap-2 text-[9px] font-bold uppercase text-slate-500">
                  <div className="flex items-center gap-1"><div className="w-2 h-2 rounded bg-[#050508] border border-slate-700"></div> Future</div>
-                 <div className="flex items-center gap-1"><div className="w-2 h-2 rounded bg-green-900"></div> Active</div>
-                 <div className="flex items-center gap-1"><div className="w-2 h-2 rounded bg-green-500"></div> Peak</div>
-                 <div className="flex items-center gap-1"><div className="w-2 h-2 rounded bg-red-600 animate-pulse"></div> Exam</div>
+                 <div className="flex items-center gap-1"><div className="w-2 h-2 rounded bg-green-500"></div> Done</div>
+                 <div className="flex items-center gap-1"><div className="w-2 h-2 rounded bg-white"></div> Today</div>
               </div>
            </div>
-           
            <div className="grid grid-cols-7 gap-3">
               {['S','M','T','W','T','F','S'].map(d => <div key={d} className="text-center text-xs font-bold text-slate-600">{d}</div>)}
               {calendarDays.map(day => {
-                 const status = getDayStatus(day);
+                 const isToday = day === todayDay;
+                 const isFuture = day > todayDay;
                  
-                 // Dynamic Styling based on Status
-                 let cellStyle = "";
-                 if (status.type === 'exam') cellStyle = "border-red-500 bg-red-900/50 text-red-200 animate-pulse shadow-[0_0_15px_red]";
-                 else if (status.type === 'future') cellStyle = "border-transparent bg-[#050508] text-slate-800 cursor-not-allowed";
-                 else if (status.type === 'peak') cellStyle = "border-green-400 bg-green-500 text-black shadow-[0_0_10px_green] font-black scale-105";
-                 else if (status.type === 'active') cellStyle = "border-transparent bg-green-900/40 text-green-300";
-                 else cellStyle = "border-transparent bg-slate-900 text-slate-600 hover:border-slate-700"; // Inactive
+                 // Simulating Past Activity (Random Seed based on day number to be deterministic for visual consistency)
+                 // In prod: Check DB for entry where date = currentMonth-day
+                 const pseudoRandom = Math.sin(day * 999) > 0; 
+                 
+                 let style = "";
+                 if (isFuture) style = "border-transparent text-slate-800 bg-[#050508] cursor-not-allowed"; // GHOSTED
+                 else if (isToday) style = "border-white text-white bg-slate-800 shadow-lg scale-110"; // BRIGHT
+                 else style = pseudoRandom ? "border-transparent text-green-400 bg-green-900/20" : "border-transparent text-slate-500 bg-slate-900"; // PAST
 
-                 return (
-                    <div key={day} className="relative group">
-                       <div className={`aspect-square rounded-lg flex items-center justify-center text-xs font-bold border transition-all ${cellStyle}`}>
-                          {day}
-                       </div>
-                       
-                       {/* TOOLTIP */}
-                       {status.type !== 'future' && (
-                         <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 w-max px-2 py-1 bg-white text-black text-[9px] font-bold rounded shadow-xl opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-20">
-                            {status.label}
-                            <div className="absolute top-full left-1/2 -translate-x-1/2 w-0 h-0 border-l-[4px] border-l-transparent border-r-[4px] border-r-transparent border-t-[4px] border-t-white"></div>
-                         </div>
-                       )}
-                    </div>
-                 )
+                 return <div key={day} className={`aspect-square rounded-lg flex items-center justify-center text-xs font-bold border transition-all ${style}`}>{day}</div>
               })}
            </div>
         </div>
@@ -223,7 +228,7 @@ export default function ChronosDashboard({ user }) {
       <AnimatePresence>
         {showPlanModal && (
           <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 z-50 bg-black/90 backdrop-blur-sm flex items-center justify-center p-4">
-            <motion.div initial={{ scale: 0.9 }} animate={{ scale: 1 }} className="bg-[#0a0a0f] border border-blue-500/50 w-full max-w-lg rounded-2xl p-8 shadow-2xl relative">
+            <motion.div initial={{ scale: 0.9 }} animate={{ scale: 1 }} className="bg-[#0a0a0f] border border-blue-500/50 w-full max-w-lg rounded-2xl p-8 shadow-2xl">
               <h2 className="text-2xl font-black text-white uppercase mb-4">Mission Briefing</h2>
               <form onSubmit={(e) => { e.preventDefault(); saveMonthlyPlan({ focus: new FormData(e.target).get('focus') }); }}>
                 <input name="focus" required placeholder="Primary Monthly Objective" className="w-full bg-slate-900 border border-slate-700 rounded p-3 text-white focus:border-blue-500 outline-none mb-6" />
@@ -245,6 +250,7 @@ export default function ChronosDashboard({ user }) {
           </motion.div>
         )}
       </AnimatePresence>
+
     </div>
   );
 }
