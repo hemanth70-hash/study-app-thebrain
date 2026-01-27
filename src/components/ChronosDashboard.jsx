@@ -18,7 +18,7 @@ export default function ChronosDashboard({ user }) {
   
   // --- COMMS SYSTEM STATE ---
   const [commsMode, setCommsMode] = useState('intel'); // 'intel' or 'chat'
-  const [hasNewMessage, setHasNewMessage] = useState(false); // Notification State
+  const [hasNewMessage, setHasNewMessage] = useState(false); 
 
   // --- INPUTS ---
   const [newGoalTitle, setNewGoalTitle] = useState("");
@@ -109,7 +109,6 @@ export default function ChronosDashboard({ user }) {
     return { text: `${diffDays} DAYS LEFT`, color: "text-blue-400", bg: "bg-blue-500/10" };
   };
 
-  // Actions
   const saveMonthlyPlan = (plan) => { localStorage.setItem(`chronos_plan_${currentDate.getMonth()}_${currentDate.getFullYear()}`, JSON.stringify(plan)); setMonthlyPlan(plan); setShowPlanModal(false); };
   const addGoal = () => { if(!newGoalTitle.trim()) return; setGoals([...goals, { id: Date.now(), title: newGoalTitle, type: newGoalType, date: newGoalType === 'ops' ? newGoalDate : null, priority: newGoalPriority, completed: false }]); setNewGoalTitle(""); };
   const toggleGoal = (id) => { setGoals(goals.map(g => g.id === id ? { ...g, completed: !g.completed } : g)); };
@@ -161,18 +160,22 @@ export default function ChronosDashboard({ user }) {
            </div>
         </div>
 
-        {/* BLOCK 2: TACTICAL COMMS */}
+        {/* =======================================================
+            BLOCK 2: TACTICAL COMMS & INTEL (FIXED)
+        ======================================================= */}
         <div className="lg:col-span-4 bg-[#0a0a0f] border border-slate-800 rounded-[2rem] p-6 shadow-xl flex flex-col h-[420px] overflow-hidden relative">
            <div className="flex items-center justify-between mb-4 pb-4 border-b border-slate-800 bg-[#0a0a0f] z-10">
               <div className="flex gap-2 p-1 bg-slate-900 rounded-lg">
-                 <button onClick={() => switchComms('intel')} className={`flex items-center gap-2 px-3 py-1.5 rounded-md text-[10px] font-bold uppercase transition-all ${commsMode === 'intel' ? 'bg-blue-600 text-white shadow' : 'text-slate-500 hover:text-slate-300'}`}><Radio size={12} className={commsMode === 'intel' ? 'animate-pulse' : ''} /> Global Intel</button>
-                 <button onClick={() => switchComms('chat')} className={`relative flex items-center gap-2 px-3 py-1.5 rounded-md text-[10px] font-bold uppercase transition-all ${commsMode === 'chat' ? 'bg-green-600 text-white shadow' : 'text-slate-500 hover:text-slate-300'}`}><MessageSquare size={12} /> Daily Convo {hasNewMessage && commsMode !== 'chat' && (<span className="absolute -top-1 -right-1 w-2.5 h-2.5 bg-red-500 rounded-full animate-bounce border border-black"></span>)}</button>
+                 <button onClick={() => switchComms('intel')} className={`flex items-center gap-2 px-3 py-1.5 rounded-md text-[10px] font-bold uppercase transition-all ${commsMode === 'intel' ? 'bg-blue-600 text-white shadow' : 'text-slate-500 hover:text-slate-300'}`}><Radio size={12} className={commsMode === 'intel' ? 'animate-pulse' : ''} /> Intel</button>
+                 <button onClick={() => switchComms('chat')} className={`relative flex items-center gap-2 px-3 py-1.5 rounded-md text-[10px] font-bold uppercase transition-all ${commsMode === 'chat' ? 'bg-green-600 text-white shadow' : 'text-slate-500 hover:text-slate-300'}`}><MessageSquare size={12} /> Chat {hasNewMessage && commsMode !== 'chat' && (<span className="absolute -top-1 -right-1 w-2.5 h-2.5 bg-red-500 rounded-full animate-bounce border border-black"></span>)}</button>
               </div>
-              <span className="text-[9px] text-slate-600 font-mono">{commsMode === 'intel' ? 'LIVE' : 'SECURE'}</span>
+              <span className="text-[9px] text-slate-600 font-mono">{commsMode === 'intel' ? 'LIVE UPLINK' : 'SECURE LINE'}</span>
            </div>
-           <div className="flex-1 overflow-hidden relative">
+           
+           <div className="flex-1 overflow-hidden relative flex flex-col">
+              {/* MODE A: INTEL FEED */}
               {commsMode === 'intel' && (
-                <div className="h-full overflow-y-auto custom-scrollbar pr-2 space-y-3">
+                <div className="flex-1 overflow-y-auto custom-scrollbar pr-2 space-y-3">
                    {hybridFeed.map((item) => (
                       <div key={item.id} className={`p-3 rounded-xl border-l-2 bg-slate-900/40 hover:bg-slate-800/60 transition-colors ${item.source === 'WEB' ? 'border-blue-500' : item.type === 'win' ? 'border-green-500' : 'border-purple-500'}`}>
                          <div className="flex justify-between items-start mb-1"><span className={`text-[8px] font-black uppercase px-2 py-0.5 rounded text-white flex items-center gap-1 ${item.source === 'WEB' ? 'bg-blue-600' : 'bg-slate-700'}`}>{item.source === 'WEB' ? <Globe size={8} /> : null} {item.source === 'WEB' ? 'INTERNET' : item.type.toUpperCase()}</span><span className="text-[9px] text-slate-600 font-mono">{new Date(item.time).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</span></div>
@@ -182,19 +185,31 @@ export default function ChronosDashboard({ user }) {
                    ))}
                 </div>
               )}
-              <div className={`h-full ${commsMode === 'chat' ? 'block' : 'hidden'}`}><StudyChat user={user} isTunnel={false} /></div>
+
+              {/* MODE B: CHAT (FIXED HEIGHT CONTAINER) */}
+              <div className={`flex-1 h-full w-full ${commsMode === 'chat' ? 'flex flex-col' : 'hidden'}`}>
+                 <div className="flex-1 min-h-0 overflow-hidden rounded-xl border border-slate-800 bg-[#050508]">
+                    <StudyChat user={user} isTunnel={false} />
+                 </div>
+              </div>
            </div>
         </div>
 
-        {/* BLOCK 3: CALENDAR */}
+        {/* =======================================================
+            BLOCK 3: EXECUTION GRID (WITH LEGEND)
+        ======================================================= */}
         <div className="lg:col-span-6 bg-[#0a0a0f] border border-slate-800 rounded-[2rem] p-8 shadow-xl">
            <div className="flex justify-between items-center mb-6">
               <h3 className="font-black text-lg text-white flex items-center gap-2"><Calendar className="text-purple-500" /><span>Execution Grid</span></h3>
+              
+              {/* 🔥 FIXED LEGEND RESTORED */}
               <div className="flex gap-3 text-[9px] font-bold uppercase text-slate-500">
                  <div className="flex items-center gap-1"><div className="w-2 h-2 rounded bg-green-900"></div> Active</div>
-                 <div className="flex items-center gap-1"><div className="w-2 h-2 rounded bg-blue-500"></div> Target</div>
+                 <div className="flex items-center gap-1"><div className="w-2 h-2 rounded bg-blue-500 animate-pulse"></div> Target</div>
+                 <div className="flex items-center gap-1"><div className="w-2 h-2 rounded bg-white"></div> Today</div>
               </div>
            </div>
+           
            <div className="grid grid-cols-7 gap-3">
               {['S','M','T','W','T','F','S'].map(d => <div key={d} className="text-center text-xs font-bold text-slate-600">{d}</div>)}
               {calendarDays.map(day => {
@@ -203,13 +218,15 @@ export default function ChronosDashboard({ user }) {
                  const dateStr = `${currentDate.getFullYear()}-${String(currentDate.getMonth() + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
                  const hasTarget = goals.some(g => g.type === 'ops' && g.date === dateStr && !g.completed);
                  const hasCompletedTarget = goals.some(g => g.type === 'ops' && g.date === dateStr && g.completed);
+                 
                  let style = isFuture ? "border-transparent text-slate-800 bg-[#050508] cursor-not-allowed" : isToday ? "border-white text-white bg-slate-800 shadow-lg scale-110" : "border-transparent text-slate-500 bg-slate-900";
+                 
                  return (
                     <div key={day} className={`aspect-square rounded-lg flex flex-col items-center justify-center text-xs font-bold border transition-all relative ${style}`}>
                        {day}
                        <div className="flex gap-0.5 mt-1">
-                          {hasTarget && <div className="w-1 h-1 rounded-full bg-blue-500 animate-pulse"></div>}
-                          {hasCompletedTarget && <div className="w-1 h-1 rounded-full bg-green-500"></div>}
+                          {hasTarget && <div className="w-1 h-1 rounded-full bg-blue-500 animate-pulse shadow-[0_0_5px_blue]"></div>}
+                          {hasCompletedTarget && <div className="w-1 h-1 rounded-full bg-green-500 shadow-[0_0_5px_green]"></div>}
                        </div>
                     </div>
                  )
@@ -217,7 +234,7 @@ export default function ChronosDashboard({ user }) {
            </div>
         </div>
 
-        {/* BLOCK 4: GOALS */}
+        {/* BLOCK 4: GOALS (Unchanged) */}
         <div className="lg:col-span-6 bg-[#0a0a0f] border border-slate-800 rounded-[2rem] p-8 shadow-xl flex flex-col">
            <div className="flex justify-between items-center mb-6">
               <h3 className="font-black text-lg text-white flex items-center gap-2"><Target className="text-orange-500" /><span>Tactical Objectives</span></h3>
@@ -239,7 +256,7 @@ export default function ChronosDashboard({ user }) {
 
       </div>
 
-      {/* MODALS */}
+      {/* MODALS UNCHANGED */}
       <AnimatePresence>
         {showPlanModal && (<motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 z-50 bg-black/90 backdrop-blur-sm flex items-center justify-center p-4"><motion.div initial={{ scale: 0.9 }} animate={{ scale: 1 }} className="bg-[#0a0a0f] border border-blue-500/50 w-full max-w-lg rounded-2xl p-8 shadow-2xl relative"><h2 className="text-2xl font-black text-white uppercase mb-4">Mission Briefing</h2><form onSubmit={(e) => { e.preventDefault(); saveMonthlyPlan({ focus: new FormData(e.target).get('focus') }); }}><input name="focus" required placeholder="Primary Monthly Objective" className="w-full bg-slate-900 border border-slate-700 rounded p-3 text-white focus:border-blue-500 outline-none mb-6" /><button type="submit" className="w-full bg-blue-600 hover:bg-blue-500 text-white font-bold py-3 rounded-lg">INITIALIZE</button></form></motion.div></motion.div>)}
       </AnimatePresence>
