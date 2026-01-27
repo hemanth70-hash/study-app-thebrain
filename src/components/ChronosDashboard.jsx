@@ -161,10 +161,10 @@ export default function ChronosDashboard({ user }) {
         </div>
 
         {/* =======================================================
-            BLOCK 2: TACTICAL COMMS & INTEL (FIXED)
+            BLOCK 2: TACTICAL COMMS & INTEL
         ======================================================= */}
         <div className="lg:col-span-4 bg-[#0a0a0f] border border-slate-800 rounded-[2rem] p-6 shadow-xl flex flex-col h-[420px] overflow-hidden relative">
-           <div className="flex items-center justify-between mb-4 pb-4 border-b border-slate-800 bg-[#0a0a0f] z-10">
+           <div className="flex items-center justify-between mb-4 pb-4 border-b border-slate-800 bg-[#0a0a0f] z-10 shrink-0">
               <div className="flex gap-2 p-1 bg-slate-900 rounded-lg">
                  <button onClick={() => switchComms('intel')} className={`flex items-center gap-2 px-3 py-1.5 rounded-md text-[10px] font-bold uppercase transition-all ${commsMode === 'intel' ? 'bg-blue-600 text-white shadow' : 'text-slate-500 hover:text-slate-300'}`}><Radio size={12} className={commsMode === 'intel' ? 'animate-pulse' : ''} /> Intel</button>
                  <button onClick={() => switchComms('chat')} className={`relative flex items-center gap-2 px-3 py-1.5 rounded-md text-[10px] font-bold uppercase transition-all ${commsMode === 'chat' ? 'bg-green-600 text-white shadow' : 'text-slate-500 hover:text-slate-300'}`}><MessageSquare size={12} /> Chat {hasNewMessage && commsMode !== 'chat' && (<span className="absolute -top-1 -right-1 w-2.5 h-2.5 bg-red-500 rounded-full animate-bounce border border-black"></span>)}</button>
@@ -186,30 +186,27 @@ export default function ChronosDashboard({ user }) {
                 </div>
               )}
 
-              {/* MODE B: CHAT (FIXED HEIGHT CONTAINER) */}
-              <div className={`flex-1 h-full w-full ${commsMode === 'chat' ? 'flex flex-col' : 'hidden'}`}>
-                 <div className="flex-1 min-h-0 overflow-hidden rounded-xl border border-slate-800 bg-[#050508]">
+              {/* MODE B: CHAT (FIXED FLEXBOX LAYOUT) */}
+              {/* 🔥 This container is key: h-full ensures it takes remaining space, flex-col organizes input at bottom */}
+              <div className={`absolute inset-0 flex flex-col ${commsMode === 'chat' ? 'visible' : 'invisible pointer-events-none'}`}>
+                 <div className="flex-1 min-h-0 bg-[#050508] rounded-xl border border-slate-800 overflow-hidden relative">
                     <StudyChat user={user} isTunnel={false} />
                  </div>
               </div>
            </div>
         </div>
 
-        {/* =======================================================
-            BLOCK 3: EXECUTION GRID (WITH LEGEND)
-        ======================================================= */}
+        {/* BLOCK 3: CALENDAR */}
         <div className="lg:col-span-6 bg-[#0a0a0f] border border-slate-800 rounded-[2rem] p-8 shadow-xl">
            <div className="flex justify-between items-center mb-6">
               <h3 className="font-black text-lg text-white flex items-center gap-2"><Calendar className="text-purple-500" /><span>Execution Grid</span></h3>
-              
-              {/* 🔥 FIXED LEGEND RESTORED */}
+              {/* LEGEND RESTORED */}
               <div className="flex gap-3 text-[9px] font-bold uppercase text-slate-500">
                  <div className="flex items-center gap-1"><div className="w-2 h-2 rounded bg-green-900"></div> Active</div>
-                 <div className="flex items-center gap-1"><div className="w-2 h-2 rounded bg-blue-500 animate-pulse"></div> Target</div>
+                 <div className="flex items-center gap-1"><div className="w-2 h-2 rounded bg-blue-500"></div> Target</div>
                  <div className="flex items-center gap-1"><div className="w-2 h-2 rounded bg-white"></div> Today</div>
               </div>
            </div>
-           
            <div className="grid grid-cols-7 gap-3">
               {['S','M','T','W','T','F','S'].map(d => <div key={d} className="text-center text-xs font-bold text-slate-600">{d}</div>)}
               {calendarDays.map(day => {
@@ -218,15 +215,13 @@ export default function ChronosDashboard({ user }) {
                  const dateStr = `${currentDate.getFullYear()}-${String(currentDate.getMonth() + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
                  const hasTarget = goals.some(g => g.type === 'ops' && g.date === dateStr && !g.completed);
                  const hasCompletedTarget = goals.some(g => g.type === 'ops' && g.date === dateStr && g.completed);
-                 
                  let style = isFuture ? "border-transparent text-slate-800 bg-[#050508] cursor-not-allowed" : isToday ? "border-white text-white bg-slate-800 shadow-lg scale-110" : "border-transparent text-slate-500 bg-slate-900";
-                 
                  return (
                     <div key={day} className={`aspect-square rounded-lg flex flex-col items-center justify-center text-xs font-bold border transition-all relative ${style}`}>
                        {day}
                        <div className="flex gap-0.5 mt-1">
-                          {hasTarget && <div className="w-1 h-1 rounded-full bg-blue-500 animate-pulse shadow-[0_0_5px_blue]"></div>}
-                          {hasCompletedTarget && <div className="w-1 h-1 rounded-full bg-green-500 shadow-[0_0_5px_green]"></div>}
+                          {hasTarget && <div className="w-1 h-1 rounded-full bg-blue-500 animate-pulse"></div>}
+                          {hasCompletedTarget && <div className="w-1 h-1 rounded-full bg-green-500"></div>}
                        </div>
                     </div>
                  )
