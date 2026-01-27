@@ -1,124 +1,263 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { motion } from 'framer-motion';
+import { motion, AnimatePresence } from 'framer-motion';
+import { MessageSquare, Lock, X } from 'lucide-react';
+
+// --- 1. CHARACTER DATABASE ---
+const CHARACTERS = [
+  { 
+    id: 'shinchan', 
+    name: 'Shinchan', 
+    sprite: '👦🏻', 
+    pet: '🐶', // Shiro
+    unlock: { type: 'default' },
+    personalities: {
+      happy: ["Oho! Beautiful lady!", "Choco chips time!", "Action Kamen is starting!"],
+      sad: ["Miss Matsuzaka is scolding me...", "No choco chips?", "Mom is angry..."],
+      troll: ["To be or not to be, that is not the question.", "Are you studying or sleeping?", "Hehe!"]
+    }
+  },
+  { 
+    id: 'doraemon', 
+    name: 'Doraemon', 
+    sprite: '🐱🤖', 
+    pet: '👓', // Nobita (lol)
+    unlock: { type: 'gpa', val: 60, desc: 'Unlock at 60% GPA' },
+    personalities: {
+      happy: ["Dorayaki time!", "I have a gadget for this!", "Great job, Nobita... I mean user!"],
+      sad: ["My gadgets are broken...", "I saw a mouse!", "Don't give up!"],
+      troll: ["Do you want the 'Instant Study' bread?", "Anywhere Door to success is hard work."]
+    }
+  },
+  { 
+    id: 'ben10', 
+    name: 'Ben 10', 
+    sprite: '⌚💚', 
+    pet: '🛸', // Ship
+    unlock: { type: 'streak', val: 7, desc: 'Unlock at 7 Day Streak' },
+    personalities: {
+      happy: ["It's Hero Time!", "Going XLR8 on this syllabus!", "Upgrade complete!"],
+      sad: ["Omnitrix is recharging...", "Grandpa Max is disappointed.", "Vilgax is winning."],
+      troll: ["Did you just use Grey Matter?", "I don't need Four Arms to finish this chapter."]
+    }
+  },
+  { 
+    id: 'tomjerry', 
+    name: 'Tom & Jerry', 
+    sprite: '🐱🐭', 
+    pet: '🧀', 
+    unlock: { type: 'gpa', val: 80, desc: 'Unlock at 80% GPA' },
+    personalities: {
+      happy: ["Peace treaty signed!", "Cheese for everyone!", "*Chase sequence paused*"],
+      sad: ["Ouch! My tail!", "Spike is awake...", "Trap failed."],
+      troll: ["*Bonk*", "Catch me if you can!", "Jerry stole your pen."]
+    }
+  }
+];
 
 export default function PixelGarden({ gpa, streak }) {
-  const canvasRef = useRef(null);
-  const [characters, setCharacters] = useState([]);
+  const [activeChars, setActiveChars] = useState([]);
   const [plants, setPlants] = useState([]);
+  const [chatBubble, setChatBubble] = useState(null); // { charId, text, mood }
+  const [inputMode, setInputMode] = useState(false); // If user wants to type back
+  const [userMsg, setUserMsg] = useState("");
+  const containerRef = useRef(null);
 
-  // --- 1. INITIALIZE WORLD ---
+  // --- 2. INITIALIZE & UNLOCK CHECKER ---
   useEffect(() => {
-    // Spawn initial characters based on streak (Max 5)
-    const count = Math.min(Math.max(1, Math.floor(streak / 5)), 5);
-    const initialChars = Array.from({ length: count }).map((_, i) => ({
-      id: i,
-      x: 50 + i * 40,
-      y: 80,
-      dir: 1, // 1 = right, -1 = left
-      type: i % 2 === 0 ? 'blue-cat' : 'red-kid' // Doraemon / Shinchan style placeholders
-    }));
-    setCharacters(initialChars);
-  }, [streak]);
+    // Determine unlocked characters
+    const unlocked = CHARACTERS.filter(c => {
+      if (c.unlock.type === 'default') return true;
+      if (c.unlock.type === 'gpa') return gpa >= c.unlock.val;
+      if (c.unlock.type === 'streak') return streak >= c.unlock.val;
+      return false;
+    });
 
-  // --- 2. GAME LOOP (Animation) ---
+    // Spawn them
+    const spawned = unlocked.map((char, i) => ({
+      ...char,
+      instanceId: i,
+      x: 20 + (i * 60), // Spread them out
+      y: 80,
+      dir: 1,
+      mood: gpa > 70 ? 'happy' : gpa < 40 ? 'sad' : 'troll'
+    }));
+    setActiveChars(spawned);
+  }, [gpa, streak]);
+
+  // --- 3. MOVEMENT LOOP ---
   useEffect(() => {
     const interval = setInterval(() => {
-      setCharacters(prev => prev.map(char => {
-        let newX = char.x + (char.dir * 2);
+      setActiveChars(prev => prev.map(char => {
+        // If chatting, don't move
+        if (chatBubble && chatBubble.charId === char.id) return char;
+
+        let newX = char.x + (char.dir * 1); // Slower, chill walk
         let newDir = char.dir;
         
-        // Bounce off walls
-        if (newX > 300) newDir = -1;
-        if (newX < 10) newDir = 1;
+        // Boundaries (0 to 90% width)
+        if (newX > 90) newDir = -1;
+        if (newX < 2) newDir = 1;
         
-        // Randomly stop or change direction
-        if (Math.random() > 0.95) newDir = Math.random() > 0.5 ? 1 : -1;
+        // Random stop/turn
+        if (Math.random() > 0.98) newDir = Math.random() > 0.5 ? 1 : -1;
 
         return { ...char, x: newX, dir: newDir };
       }));
     }, 100);
     return () => clearInterval(interval);
-  }, []);
+  }, [chatBubble]);
 
-  // --- 3. PLANTING MECHANIC ---
-  const handlePlant = (e) => {
-    const rect = e.currentTarget.getBoundingClientRect();
-    const x = e.clientX - rect.left;
-    const y = e.clientY - rect.top;
+  // --- 4. INTERACTION: TALK TO CHAR ---
+  const handleCharClick = (char) => {
+    // Pick a random line based on current mood
+    const lines = char.personalities[char.mood];
+    const text = lines[Math.floor(Math.random() * lines.length)];
     
-    // Plant a tree/flower at click location
-    setPlants(prev => [...prev, { id: Date.now(), x, y, type: Math.random() > 0.7 ? 'tree' : 'flower' }]);
+    setChatBubble({ charId: char.id, text, mood: char.mood });
+    setTimeout(() => {
+        if(!inputMode) setChatBubble(null); // Auto-close if user doesn't start typing
+    }, 4000);
+  };
+
+  // --- 5. INTERACTION: PLANTING ---
+  const handlePlant = (e) => {
+    if (chatBubble) return; // Don't plant if chatting
+    const rect = e.currentTarget.getBoundingClientRect();
+    const xPct = ((e.clientX - rect.left) / rect.width) * 100;
+    
+    // Plant emoji array
+    const flora = ['🌲', '🌳', '🌻', '🌷', '🍄', '🌾'];
+    const plant = flora[Math.floor(Math.random() * flora.length)];
+    
+    setPlants(prev => [...prev, { id: Date.now(), x: xPct, plant }]);
   };
 
   return (
     <div 
-      className="relative w-full h-32 bg-[#0d1b2a] rounded-xl overflow-hidden border border-slate-800 cursor-crosshair group"
+      ref={containerRef}
+      className="relative w-full h-40 bg-[#0d1b2a] rounded-xl overflow-hidden border border-slate-800 cursor-crosshair group mt-6 select-none"
       onClick={handlePlant}
     >
-      {/* SKY & WEATHER */}
-      <div className={`absolute inset-0 transition-colors duration-1000 ${gpa > 50 ? 'bg-gradient-to-b from-sky-900/30 to-transparent' : 'bg-slate-900'}`}></div>
+      {/* --- ENVIRONMENT LAYER --- */}
       
-      {/* SUN / MOON */}
-      <div className={`absolute top-4 right-8 w-8 h-8 rounded-full blur-sm transition-all duration-1000 ${gpa > 50 ? 'bg-yellow-400 shadow-[0_0_20px_orange]' : 'bg-slate-400 shadow-[0_0_10px_white]'}`}></div>
+      {/* Sky & Weather */}
+      <div className={`absolute inset-0 transition-colors duration-1000 ${gpa > 50 ? 'bg-gradient-to-b from-sky-900/40 to-[#0d1b2a]' : 'bg-[#050505]'}`}></div>
+      
+      {/* Sun/Moon */}
+      <motion.div 
+        animate={{ y: [0, -5, 0], rotate: 360 }}
+        transition={{ duration: 20, repeat: Infinity, ease: "linear" }}
+        className={`absolute top-4 right-8 w-10 h-10 rounded-full blur-md transition-all duration-1000 flex items-center justify-center text-xl
+          ${gpa > 50 ? 'bg-yellow-400/20 shadow-[0_0_30px_orange]' : 'bg-slate-400/10 shadow-[0_0_15px_white]'}`}
+      >
+        {gpa > 50 ? '☀️' : '🌙'}
+      </motion.div>
 
-      {/* RAIN (If GPA Low) */}
-      {gpa < 40 && (
-        <div className="absolute inset-0 bg-[url('https://www.transparenttextures.com/patterns/diagmonds-light.png')] opacity-10 animate-slide-down"></div>
-      )}
+      {/* Rain (Low GPA) */}
+      {gpa < 40 && <div className="absolute inset-0 bg-[url('https://www.transparenttextures.com/patterns/diagmonds-light.png')] opacity-10 animate-pulse"></div>}
 
-      {/* GROUND */}
-      <div className="absolute bottom-0 w-full h-8 bg-[#1a4d2e] border-t-4 border-[#2d6a4f]"></div>
+      {/* Ground */}
+      <div className="absolute bottom-0 w-full h-10 bg-gradient-to-t from-[#143620] to-[#1a4d2e] border-t-4 border-[#2d6a4f]"></div>
 
-      {/* PLANTS */}
+      {/* Plants */}
       {plants.map(p => (
-        <motion.div
-          key={p.id}
-          initial={{ scale: 0, y: 10 }}
-          animate={{ scale: 1, y: 0 }}
-          className="absolute bottom-6 pointer-events-none"
-          style={{ left: p.x - 10 }}
-        >
-          {p.type === 'tree' ? (
-            <div className="text-xl">🌲</div>
-          ) : (
-            <div className="text-sm">🌻</div>
-          )}
+        <motion.div key={p.id} initial={{ scale: 0, y: 10 }} animate={{ scale: 1, y: 0 }} className="absolute bottom-4 pointer-events-none text-xl" style={{ left: `${p.x}%` }}>
+          {p.plant}
         </motion.div>
       ))}
 
-      {/* CHARACTERS (PIXEL ART STYLE) */}
-      {characters.map(char => (
-        <motion.div
+      {/* --- CHARACTERS LAYER --- */}
+      {activeChars.map(char => (
+        <motion.div 
           key={char.id}
-          animate={{ x: char.x }}
+          animate={{ left: `${char.x}%` }}
           transition={{ duration: 0.1, ease: "linear" }}
-          className="absolute bottom-6 pointer-events-none flex flex-col items-center"
+          className="absolute bottom-6 flex flex-col items-center cursor-pointer z-10 hover:scale-110 transition-transform"
+          onClick={(e) => { e.stopPropagation(); handleCharClick(char); }}
         >
-           {/* Chat Bubble Randomly */}
-           {Math.random() > 0.98 && (
-             <motion.div 
-               initial={{ opacity: 0, y: 5 }} 
-               animate={{ opacity: 1, y: -10 }} 
-               exit={{ opacity: 0 }}
-               className="absolute -top-6 bg-white text-black text-[8px] px-1 rounded font-bold whitespace-nowrap"
-             >
-               {gpa > 80 ? "Ez!" : "Work!"}
-             </motion.div>
-           )}
-
-           {/* AVATAR */}
-           <div className={`w-6 h-6 ${char.type === 'blue-cat' ? 'bg-blue-500 rounded-full border-2 border-white' : 'bg-red-500 rounded-lg border-2 border-yellow-300'} relative shadow-lg`}>
-              <div className={`absolute top-1 right-1 w-1 h-1 bg-black rounded-full ${char.dir === -1 ? 'left-1' : 'right-1'}`}></div>
+           {/* Character Sprite */}
+           <div className={`text-3xl filter drop-shadow-lg ${char.dir === -1 ? 'scale-x-[-1]' : ''}`}>
+             {char.sprite}
            </div>
-           {/* Shadow */}
-           <div className="w-4 h-1 bg-black/50 rounded-full mt-1 blur-[1px]"></div>
+           
+           {/* Pet Follower */}
+           <motion.div 
+             animate={{ x: char.dir * -20 }} // Pet follows behind
+             className={`absolute bottom-0 text-lg opacity-80 ${char.dir === -1 ? 'scale-x-[-1]' : ''}`}
+           >
+             {char.pet}
+           </motion.div>
+
+           {/* Name Tag (Hover) */}
+           <div className="opacity-0 group-hover:opacity-100 absolute -top-4 text-[8px] bg-black/50 text-white px-1 rounded whitespace-nowrap pointer-events-none">
+             {char.name}
+           </div>
         </motion.div>
       ))}
 
-      {/* INSTRUCTION OVERLAY */}
-      <div className="absolute top-2 left-2 text-[8px] text-slate-500 opacity-0 group-hover:opacity-100 transition-opacity font-mono">
-        CLICK TO PLANT • GPA CONTROLS WEATHER
+      {/* --- CHAT BUBBLE SYSTEM --- */}
+      <AnimatePresence>
+        {chatBubble && (
+          <motion.div 
+            initial={{ scale: 0, opacity: 0 }}
+            animate={{ scale: 1, opacity: 1 }}
+            exit={{ scale: 0, opacity: 0 }}
+            className="absolute top-4 left-1/2 -translate-x-1/2 max-w-[90%] bg-white/10 backdrop-blur-md border border-white/20 p-3 rounded-xl z-50 text-center shadow-2xl"
+            onClick={(e) => e.stopPropagation()} // Prevent planting click through
+          >
+             <div className="text-white text-xs font-bold mb-1 flex items-center justify-center gap-2">
+               {CHARACTERS.find(c => c.id === chatBubble.charId)?.sprite} SAYS:
+             </div>
+             <p className="text-sm text-white font-medium mb-2">"{chatBubble.text}"</p>
+             
+             {/* Reply Input */}
+             {!inputMode ? (
+               <button 
+                 onClick={() => setInputMode(true)}
+                 className="text-[10px] bg-blue-600 hover:bg-blue-500 text-white px-3 py-1 rounded-full flex items-center gap-1 mx-auto"
+               >
+                 <MessageSquare size={10} /> Reply
+               </button>
+             ) : (
+               <div className="flex gap-1">
+                 <input 
+                   autoFocus
+                   value={userMsg}
+                   onChange={(e) => setUserMsg(e.target.value)}
+                   className="bg-black/50 text-white text-xs rounded px-2 py-1 outline-none w-32"
+                   placeholder="Say something..."
+                   onKeyDown={(e) => {
+                     if (e.key === 'Enter') {
+                       setChatBubble({ ...chatBubble, text: "Oho! Nice to talk to you!" }); // Simple mock response
+                       setInputMode(false);
+                       setUserMsg("");
+                       setTimeout(() => setChatBubble(null), 2000);
+                     }
+                   }}
+                 />
+                 <button onClick={() => setInputMode(false)} className="text-red-400"><X size={12}/></button>
+               </div>
+             )}
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* --- LOCKED CHARACTERS PREVIEW (Bottom Right) --- */}
+      <div className="absolute bottom-2 right-2 flex gap-1 opacity-50 hover:opacity-100 transition-opacity">
+        {CHARACTERS.filter(c => !activeChars.find(a => a.id === c.id)).map(locked => (
+          <div key={locked.id} className="relative group/lock">
+             <div className="w-6 h-6 bg-black/50 rounded flex items-center justify-center text-sm grayscale">
+               {locked.sprite}
+             </div>
+             <div className="absolute -top-1 -right-1 text-red-500 bg-black rounded-full p-[1px]"><Lock size={8} /></div>
+             {/* Tooltip */}
+             <div className="absolute bottom-full right-0 mb-1 w-max bg-black text-white text-[9px] px-2 py-1 rounded hidden group-hover/lock:block z-50">
+               {locked.unlock.desc}
+             </div>
+          </div>
+        ))}
       </div>
+
     </div>
   );
 }
