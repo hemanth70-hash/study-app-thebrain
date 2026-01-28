@@ -6,7 +6,7 @@ import {
 } from 'lucide-react';
 import { supabase } from '../supabaseClient';
 import StudyChat from './StudyChat';
-import PixelGarden from './PixelGarden'; // 🔥 IMPORT CONFIRMED
+import PixelGarden from './PixelGarden'; // 🔥 IMPORT ADDED
 
 export default function ChronosDashboard({ user }) {
   const [currentDate, setCurrentDate] = useState(new Date());
@@ -95,10 +95,6 @@ export default function ChronosDashboard({ user }) {
   const totalGoals = goals.length;
   const monthlyEfficiency = totalGoals === 0 ? 0 : Math.round((completedGoals / totalGoals) * 100);
 
-  // Daily Score Logic for Garden Weather
-  const todayStr = new Date().toISOString().split('T')[0];
-  const dailyScore = user?.last_mock_date === todayStr ? user.last_mock_score : null;
-
   // --- 3. CALENDAR LOGIC ---
   const todayDay = currentDate.getDate();
   const daysInMonth = new Date(currentDate.getFullYear(), currentDate.getMonth() + 1, 0).getDate();
@@ -164,14 +160,8 @@ export default function ChronosDashboard({ user }) {
               <div className="mt-8">
                  <div className="w-full h-2 bg-slate-800 rounded-full overflow-hidden border border-slate-700"><motion.div initial={{ width: 0 }} animate={{ width: `${currentGPA}%` }} className="h-full bg-gradient-to-r from-blue-600 to-cyan-400 shadow-[0_0_15px_cyan]" /></div>
                  
-                 {/* 🔥 PIXEL GARDEN CONFIRMED & INSERTED HERE */}
-                 <PixelGarden
-  gpa={currentGPA}
-  streak={user?.streak_count || 0}
-  dailyScore={dailyScore}
-  embed
-/>
-
+                 {/* 🔥 PIXEL GARDEN ADDED HERE */}
+                 <PixelGarden gpa={currentGPA} streak={user?.streak_count || 0} />
               </div>
            </div>
         </div>
