@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { MessageSquare, Send, X, Zap } from 'lucide-react';
+import { MessageSquare, Send, X, Cloud, Star, Moon, Sun } from 'lucide-react';
 
 // =======================================================
 // 1. GEMINI AI CONFIGURATION
@@ -9,7 +9,7 @@ const API_KEY = "AIzaSyDfBY7jQHF-X22l1RDv6jA9w1tzVWM8oXs"; // Your Gemini Key
 const GEMINI_URL = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${API_KEY}`;
 
 // =======================================================
-// 2. CHARACTER DATABASE (Animal Emojis)
+// 2. CHARACTER & ASSET DATABASE
 // =======================================================
 const CHARACTERS = [
   { 
@@ -17,17 +17,8 @@ const CHARACTERS = [
     name: 'Sly', 
     sprite: '🦊', 
     type: 'troll',
-    systemPrompt: "You are a mischievous fox named Sly. You love to troll and tease the user about their study habits. You are funny but slightly rude. Keep responses very short (under 15 words).",
+    systemPrompt: "You are a mischievous fox named Sly. You tease the user about studying. You are funny, sarcastic, and keep responses under 15 words.",
     x: 20, 
-    dir: 1 
-  },
-  { 
-    id: 'owl', 
-    name: 'Prof. Hoot', 
-    sprite: '🦉', 
-    type: 'mentor',
-    systemPrompt: "You are a wise old owl. You give serious, philosophical advice about studying and focus. You are calm and polite. Keep responses short (under 15 words).",
-    x: 50, 
     dir: 1 
   },
   { 
@@ -35,7 +26,16 @@ const CHARACTERS = [
     name: 'Leo', 
     sprite: '🦁', 
     type: 'motivator',
-    systemPrompt: "You are a high-energy lion coach. You yell (use caps) and motivate the user to crush their goals! You are intense. Keep responses short (under 15 words).",
+    systemPrompt: "You are Leo the Lion. You are a high-energy coach. You yell (use CAPS) to motivate the user! Keep responses under 15 words.",
+    x: 50, 
+    dir: 1 
+  },
+  { 
+    id: 'owl', 
+    name: 'Prof. Hoot', 
+    sprite: '🦉', 
+    type: 'mentor',
+    systemPrompt: "You are Professor Hoot. You are wise, calm, and philosophical about education. Keep responses under 15 words.",
     x: 80, 
     dir: -1 
   }
@@ -48,12 +48,15 @@ export default function PixelGarden({ dailyScore, gpa, streak }) {
   const [chatLog, setChatLog] = useState([]);
   const [userVal, setUserVal] = useState("");
   const [bubbles, setBubbles] = useState({});
-  const [weather, setWeather] = useState('clear');
+  
+  // Environment State
   const [timeOfDay, setTimeOfDay] = useState('day');
+  const [weather, setWeather] = useState('clear');
+  const [stars, setStars] = useState([]);
   
   const directorRef = useRef(false);
 
-  // --- 1. INITIALIZE WORLD (Time/Weather) ---
+  // --- 1. INITIALIZE WORLD (Atmosphere) ---
   useEffect(() => {
     const hour = new Date().getHours();
     setTimeOfDay((hour < 6 || hour >= 18) ? 'night' : 'day');
@@ -63,6 +66,16 @@ export default function PixelGarden({ dailyScore, gpa, streak }) {
       else if (dailyScore > 80) setWeather('party');
       else setWeather('clear');
     }
+
+    // Generate Stars for Night Mode
+    const starArray = Array.from({ length: 20 }).map((_, i) => ({
+      id: i,
+      top: Math.random() * 50 + "%",
+      left: Math.random() * 100 + "%",
+      size: Math.random() * 3 + 1 + "px",
+      delay: Math.random() * 2 + "s"
+    }));
+    setStars(starArray);
   }, [dailyScore]);
 
   // --- 2. LIVE GEMINI AI ENGINE ---
@@ -76,14 +89,14 @@ export default function PixelGarden({ dailyScore, gpa, streak }) {
         })
       });
       const data = await response.json();
-      return data?.candidates?.[0]?.content?.parts?.[0]?.text || "I'm thinking...";
+      return data?.candidates?.[0]?.content?.parts?.[0]?.text || "...";
     } catch (error) {
       console.error("Gemini Error:", error);
-      return "My brain is offline (API Error).";
+      return "Zzz... (API Error)";
     }
   };
 
-  // --- 3. USER CHAT (You talk to them) ---
+  // --- 3. USER CHAT (Talking to You) ---
   const handleUserSend = async () => {
     if (!userVal.trim()) return;
     
@@ -91,58 +104,60 @@ export default function PixelGarden({ dailyScore, gpa, streak }) {
     setChatLog(prev => [...prev, { sender: 'user', text: input }]);
     setUserVal("");
 
-    // Construct Prompt with Context
     const context = `Context: User GPA is ${gpa}. Streak is ${streak} days.`;
-    const fullPrompt = `${chatTarget.systemPrompt}\n${context}\nUser says: "${input}"\nYour reply:`;
+    const fullPrompt = `${chatTarget.systemPrompt}\n${context}\nUser says: "${input}"\nReply:`;
 
-    // Call Gemini
     const reply = await callGemini(fullPrompt);
     setChatLog(prev => [...prev, { sender: 'bot', text: reply }]);
   };
 
-  // --- 4. AUTO-DIRECTOR (They talk to EACH OTHER) ---
+  // --- 4. AUTO-DIRECTOR (Talking to Each Other) ---
   useEffect(() => {
     const loop = setInterval(async () => {
+      // Don't interrupt if user is chatting or director is busy
       if (chatTarget || directorRef.current) return;
       
-      // 15% chance to start a skit
-      if (Math.random() > 0.85) {
+      // 20% Chance to trigger a skit every 5 seconds (Increased frequency)
+      if (Math.random() > 0.80) {
         directorRef.current = true;
         
         // Pick Actors
         const a1 = activeChars[0]; // Fox
-        const a2 = activeChars[1]; // Owl
+        const a2 = activeChars[1]; // Lion
 
         // Ask Gemini to write a script
-        const scriptPrompt = `Write a 2-line dialogue between a trolling Fox and a wise Owl.
-        Format: "Fox: [line] | Owl: [line]"
-        Keep it funny and short.`;
+        const scriptPrompt = `Write a very short 2-line dialogue between a trolling Fox and a yelling Lion Coach.
+        Format: "Fox: [line] | Lion: [line]"
+        Keep it funny and under 10 words per line.`;
         
         const rawScript = await callGemini(scriptPrompt);
         
         // Parse & Play
         const parts = rawScript.split('|');
-        const line1 = parts[0]?.split(':')[1]?.trim() || "Hey Owl!";
-        const line2 = parts[1]?.split(':')[1]?.trim() || "Quiet, Fox.";
+        const line1 = parts[0]?.split(':')[1]?.trim() || "Why run when you can nap?";
+        const line2 = parts[1]?.split(':')[1]?.trim() || "NO NAPS! ONLY GAINS!";
 
+        // Action 1
         setBubbles({ [a1.id]: line1 });
         setActiveChars(prev => prev.map(c => c.id === a1.id ? { ...c, action: 'bounce' } : c));
         await new Promise(r => setTimeout(r, 4000));
 
+        // Action 2
         setBubbles({ [a2.id]: line2 });
         setActiveChars(prev => prev.map(c => c.id === a2.id ? { ...c, action: 'bounce' } : c));
         await new Promise(r => setTimeout(r, 4000));
 
+        // Reset
         setBubbles({});
         setActiveChars(prev => prev.map(c => ({ ...c, action: 'idle' })));
         directorRef.current = false;
       }
-    }, 8000); 
+    }, 5000); 
 
     return () => clearInterval(loop);
   }, [chatTarget, activeChars]);
 
-  // --- 5. PHYSICS LOOP (Walking) ---
+  // --- 5. PHYSICS LOOP (Movement) ---
   useEffect(() => {
     const loop = setInterval(() => {
       setActiveChars(prev => prev.map(char => {
@@ -164,71 +179,98 @@ export default function PixelGarden({ dailyScore, gpa, streak }) {
     return () => clearInterval(loop);
   }, [chatTarget, bubbles]);
 
-  // --- 6. PLANTING ---
+  // --- 6. PLANTING MECHANIC ---
   const handlePlant = (e) => {
     if (chatTarget) return;
     const rect = e.currentTarget.getBoundingClientRect();
     const xPct = ((e.clientX - rect.left) / rect.width) * 100;
-    const flora = ['🌲', '🌳', '🌻', '🌷', '🍄'];
+    const flora = ['🌲', '🌳', '🌻', '🌷', '🍄', '🌾'];
     setPlants(prev => [...prev, { id: Date.now(), x: xPct, type: flora[Math.floor(Math.random() * flora.length)] }]);
   };
 
   return (
-    <div className="relative w-full h-56 bg-[#0a0a0f] rounded-xl overflow-hidden border border-slate-800 mt-6 select-none group shadow-2xl font-sans" onClick={handlePlant}>
+    <div className="relative w-full h-64 bg-[#0a0a0f] rounded-xl overflow-hidden border border-slate-800 mt-6 select-none group shadow-2xl font-sans" onClick={handlePlant}>
       
-      {/* SKY & WEATHER */}
-      <div className={`absolute inset-0 transition-colors duration-1000 
-        ${timeOfDay === 'day' ? 'bg-gradient-to-b from-sky-400/40 to-[#0a0a0f]' : 'bg-gradient-to-b from-indigo-900/40 to-[#0a0a0f]'}
+      {/* ==============================
+          LAYER 1: ATMOSPHERE
+      ============================== */}
+      
+      {/* Sky Gradient */}
+      <div className={`absolute inset-0 transition-colors duration-2000 
+        ${timeOfDay === 'day' ? 'bg-gradient-to-b from-sky-400 to-blue-200' : 'bg-gradient-to-b from-[#0b1026] to-[#2b3266]'}
+        ${weather === 'storm' ? 'bg-slate-900' : ''}
       `}></div>
-      
-      {/* Sun/Moon */}
+
+      {/* Sun / Moon */}
       <motion.div 
-        animate={{ y: [0, -5, 0], rotate: 360 }}
-        transition={{ duration: 20, repeat: Infinity, ease: "linear" }}
-        className={`absolute top-4 right-8 w-10 h-10 rounded-full blur-md flex items-center justify-center text-xl
-          ${timeOfDay === 'day' ? 'bg-yellow-400/20 shadow-[0_0_30px_orange]' : 'bg-slate-400/10 shadow-[0_0_15px_white]'}`}
+        animate={{ y: timeOfDay === 'day' ? 20 : 200, x: timeOfDay === 'day' ? [0, 50] : 0 }} 
+        transition={{ duration: 20 }}
+        className="absolute top-4 right-10"
       >
-        {timeOfDay === 'day' ? '☀️' : '🌙'}
+        {timeOfDay === 'day' ? (
+           <div className="w-16 h-16 bg-yellow-400 rounded-full blur-sm shadow-[0_0_40px_orange]"></div>
+        ) : (
+           <div className="w-12 h-12 bg-slate-200 rounded-full shadow-[0_0_20px_white]"></div>
+        )}
       </motion.div>
 
-      {/* Stars (Night) */}
-      {timeOfDay === 'night' && [...Array(15)].map((_, i) => (
-        <div key={i} className="absolute bg-white/60 rounded-full w-1 h-1 animate-pulse" style={{ top: `${Math.random()*60}%`, left: `${Math.random()*100}%` }} />
+      {/* Stars (Night Only) */}
+      {timeOfDay === 'night' && stars.map(star => (
+        <div 
+          key={star.id} 
+          className="absolute bg-white rounded-full animate-pulse" 
+          style={{ top: star.top, left: star.left, width: star.size, height: star.size, animationDuration: star.delay }} 
+        />
       ))}
 
-      {/* Rain (Storm) */}
-      {weather === 'storm' && <div className="absolute inset-0 bg-[url('https://www.transparenttextures.com/patterns/diagmonds-light.png')] opacity-20 animate-pulse pointer-events-none"></div>}
+      {/* Clouds */}
+      <motion.div 
+        animate={{ x: ["-100%", "100%"] }} 
+        transition={{ repeat: Infinity, duration: 60, ease: "linear" }}
+        className="absolute top-8 left-0 opacity-80"
+      >
+        <Cloud className="text-white w-24 h-12 blur-md opacity-50" />
+      </motion.div>
 
+      {/* Storm Effect */}
+      {weather === 'storm' && <div className="absolute inset-0 bg-white/10 z-10 animate-[flash_0.2s_infinite]"></div>}
+
+      {/* ==============================
+          LAYER 2: GROUND & PROPS
+      ============================== */}
+      
       {/* Ground */}
-      <div className="absolute bottom-0 w-full h-10 bg-gradient-to-r from-emerald-900/40 to-emerald-800/20 border-t border-white/5 backdrop-blur-sm"></div>
+      <div className="absolute bottom-0 w-full h-16 bg-gradient-to-t from-[#1a4d2e] to-[#2d6a4f] border-t-8 border-[#40916c] relative z-20"></div>
 
       {/* Plants */}
       {plants.map(p => (
-        <motion.div key={p.id} initial={{ scale: 0, y: 10 }} animate={{ scale: 1, y: 0 }} className="absolute bottom-4 pointer-events-none text-xl" style={{ left: `${p.x}%` }}>
+        <motion.div key={p.id} initial={{ scale: 0, y: 10 }} animate={{ scale: 1, y: 0 }} className="absolute bottom-12 pointer-events-none text-2xl z-20" style={{ left: `${p.x}%` }}>
           {p.type}
         </motion.div>
       ))}
 
-      {/* CHARACTERS */}
+      {/* ==============================
+          LAYER 3: CHARACTERS
+      ============================== */}
       {activeChars.map(char => (
         <motion.div 
-          key={char.id}
+          key={char.instanceId}
           animate={{ left: `${char.x}%` }}
           transition={{ duration: 0.1, ease: 'linear' }}
-          className="absolute bottom-6 flex flex-col items-center cursor-pointer z-10 hover:scale-110 transition-transform"
-          onClick={(e) => { e.stopPropagation(); setChatTarget(char); setChatLog([{ sender: 'bot', text: `(AI Connected) Hey, I'm ${char.name}.` }]); }}
+          className="absolute bottom-12 flex flex-col items-center cursor-pointer z-30 hover:scale-110 transition-transform"
+          onClick={(e) => { e.stopPropagation(); setChatTarget(char); setChatLog([{ sender: 'bot', text: `(Connecting to Gemini...) Hello!` }]); }}
         >
            {/* Auto-Banter Bubble */}
            <AnimatePresence>
              {bubbles[char.id] && (
-               <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }} className="absolute -top-20 w-32 bg-white text-black text-[9px] p-2 rounded-xl text-center font-bold z-50">
+               <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }} className="absolute -top-24 w-32 bg-white text-black text-[10px] p-2 rounded-xl text-center font-bold z-50 border-2 border-black">
                  {bubbles[char.id]}
-                 <div className="absolute top-full left-1/2 -translate-x-1/2 border-l-[6px] border-l-transparent border-r-[6px] border-r-transparent border-t-[6px] border-t-white"></div>
+                 <div className="absolute top-full left-1/2 -translate-x-1/2 border-l-[6px] border-l-transparent border-r-[6px] border-r-transparent border-t-[6px] border-t-black"></div>
                </motion.div>
              )}
            </AnimatePresence>
 
-           <div className={`text-4xl filter drop-shadow-lg transition-transform 
+           <div className={`text-5xl filter drop-shadow-2xl transition-transform 
              ${char.dir === -1 ? 'scale-x-[-1]' : ''} 
              ${char.action === 'bounce' ? 'animate-bounce' : ''} 
              ${char.action === 'walk' ? 'animate-pulse' : ''}
@@ -238,14 +280,16 @@ export default function PixelGarden({ dailyScore, gpa, streak }) {
         </motion.div>
       ))}
 
-      {/* CHAT OVERLAY */}
+      {/* ==============================
+          LAYER 4: CHAT OVERLAY
+      ============================== */}
       <AnimatePresence>
         {chatTarget && (
           <motion.div initial={{ y: '100%' }} animate={{ y: 0 }} exit={{ y: '100%' }} className="absolute inset-0 bg-[#050508]/95 z-50 flex flex-col p-4 backdrop-blur-md">
              <div className="flex justify-between items-center border-b border-white/10 pb-2 mb-2">
                 <div className="flex items-center gap-2">
-                   <span className="text-2xl">{chatTarget.sprite}</span>
-                   <span className="text-white font-bold">{chatTarget.name} <span className="text-blue-400 text-[10px]">(Gemini AI)</span></span>
+                   <span className="text-3xl">{chatTarget.sprite}</span>
+                   <span className="text-white font-bold">{chatTarget.name} <span className="text-blue-400 text-[10px]">(Gemini Live)</span></span>
                 </div>
                 <button onClick={() => setChatTarget(null)} className="text-white/50 hover:text-white"><X size={18}/></button>
              </div>
