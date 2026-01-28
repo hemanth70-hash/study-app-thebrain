@@ -6,7 +6,7 @@ import {
 } from 'lucide-react';
 import { supabase } from '../supabaseClient';
 import StudyChat from './StudyChat';
-import PixelGarden from './PixelGarden'; // 🔥 IMPORT ADDED
+import PixelGarden from './PixelGarden'; // 🔥 IMPORTED
 
 export default function ChronosDashboard({ user }) {
   const [currentDate, setCurrentDate] = useState(new Date());
@@ -18,12 +18,12 @@ export default function ChronosDashboard({ user }) {
   const [showReportModal, setShowReportModal] = useState(false);
   
   // --- COMMS SYSTEM STATE ---
-  const [commsMode, setCommsMode] = useState('intel'); // 'intel' or 'chat'
+  const [commsMode, setCommsMode] = useState('intel'); 
   const [hasNewMessage, setHasNewMessage] = useState(false); 
 
   // --- INPUTS ---
   const [newGoalTitle, setNewGoalTitle] = useState("");
-  const [newGoalType, setNewGoalType] = useState("ops"); // 'core' or 'ops'
+  const [newGoalType, setNewGoalType] = useState("ops"); 
   const [newGoalDate, setNewGoalDate] = useState(new Date().toISOString().split('T')[0]);
   const [newGoalPriority, setNewGoalPriority] = useState("normal");
   const [examDate, setExamDate] = useState("2026-08-01");
@@ -44,7 +44,6 @@ export default function ChronosDashboard({ user }) {
     if (storedPlan) setMonthlyPlan(JSON.parse(storedPlan)); 
     else setShowPlanModal(true);
 
-    // LIVE FEED ENGINE
     const fetchHybridFeed = async () => {
       setIsFeedUpdating(true);
       const { data: internalData } = await supabase.from('victory_feed').select('*').order('created_at', { ascending: false }).limit(10);
@@ -94,6 +93,10 @@ export default function ChronosDashboard({ user }) {
   const completedGoals = goals.filter(g => g.completed).length;
   const totalGoals = goals.length;
   const monthlyEfficiency = totalGoals === 0 ? 0 : Math.round((completedGoals / totalGoals) * 100);
+  
+  // Daily Score Logic
+  const todayStr = new Date().toISOString().split('T')[0];
+  const dailyScore = user?.last_mock_date === todayStr ? user.last_mock_score : null;
 
   // --- 3. CALENDAR LOGIC ---
   const todayDay = currentDate.getDate();
@@ -160,8 +163,8 @@ export default function ChronosDashboard({ user }) {
               <div className="mt-8">
                  <div className="w-full h-2 bg-slate-800 rounded-full overflow-hidden border border-slate-700"><motion.div initial={{ width: 0 }} animate={{ width: `${currentGPA}%` }} className="h-full bg-gradient-to-r from-blue-600 to-cyan-400 shadow-[0_0_15px_cyan]" /></div>
                  
-                 {/* 🔥 PIXEL GARDEN ADDED HERE */}
-                 <PixelGarden gpa={currentGPA} streak={user?.streak_count || 0} />
+                 {/* 🔥 PIXEL GARDEN INSERTED HERE */}
+                 <PixelGarden gpa={currentGPA} streak={user?.streak_count || 0} dailyScore={dailyScore} />
               </div>
            </div>
         </div>
