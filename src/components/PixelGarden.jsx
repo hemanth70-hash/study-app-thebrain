@@ -3,61 +3,86 @@ import { motion, AnimatePresence } from "framer-motion";
 import SpriteAnimator from "./SpriteAnimator";
 
 /* =====================================================
-   CHARACTERS (LOGIC ONLY)
+   CHARACTERS (LOGIC + POSITION)
 ===================================================== */
 
 const CHARACTERS = [
   {
     id: "shinchan",
     name: "Shinchan",
-    // Local Brain Logic replacing API
-    brain: (score) => score < 40 ? "Mom is angry! Hide the test paper!" : "Oho! Chocobi time!",
+    brain: (score) =>
+      score < 40
+        ? "Eh?! Mom will kill me!"
+        : "Hehehe… Chocobi party!",
     x: 20,
     dir: 1,
   },
   {
     id: "doraemon",
     name: "Doraemon",
-    brain: (score) => score < 40 ? "Nobita! Use the Memorization Bread!" : "Good job! Dorayaki for you!",
+    brain: (score) =>
+      score < 40
+        ? "Nobita! Use a gadget properly!"
+        : "Good job! Dorayaki time.",
     x: 50,
     dir: 1,
   },
   {
     id: "ben10",
     name: "Ben 10",
-    brain: (score) => score < 40 ? "The Omnitrix needs a recharge. Rest now." : "It's Hero Time!",
+    brain: (score) =>
+      score < 40
+        ? "Even heroes need rest."
+        : "It’s Hero Time!",
     x: 80,
     dir: -1,
   },
 ];
 
 /* =====================================================
-   SPRITE MAP (Matches your folder structure)
+   SPRITES (MATCHES YOUR FOLDERS)
 ===================================================== */
 
 const SPRITES = {
   shinchan: {
-    idle: { src: "/pixel/shinchan/idle.png", frameCount: 4, fps: 4 },
-    walk: { src: "/pixel/shinchan/walk.png", frameCount: 6, fps: 10 },
-    talk: { src: "/pixel/shinchan/talk.png", frameCount: 4, fps: 8 },
+    idle: { src: "/pixel/shinchan/idle.png", frames: 4, fps: 4 },
+    walk: { src: "/pixel/shinchan/walk.png", frames: 6, fps: 10 },
+    talk: { src: "/pixel/shinchan/talk.png", frames: 4, fps: 8 },
+    angry: { src: "/pixel/shinchan/angry.png", frames: 4, fps: 6 },
+    happy: { src: "/pixel/shinchan/happy.png", frames: 5, fps: 8 },
+    facepalm: { src: "/pixel/shinchan/facepalm.png", frames: 4, fps: 5 },
   },
   doraemon: {
-    idle: { src: "/pixel/doraemon/idle.png", frameCount: 4, fps: 4 },
-    walk: { src: "/pixel/doraemon/walk.png", frameCount: 6, fps: 8 },
-    talk: { src: "/pixel/doraemon/talk.png", frameCount: 4, fps: 6 },
+    idle: { src: "/pixel/doraemon/idle.png", frames: 4, fps: 4 },
+    walk: { src: "/pixel/doraemon/walk.png", frames: 6, fps: 8 },
+    talk: { src: "/pixel/doraemon/talk.png", frames: 4, fps: 6 },
+    gadget1: { src: "/pixel/doraemon/gadget1.png", frames: 6, fps: 10 },
+    gadget2: { src: "/pixel/doraemon/gadget2.png", frames: 6, fps: 10 },
   },
   ben10: {
-    idle: { src: "/pixel/ben10/idle.png", frameCount: 4, fps: 4 },
-    walk: { src: "/pixel/ben10/walk.png", frameCount: 6, fps: 10 },
-    talk: { src: "/pixel/ben10/talk.png", frameCount: 4, fps: 6 },
+    idle: { src: "/pixel/ben10/idle.png", frames: 4, fps: 4 },
+    walk: { src: "/pixel/ben10/walk.png", frames: 6, fps: 10 },
+    hero: { src: "/pixel/ben10/hero.png", frames: 6, fps: 12 },
+    angry: { src: "/pixel/ben10/angry.png", frames: 4, fps: 6 },
   },
+};
+
+/* =====================================================
+   HELPERS
+===================================================== */
+
+const talkActionFor = (id) => {
+  if (id === "doraemon") return Math.random() > 0.5 ? "gadget1" : "gadget2";
+  if (id === "ben10") return "hero";
+  if (id === "shinchan") return Math.random() > 0.5 ? "happy" : "talk";
+  return "talk";
 };
 
 /* =====================================================
    COMPONENT
 ===================================================== */
 
-export default function PixelGarden({ dailyScore, gpa, streak }) {
+export default function PixelGarden({ dailyScore, gpa }) {
   const [chars, setChars] = useState(
     CHARACTERS.map((c) => ({
       ...c,
@@ -70,45 +95,36 @@ export default function PixelGarden({ dailyScore, gpa, streak }) {
   const directorBusy = useRef(false);
 
   /* =====================================================
-     AMBIENT MOVEMENT (Physics Loop)
+     AMBIENT MOVEMENT
   ===================================================== */
 
   useEffect(() => {
     const loop = setInterval(() => {
       setChars((prev) =>
         prev.map((c) => {
-          if (c.locked) return c; // Don't move if talking
+          if (c.locked) return c;
 
-          const move = Math.random() > 0.6; // 40% chance to move
-          const dir = Math.random() > 0.5 ? 1 : -1;
+          const move = Math.random() > 0.65;
+          if (!move) return { ...c, action: "idle" };
 
-          let newX = c.x;
-          let newAction = "idle";
-
-          if (move) {
-             newX += dir * 2;
-             // Wall bouncing
-             if (newX > 85) newX = 85; 
-             if (newX < 5) newX = 5;
-             newAction = "walk";
-          }
+          let newX = c.x + (c.dir === 1 ? 2 : -2);
+          if (newX > 85) newX = 85;
+          if (newX < 5) newX = 5;
 
           return {
             ...c,
-            // Only update direction if actually moving
-            dir: move ? dir : c.dir,
-            action: newAction,
             x: newX,
+            action: "walk",
           };
         })
       );
-    }, 500); // Slower updates for chill vibe
+    }, 700);
 
     return () => clearInterval(loop);
   }, []);
 
   /* =====================================================
-     DIRECTOR AI (Local Logic - No Backend)
+     DIRECTOR (LOCAL AI)
   ===================================================== */
 
   useEffect(() => {
@@ -116,53 +132,57 @@ export default function PixelGarden({ dailyScore, gpa, streak }) {
       if (directorBusy.current) return;
       directorBusy.current = true;
 
-      // 1. Pick a random speaker
-      const speakerIdx = Math.floor(Math.random() * chars.length);
-      const speakerId = chars[speakerIdx].id;
-      
-      // 2. Generate Dialogue (Local Brain)
-      // Uses dailyScore if available, otherwise GPA as fallback
-      const scoreToCheck = dailyScore !== null ? dailyScore : gpa;
-      const dialogue = CHARACTERS.find(c => c.id === speakerId).brain(scoreToCheck);
+      const speaker =
+        chars[Math.floor(Math.random() * chars.length)];
+      const score = dailyScore ?? gpa;
+      const dialogue = CHARACTERS.find(
+        (c) => c.id === speaker.id
+      ).brain(score);
 
-      // 3. Update State (Lock & Talk)
-      setBubbles({ [speakerId]: dialogue });
-      setChars(prev => prev.map(c => 
-        c.id === speakerId ? { ...c, action: "talk", locked: true } : c
-      ));
+      setBubbles({ [speaker.id]: dialogue });
+      setChars((prev) =>
+        prev.map((c) =>
+          c.id === speaker.id
+            ? {
+                ...c,
+                action: talkActionFor(c.id),
+                locked: true,
+              }
+            : c
+        )
+      );
 
-      // 4. Reset after 4 seconds
       setTimeout(() => {
         setBubbles({});
-        setChars(prev => prev.map(c => 
-          c.id === speakerId ? { ...c, action: "idle", locked: false } : c
-        ));
+        setChars((prev) =>
+          prev.map((c) =>
+            c.id === speaker.id
+              ? { ...c, action: "idle", locked: false }
+              : c
+          )
+        );
         directorBusy.current = false;
       }, 4000);
-
-    }, 8000); // Someone talks every 8 seconds
+    }, 8000);
 
     return () => clearInterval(loop);
-  }, [chars, gpa, dailyScore]);
+  }, [chars, dailyScore, gpa]);
 
   /* =====================================================
      RENDER
   ===================================================== */
 
   return (
-    <div className="relative w-full h-[180px] overflow-hidden rounded-xl border border-slate-700 bg-[#0a0a0f] mt-6 select-none group">
-      
-      {/* SKY LAYER */}
+    <div className="relative w-full h-[180px] overflow-hidden rounded-xl border border-slate-700 bg-[#0a0a0f] mt-6 select-none">
+      {/* SKY */}
       <div className="absolute inset-0 bg-gradient-to-b from-sky-900/40 to-transparent" />
-      
-      {/* GROUND LAYER */}
+
+      {/* GROUND */}
       <div className="absolute bottom-0 left-0 w-full h-10 bg-gradient-to-t from-green-900/80 to-green-800/40 border-t border-green-700/50" />
 
-      {/* CHARACTERS LAYER */}
       {chars.map((c) => {
-        // Fallback to 'idle' if action sprite missing
-        const spriteKey = SPRITES[c.id][c.action] ? c.action : 'idle';
-        const spriteData = SPRITES[c.id][spriteKey];
+        const sprite =
+          SPRITES[c.id][c.action] || SPRITES[c.id].idle;
 
         return (
           <motion.div
@@ -171,7 +191,6 @@ export default function PixelGarden({ dailyScore, gpa, streak }) {
             transition={{ duration: 0.5, ease: "linear" }}
             className="absolute bottom-6 z-10 flex flex-col items-center"
           >
-            {/* SPEECH BUBBLE */}
             <AnimatePresence>
               {bubbles[c.id] && (
                 <motion.div
@@ -181,25 +200,21 @@ export default function PixelGarden({ dailyScore, gpa, streak }) {
                   className="absolute -top-20 w-32 bg-white text-black text-[10px] font-bold px-3 py-2 rounded-xl border-2 border-black text-center shadow-lg z-50"
                 >
                   {bubbles[c.id]}
-                  {/* Bubble Tail */}
-                  <div className="absolute top-full left-1/2 -translate-x-1/2 w-0 h-0 border-l-[6px] border-l-transparent border-r-[6px] border-r-transparent border-t-[6px] border-t-white"></div>
                 </motion.div>
               )}
             </AnimatePresence>
 
-            {/* SPRITE COMPONENT */}
-            <div className={`transition-transform ${c.dir === -1 ? "scale-x-[-1]" : ""}`}>
-               <SpriteAnimator
-                 src={spriteData.src}
-                 frameWidth={64}   // Ensure your PNGs match this size!
-                 frameHeight={64}
-                 frameCount={spriteData.frameCount}
-                 fps={spriteData.fps}
-               />
+            <div className={c.dir === -1 ? "scale-x-[-1]" : ""}>
+              <SpriteAnimator
+                src={sprite.src}
+                frameWidth={64}
+                frameHeight={64}
+                frames={sprite.frames}
+                fps={sprite.fps}
+              />
             </div>
-            
-            {/* Shadow */}
-            <div className="w-10 h-2 bg-black/40 rounded-full blur-sm mt-[-5px]"></div>
+
+            <div className="w-10 h-2 bg-black/40 rounded-full blur-sm mt-[-4px]" />
           </motion.div>
         );
       })}
