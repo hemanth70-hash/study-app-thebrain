@@ -3,10 +3,11 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { MessageSquare, Send, X } from 'lucide-react';
 
 // =======================================================
-// 1. CONFIGURATION (DIRECT KEY)
+// 1. CONFIGURATION (DIRECT GEMINI LINK)
 // =======================================================
-// 🔥 HARDCODED KEY AS REQUESTED
+// 🔥 Hardcoded Key (Working)
 const API_KEY = "AIzaSyDfBY7jQHF-X22l1RDv6jA9w1tzVWM8oXs"; 
+// 🔥 Correct Google Endpoint
 const API_URL = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${API_KEY}`;
 
 // =======================================================
@@ -55,12 +56,11 @@ export default function PixelAquarium({ dailyScore, gpa, streak }) {
   const [userVal, setUserVal] = useState("");
   const [dialogues, setDialogues] = useState({});
   const directorRef = useRef(false);
-  const chatEndRef = useRef(null); // To auto-scroll
+  const chatEndRef = useRef(null);
 
   // --- 1. ENVIRONMENT (Bubbles) ---
   useEffect(() => {
     const interval = setInterval(() => {
-      // Bubbles
       setBubbles(prev => {
         const newBubbles = prev.map(b => ({ ...b, y: b.y + 1.5 })).filter(b => b.y < 110);
         if (Math.random() > 0.8) {
@@ -69,7 +69,6 @@ export default function PixelAquarium({ dailyScore, gpa, streak }) {
         return newBubbles;
       });
 
-      // Fish Movement
       setSwimmers(prev => prev.map(s => {
         if (chatTarget?.id === s.id) return s;
         let { x, dir, speed } = s;
@@ -79,7 +78,7 @@ export default function PixelAquarium({ dailyScore, gpa, streak }) {
         if (x > 90) dir = -1;
         if (x < 5) dir = 1;
         
-        // Smooth Bobbing
+        // Bobbing
         let y = s.y + Math.sin(Date.now() / 800) * 0.15;
         return { ...s, x, dir, y };
       }));
@@ -87,22 +86,31 @@ export default function PixelAquarium({ dailyScore, gpa, streak }) {
     return () => clearInterval(interval);
   }, [chatTarget]);
 
-  // Auto-scroll chat to bottom
+  // Scroll to bottom prevents shaking
   useEffect(() => {
     chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [chatLog]);
 
-  // --- 2. GEMINI ENGINE ---
+  // --- 2. GEMINI ENGINE (Correct JSON Format) ---
   const callGemini = async (prompt) => {
     try {
       const response = await fetch(API_URL, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] })
+        body: JSON.stringify({ 
+          contents: [{ parts: [{ text: prompt }] }] 
+        })
       });
+      
       const data = await response.json();
-      if (!data.candidates || data.error) return "Blub... (Thinking)";
-      return data.candidates[0].content.parts[0].text;
+      
+      // Safety check for errors
+      if (data.error) {
+        console.error("Gemini Error:", data.error);
+        return "My brain is tired (API Error)";
+      }
+      
+      return data?.candidates?.[0]?.content?.parts?.[0]?.text || "...";
     } catch (e) {
       return "Connection lost.";
     }
@@ -130,15 +138,20 @@ export default function PixelAquarium({ dailyScore, gpa, streak }) {
         directorRef.current = true;
         const f1 = swimmers[0]; 
         const f2 = swimmers[1]; 
+        
+        // Auto-Banter Prompt
         const scriptPrompt = `Write a 2-line dialogue between a wise Octopus and a greedy Crab. Format: "Octopus: [text] | Crab: [text]"`;
         const raw = await callGemini(scriptPrompt);
+        
         const parts = raw.split('|');
         const line1 = parts[0]?.split(':')[1]?.trim() || "Work smarter.";
         const line2 = parts[1]?.split(':')[1]?.trim() || "Work harder!";
+        
         setDialogues({ [f1.id]: line1 });
         await new Promise(r => setTimeout(r, 3500));
         setDialogues({ [f2.id]: line2 });
         await new Promise(r => setTimeout(r, 3500));
+        
         setDialogues({});
         directorRef.current = false;
       }
@@ -168,12 +181,12 @@ export default function PixelAquarium({ dailyScore, gpa, streak }) {
            <AnimatePresence>
              {dialogues[s.id] && (<motion.div initial={{ opacity: 0, scale: 0 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0 }} className="absolute -top-16 w-32 bg-white text-blue-900 text-[10px] font-bold p-2 rounded-xl text-center z-50 border-2 border-blue-200 shadow-lg">{dialogues[s.id]}<div className="absolute top-full left-1/2 -translate-x-1/2 w-0 h-0 border-l-[6px] border-l-transparent border-r-[6px] border-r-transparent border-t-[6px] border-t-white"></div></motion.div>)}
            </AnimatePresence>
-           {/* FLIP LOGIC: Scale-X handles facing direction */}
+           {/* FLIP LOGIC: Scale -1 flips horizontally */}
            <div className={`text-5xl filter drop-shadow-xl ${s.dir === 1 ? 'scale-x-[-1]' : ''}`}>{s.sprite}</div>
         </motion.div>
       ))}
 
-      {/* CHAT OVERLAY (Fixed Shaking & Scroll) */}
+      {/* CHAT OVERLAY - FIXED SHAKING */}
       <AnimatePresence>
         {chatTarget && (
           <motion.div initial={{ y: '100%' }} animate={{ y: 0 }} exit={{ y: '100%' }} className="absolute inset-0 bg-blue-950/95 z-50 flex flex-col p-4 backdrop-blur-md">
@@ -188,7 +201,7 @@ export default function PixelAquarium({ dailyScore, gpa, streak }) {
                 <button onClick={() => setChatTarget(null)} className="text-white/50 hover:text-white"><X size={18}/></button>
              </div>
              
-             {/* THE SHAKE FIX: overflow-y-scroll keeps scrollbar width reserved */}
+             {/* THE FIX: overflow-y-scroll keeps layout stable */}
              <div className="flex-1 overflow-y-scroll custom-scrollbar space-y-3 mb-2 pr-2">
                 {chatLog.map((m, i) => (
                   <div key={i} className={`flex ${m.sender === 'user' ? 'justify-end' : 'justify-start'}`}>
