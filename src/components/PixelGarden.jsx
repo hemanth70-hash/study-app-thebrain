@@ -3,11 +3,11 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { MessageSquare, Send, X } from 'lucide-react';
 
 // =======================================================
-// 1. GEMINI CONFIGURATION (STABLE MODEL)
+// 1. CONFIGURATION (DIRECT KEY)
 // =======================================================
-const API_KEY = AIzaSyDfBY7jQHF-X22l1RDv6jA9w1tzVWM8oXs 
-// Switched to 'gemini-pro' which is the most stable free model endpoint
-const API_URL = `https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent?key=${API_KEY}`;
+// 🔥 HARDCODED KEY AS REQUESTED
+const API_KEY = "AIzaSyDfBY7jQHF-X22l1RDv6jA9w1tzVWM8oXs"; 
+const API_URL = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${API_KEY}`;
 
 // =======================================================
 // 2. AQUATIC CHARACTERS
@@ -55,12 +55,12 @@ export default function PixelAquarium({ dailyScore, gpa, streak }) {
   const [userVal, setUserVal] = useState("");
   const [dialogues, setDialogues] = useState({});
   const directorRef = useRef(false);
-  // Ref to auto-scroll chat
-  const chatEndRef = useRef(null);
+  const chatEndRef = useRef(null); // To auto-scroll
 
   // --- 1. ENVIRONMENT (Bubbles) ---
   useEffect(() => {
     const interval = setInterval(() => {
+      // Bubbles
       setBubbles(prev => {
         const newBubbles = prev.map(b => ({ ...b, y: b.y + 1.5 })).filter(b => b.y < 110);
         if (Math.random() > 0.8) {
@@ -69,12 +69,17 @@ export default function PixelAquarium({ dailyScore, gpa, streak }) {
         return newBubbles;
       });
 
+      // Fish Movement
       setSwimmers(prev => prev.map(s => {
         if (chatTarget?.id === s.id) return s;
         let { x, dir, speed } = s;
         x += dir * speed;
+        
+        // Turn Logic
         if (x > 90) dir = -1;
         if (x < 5) dir = 1;
+        
+        // Smooth Bobbing
         let y = s.y + Math.sin(Date.now() / 800) * 0.15;
         return { ...s, x, dir, y };
       }));
@@ -82,14 +87,13 @@ export default function PixelAquarium({ dailyScore, gpa, streak }) {
     return () => clearInterval(interval);
   }, [chatTarget]);
 
-  // Scroll to bottom when chat updates
+  // Auto-scroll chat to bottom
   useEffect(() => {
     chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [chatLog]);
 
   // --- 2. GEMINI ENGINE ---
   const callGemini = async (prompt) => {
-    if (!API_KEY) return "Error: API Key missing in .env";
     try {
       const response = await fetch(API_URL, {
         method: "POST",
@@ -164,11 +168,12 @@ export default function PixelAquarium({ dailyScore, gpa, streak }) {
            <AnimatePresence>
              {dialogues[s.id] && (<motion.div initial={{ opacity: 0, scale: 0 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0 }} className="absolute -top-16 w-32 bg-white text-blue-900 text-[10px] font-bold p-2 rounded-xl text-center z-50 border-2 border-blue-200 shadow-lg">{dialogues[s.id]}<div className="absolute top-full left-1/2 -translate-x-1/2 w-0 h-0 border-l-[6px] border-l-transparent border-r-[6px] border-r-transparent border-t-[6px] border-t-white"></div></motion.div>)}
            </AnimatePresence>
+           {/* FLIP LOGIC: Scale-X handles facing direction */}
            <div className={`text-5xl filter drop-shadow-xl ${s.dir === 1 ? 'scale-x-[-1]' : ''}`}>{s.sprite}</div>
         </motion.div>
       ))}
 
-      {/* CHAT OVERLAY - FIXED SHAKING */}
+      {/* CHAT OVERLAY (Fixed Shaking & Scroll) */}
       <AnimatePresence>
         {chatTarget && (
           <motion.div initial={{ y: '100%' }} animate={{ y: 0 }} exit={{ y: '100%' }} className="absolute inset-0 bg-blue-950/95 z-50 flex flex-col p-4 backdrop-blur-md">
@@ -182,7 +187,8 @@ export default function PixelAquarium({ dailyScore, gpa, streak }) {
                 </div>
                 <button onClick={() => setChatTarget(null)} className="text-white/50 hover:text-white"><X size={18}/></button>
              </div>
-             {/* ADDED: overflow-y-scroll prevents width jumps when scrollbar appears */}
+             
+             {/* THE SHAKE FIX: overflow-y-scroll keeps scrollbar width reserved */}
              <div className="flex-1 overflow-y-scroll custom-scrollbar space-y-3 mb-2 pr-2">
                 {chatLog.map((m, i) => (
                   <div key={i} className={`flex ${m.sender === 'user' ? 'justify-end' : 'justify-start'}`}>
@@ -191,6 +197,7 @@ export default function PixelAquarium({ dailyScore, gpa, streak }) {
                 ))}
                 <div ref={chatEndRef} />
              </div>
+             
              <div className="flex gap-2 shrink-0">
                 <input autoFocus value={userVal} onChange={(e) => setUserVal(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && handleSend()} className="flex-1 bg-slate-900 border border-cyan-900 rounded-lg px-3 py-2 text-xs text-white outline-none" placeholder="Ask..." />
                 <button onClick={handleSend} className="bg-cyan-600 p-2 rounded-lg text-white"><Send size={14} /></button>
