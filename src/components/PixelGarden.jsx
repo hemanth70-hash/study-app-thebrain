@@ -5,7 +5,7 @@ import { MessageSquare, Send, X } from 'lucide-react';
 // =======================================================
 // 1. GEMINI CONFIGURATION (STABLE MODEL)
 // =======================================================
-const API_KEY = import.meta.env.VITE_GEMINI_API_KEY; 
+const API_KEY = AIzaSyDfBY7jQHF-X22l1RDv6jA9w1tzVWM8oXs 
 // Switched to 'gemini-pro' which is the most stable free model endpoint
 const API_URL = `https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent?key=${API_KEY}`;
 
