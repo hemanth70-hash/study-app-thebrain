@@ -1,108 +1,19 @@
 import React, { useState, useRef, useEffect } from 'react';
-
-// Standard CSS Animations embedded in JS
-const styles = {
-  container: {
-    position: 'relative',
-    width: '100%',
-    height: '12rem', // h-48
-    backgroundColor: '#0f172a', // slate-900
-    borderRadius: '0.75rem', // rounded-xl
-    border: '4px solid #1e293b', // border-slate-800
-    marginTop: '1.5rem',
-    display: 'flex',
-    flexDirection: 'column',
-    alignItems: 'center',
-    justifyContent: 'center',
-    userSelect: 'none',
-    overflow: 'hidden',
-    boxShadow: '0 0 40px rgba(14,165,233,0.15)',
-    fontFamily: 'monospace'
-  },
-  track: {
-    position: 'relative',
-    width: '90%',
-    height: '4rem',
-    display: 'flex',
-    alignItems: 'center',
-    zIndex: 10
-  },
-  lineBase: {
-    position: 'absolute',
-    width: '100%',
-    height: '0.75rem',
-    backgroundColor: '#334155', // slate-700
-    borderRadius: '9999px',
-    overflow: 'hidden'
-  },
-  lineFill: {
-    height: '100%',
-    backgroundColor: '#0ea5e9', // cyan-500
-    transition: 'width 0.1s linear'
-  },
-  knob: {
-    position: 'absolute',
-    top: '50%',
-    left: '0',
-    width: '3rem',
-    height: '3rem',
-    borderRadius: '50%',
-    border: '4px solid white',
-    transform: 'translate(-50%, -50%)',
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    cursor: 'grab',
-    boxShadow: '0 4px 6px rgba(0,0,0,0.3)',
-    transition: 'background-color 0.3s, left 0.1s linear',
-    zIndex: 20
-  },
-  display: {
-    marginTop: '2rem',
-    textAlign: 'center',
-    zIndex: 10
-  },
-  timeText: {
-    fontSize: '3rem',
-    fontWeight: '900',
-    color: 'white',
-    lineHeight: 1
-  },
-  subText: {
-    fontSize: '0.75rem',
-    fontWeight: 'bold',
-    color: '#64748b', // slate-500
-    textTransform: 'uppercase',
-    letterSpacing: '0.1em',
-    marginTop: '0.5rem'
-  },
-  cheerPopup: {
-    position: 'absolute',
-    inset: 0,
-    backgroundColor: 'rgba(0,0,0,0.85)',
-    backdropFilter: 'blur(4px)',
-    display: 'flex',
-    flexDirection: 'column',
-    alignItems: 'center',
-    justifyContent: 'center',
-    zIndex: 50,
-    animation: 'popIn 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275)'
-  }
-};
+import { motion, useMotionValue, useTransform, animate, AnimatePresence } from 'framer-motion';
+import { Clock, Zap, CheckCircle2 } from 'lucide-react';
 
 export default function PixelGarden() {
   const [minutes, setMinutes] = useState(0);
   const [isActive, setIsActive] = useState(false);
   const [cheer, setCheer] = useState(null);
-  const [dragX, setDragX] = useState(0);
-  const [isDragging, setIsDragging] = useState(false);
   
-  const trackRef = useRef(null);
-  const audioCtx = useRef(null);
+  // Motion Values
+  const x = useMotionValue(0);
+  const constraintsRef = useRef(null);
   const lastTickX = useRef(0);
-  const timerRef = useRef(null);
+  const audioCtx = useRef(null);
 
-  // --- AUDIO ENGINE ---
+  // --- 1. AUDIO ENGINE (The "Tick" Sound) ---
   const playSound = (type) => {
     if (!audioCtx.current) {
       audioCtx.current = new (window.AudioContext || window.webkitAudioContext)();
@@ -112,6 +23,7 @@ export default function PixelGarden() {
     const gain = ctx.createGain();
 
     if (type === 'tick') {
+      // Mechanical Click
       osc.type = 'square';
       osc.frequency.setValueAtTime(600, ctx.currentTime);
       osc.frequency.exponentialRampToValueAtTime(100, ctx.currentTime + 0.05);
@@ -120,180 +32,163 @@ export default function PixelGarden() {
       osc.start();
       osc.stop(ctx.currentTime + 0.05);
     } else {
+      // Success Chime
       osc.type = 'sine';
       osc.frequency.setValueAtTime(400, ctx.currentTime);
-      osc.frequency.linearRampToValueAtTime(800, ctx.currentTime + 0.2);
+      osc.frequency.linearRampToValueAtTime(800, ctx.currentTime + 0.1);
       gain.gain.setValueAtTime(0.1, ctx.currentTime);
       gain.gain.linearRampToValueAtTime(0, ctx.currentTime + 0.5);
       osc.start();
       osc.stop(ctx.currentTime + 0.5);
     }
+    
     osc.connect(gain);
     gain.connect(ctx.destination);
   };
 
-  // --- MOUSE HANDLERS ---
-  const handleMouseDown = (e) => {
-    if (isActive) return;
-    setIsDragging(true);
-    updatePosition(e.clientX);
+  // --- 2. DRAG HANDLER ---
+  const handleDrag = () => {
+    const currentX = x.get();
+    const width = constraintsRef.current ? constraintsRef.current.offsetWidth : 300;
+    
+    // Map position to minutes (0px = 0min, Full Width = 60min)
+    const progress = Math.max(0, Math.min(currentX / width, 1));
+    const newMinutes = Math.round(progress * 60);
+    setMinutes(newMinutes);
+
+    // Play tick sound every 10 pixels
+    if (Math.abs(currentX - lastTickX.current) > 10) {
+      playSound('tick');
+      lastTickX.current = currentX;
+    }
   };
 
-  const handleMouseMove = (e) => {
-    if (!isDragging) return;
-    updatePosition(e.clientX);
-  };
-
-  const handleMouseUp = () => {
-    if (!isDragging) return;
-    setIsDragging(false);
+  const handleDragEnd = () => {
     if (minutes > 0) {
       startTimer();
     } else {
-      setDragX(0); // Snap back
+      // Snap back if 0
+      animate(x, 0, { type: "spring", stiffness: 300, damping: 30 });
     }
   };
 
-  // Support Touch Events for Mobile
-  const handleTouchStart = (e) => handleMouseDown(e.touches[0]);
-  const handleTouchMove = (e) => handleMouseMove(e.touches[0]);
-
-  const updatePosition = (clientX) => {
-    if (!trackRef.current) return;
-    const rect = trackRef.current.getBoundingClientRect();
-    const offsetX = clientX - rect.left;
-    const width = rect.width;
-    
-    // Clamp between 0 and width
-    let newX = Math.max(0, Math.min(offsetX, width));
-    
-    setDragX(newX);
-    
-    // Calculate minutes (0 to 60)
-    const pct = newX / width;
-    setMinutes(Math.round(pct * 60));
-
-    // Tick Sound
-    if (Math.abs(newX - lastTickX.current) > 10) {
-      playSound('tick');
-      lastTickX.current = newX;
-    }
-  };
-
-  // --- TIMER LOGIC ---
+  // --- 3. TIMER LOGIC (Unwinding) ---
   const startTimer = () => {
     setIsActive(true);
-    const totalTime = minutes * 1000; // 1 second per minute for demo
-    const startTime = Date.now();
-    const startX = dragX;
+    
+    // For demo: 1 real second = 1 timer minute. 
+    // To make it real time, change (minutes * 1) to (minutes * 60)
+    const duration = minutes * 1; 
 
-    timerRef.current = setInterval(() => {
-      const elapsed = Date.now() - startTime;
-      const remainingPct = 1 - (elapsed / totalTime);
-      
-      if (remainingPct <= 0) {
-        clearInterval(timerRef.current);
+    animate(x, 0, {
+      duration: duration,
+      ease: "linear",
+      onUpdate: (latest) => {
+        const width = constraintsRef.current ? constraintsRef.current.offsetWidth : 1;
+        setMinutes(Math.ceil((latest / width) * 60));
+      },
+      onComplete: () => {
+        setIsActive(false);
+        setMinutes(0);
         finishTimer();
-      } else {
-        setDragX(startX * remainingPct);
-        // Calculate remaining minutes based on original max width logic
-        const currentMins = Math.ceil((startX * remainingPct / trackRef.current.offsetWidth) * 60);
-        // Fallback if width ref is tricky during resize, simple math:
-        setMinutes(Math.ceil(minutes * remainingPct)); 
       }
-    }, 16); // 60fps
+    });
   };
 
   const finishTimer = () => {
-    setDragX(0);
-    setMinutes(0);
-    setIsActive(false);
     playSound('success');
-    setCheer("YOU CRUSHED IT! 🚀");
+    setCheer("FOCUS COMPLETE! 🚀");
     setTimeout(() => setCheer(null), 3000);
   };
 
-  // Cleanup on unmount
-  useEffect(() => {
-    window.addEventListener('mouseup', handleMouseUp);
-    window.addEventListener('touchend', handleMouseUp);
-    return () => {
-      window.removeEventListener('mouseup', handleMouseUp);
-      window.removeEventListener('touchend', handleMouseUp);
-      clearInterval(timerRef.current);
-    };
-  }, [isDragging, minutes]);
+  // --- VISUAL TRANSFORMS ---
+  const bg = useTransform(x, [0, 300], ["#1e293b", "#0f172a"]);
+  const barColor = useTransform(x, [0, 300], ["#334155", "#0ea5e9"]);
+  const glow = useTransform(x, [0, 300], [0, 1]);
 
   return (
-    <div style={styles.container} onMouseMove={handleMouseMove} onTouchMove={handleTouchMove}>
-      
+    <motion.div 
+      style={{ backgroundColor: bg }}
+      className="relative w-full h-48 rounded-xl overflow-hidden border-4 border-slate-800 mt-6 select-none shadow-2xl flex flex-col items-center justify-center p-6"
+    >
+      {/* GLOW EFFECT */}
+      <motion.div style={{ opacity: glow }} className="absolute inset-0 bg-cyan-900/20 z-0 pointer-events-none" />
+
       {/* INSTRUCTIONS */}
       {!isActive && minutes === 0 && (
-        <div style={{ position: 'absolute', top: '10px', color: '#64748b', fontSize: '10px', fontWeight: 'bold', letterSpacing: '2px', animation: 'pulse 2s infinite' }}>
-          DRAG TO SET FOCUS
+        <div className="absolute top-4 text-slate-500 text-[10px] font-bold uppercase tracking-widest animate-pulse">
+          Drag to Set Timer
         </div>
       )}
 
       {/* TRACK */}
-      <div style={styles.track} ref={trackRef}>
-        <div style={styles.lineBase}>
-          <div style={{ ...styles.lineFill, width: `${dragX}px`, backgroundColor: isActive ? '#22c55e' : '#0ea5e9' }}></div>
+      <div className="relative w-full h-16 flex items-center z-10" ref={constraintsRef}>
+        {/* Gray Line */}
+        <div className="absolute w-full h-3 bg-slate-700 rounded-full overflow-hidden">
+           {/* Colored Fill */}
+           <motion.div style={{ width: x, backgroundColor: barColor }} className="h-full" />
         </div>
 
-        {/* DRAGGABLE KNOB */}
-        <div 
-          onMouseDown={handleMouseDown}
-          onTouchStart={handleTouchStart}
-          style={{ 
-            ...styles.knob, 
-            left: `${dragX}px`, 
-            backgroundColor: isActive ? '#22c55e' : '#06b6d4',
-            borderColor: isActive ? '#86efac' : '#cffafe'
-          }}
+        {/* Ticks */}
+        <div className="absolute w-full flex justify-between px-2 pointer-events-none">
+           {[0, 15, 30, 45, 60].map((m) => (
+             <div key={m} className="flex flex-col items-center gap-2">
+                <div className="w-0.5 h-4 bg-slate-500"></div>
+                <span className="text-[9px] text-slate-500 font-bold">{m}</span>
+             </div>
+           ))}
+        </div>
+
+        {/* DRAGGABLE HANDLE */}
+        <motion.div
+          drag={isActive ? false : "x"} // No dragging while running
+          dragConstraints={constraintsRef}
+          dragElastic={0.05}
+          dragMomentum={false}
+          style={{ x }}
+          onDrag={handleDrag}
+          onDragEnd={handleDragEnd}
+          whileHover={{ scale: 1.1, cursor: "grab" }}
+          whileTap={{ scale: 0.95, cursor: "grabbing" }}
+          className={`absolute top-1/2 -translate-y-1/2 -ml-6 w-12 h-12 rounded-full border-4 shadow-[0_0_20px_rgba(0,0,0,0.5)] flex items-center justify-center z-20 transition-colors
+            ${isActive ? 'bg-green-500 border-green-300' : 'bg-cyan-500 border-cyan-200'}
+          `}
         >
           {isActive ? (
-             // Lightning Icon (SVG)
-             <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
-               <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon>
-             </svg>
+             <motion.div animate={{ rotate: 360 }} transition={{ repeat: Infinity, duration: 2, ease: "linear" }}>
+                <Zap size={20} className="text-white fill-white" />
+             </motion.div>
           ) : (
-             // Clock Icon (SVG)
-             <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
-               <circle cx="12" cy="12" r="10"></circle>
-               <polyline points="12 6 12 12 16 14"></polyline>
-             </svg>
+             <Clock size={24} className="text-white" />
           )}
-        </div>
+        </motion.div>
       </div>
 
       {/* DIGITAL DISPLAY */}
-      <div style={styles.display}>
-        <div style={{ ...styles.timeText, color: isActive ? '#4ade80' : 'white' }}>
-          {minutes < 10 ? `0${minutes}` : minutes}:00
+      <div className="mt-6 flex flex-col items-center z-10">
+        <div className={`text-5xl font-black font-mono tracking-tighter ${isActive ? 'text-green-400' : 'text-white'}`}>
+           {minutes < 10 ? `0${minutes}` : minutes}:00
         </div>
-        <div style={styles.subText}>
-          {isActive ? 'REMAINING' : 'MINUTES'}
+        <div className="text-xs font-bold text-slate-500 uppercase tracking-widest mt-1">
+           {isActive ? 'Unwinding...' : 'Minutes'}
         </div>
       </div>
 
       {/* CHEER POPUP */}
-      {cheer && (
-        <div style={styles.cheerPopup}>
-          <svg width="60" height="60" viewBox="0 0 24 24" fill="none" stroke="#4ade80" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" style={{marginBottom: '10px'}}>
-            <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path>
-            <polyline points="22 4 12 14.01 9 11.01"></polyline>
-          </svg>
-          <h2 style={{ fontSize: '2rem', fontWeight: '900', color: 'white', fontStyle: 'italic', textAlign: 'center' }}>
-            {cheer}
-          </h2>
-        </div>
-      )}
+      <AnimatePresence>
+        {cheer && (
+          <motion.div 
+            initial={{ scale: 0, rotate: -10 }}
+            animate={{ scale: 1, rotate: 0 }}
+            exit={{ scale: 0, opacity: 0 }}
+            className="absolute inset-0 z-50 bg-black/80 backdrop-blur-md flex flex-col items-center justify-center text-center"
+          >
+             <CheckCircle2 size={60} className="text-green-400 mb-4" />
+             <h2 className="text-3xl font-black text-white italic">{cheer}</h2>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
-      {/* Animation Styles */}
-      <style>{`
-        @keyframes pulse { 0% { opacity: 0.5; } 50% { opacity: 1; } 100% { opacity: 0.5; } }
-        @keyframes popIn { 0% { transform: scale(0); } 100% { transform: scale(1); } }
-      `}</style>
-    </div>
+    </motion.div>
   );
 }
