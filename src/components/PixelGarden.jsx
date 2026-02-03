@@ -1,19 +1,39 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { motion, useMotionValue, useTransform, animate, AnimatePresence } from 'framer-motion';
-import { Clock, Zap, CheckCircle2 } from 'lucide-react';
+
+// --- ICONS (Raw SVG to avoid installing lucide-react) ---
+const ClockIcon = () => (
+  <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+    <circle cx="12" cy="12" r="10"/>
+    <polyline points="12 6 12 12 16 14"/>
+  </svg>
+);
+
+const ZapIcon = () => (
+  <svg width="20" height="20" viewBox="0 0 24 24" fill="white" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/>
+  </svg>
+);
+
+const CheckIcon = () => (
+  <svg width="60" height="60" viewBox="0 0 24 24" fill="none" stroke="#4ade80" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/>
+    <polyline points="22 4 12 14.01 9 11.01"/>
+  </svg>
+);
 
 export default function PixelGarden() {
   const [minutes, setMinutes] = useState(0);
   const [isActive, setIsActive] = useState(false);
   const [cheer, setCheer] = useState(null);
+  const [dragX, setDragX] = useState(0);
+  const [isDragging, setIsDragging] = useState(false);
   
-  // Motion Values
-  const x = useMotionValue(0);
-  const constraintsRef = useRef(null);
-  const lastTickX = useRef(0);
+  const trackRef = useRef(null);
   const audioCtx = useRef(null);
+  const lastTickX = useRef(0);
+  const timerRef = useRef(null);
 
-  // --- 1. AUDIO ENGINE (The "Tick" Sound) ---
+  // --- AUDIO ENGINE ---
   const playSound = (type) => {
     if (!audioCtx.current) {
       audioCtx.current = new (window.AudioContext || window.webkitAudioContext)();
@@ -23,7 +43,6 @@ export default function PixelGarden() {
     const gain = ctx.createGain();
 
     if (type === 'tick') {
-      // Mechanical Click
       osc.type = 'square';
       osc.frequency.setValueAtTime(600, ctx.currentTime);
       osc.frequency.exponentialRampToValueAtTime(100, ctx.currentTime + 0.05);
@@ -32,87 +51,126 @@ export default function PixelGarden() {
       osc.start();
       osc.stop(ctx.currentTime + 0.05);
     } else {
-      // Success Chime
       osc.type = 'sine';
       osc.frequency.setValueAtTime(400, ctx.currentTime);
-      osc.frequency.linearRampToValueAtTime(800, ctx.currentTime + 0.1);
+      osc.frequency.linearRampToValueAtTime(800, ctx.currentTime + 0.2);
       gain.gain.setValueAtTime(0.1, ctx.currentTime);
       gain.gain.linearRampToValueAtTime(0, ctx.currentTime + 0.5);
       osc.start();
       osc.stop(ctx.currentTime + 0.5);
     }
-    
     osc.connect(gain);
     gain.connect(ctx.destination);
   };
 
-  // --- 2. DRAG HANDLER ---
-  const handleDrag = () => {
-    const currentX = x.get();
-    const width = constraintsRef.current ? constraintsRef.current.offsetWidth : 300;
-    
-    // Map position to minutes (0px = 0min, Full Width = 60min)
-    const progress = Math.max(0, Math.min(currentX / width, 1));
-    const newMinutes = Math.round(progress * 60);
-    setMinutes(newMinutes);
-
-    // Play tick sound every 10 pixels
-    if (Math.abs(currentX - lastTickX.current) > 10) {
-      playSound('tick');
-      lastTickX.current = currentX;
-    }
+  // --- MOUSE/TOUCH HANDLERS ---
+  const handleStart = (clientX) => {
+    if (isActive) return;
+    setIsDragging(true);
+    updatePosition(clientX);
   };
 
-  const handleDragEnd = () => {
+  const handleMove = (clientX) => {
+    if (!isDragging) return;
+    updatePosition(clientX);
+  };
+
+  const handleEnd = () => {
+    if (!isDragging) return;
+    setIsDragging(false);
     if (minutes > 0) {
       startTimer();
     } else {
-      // Snap back if 0
-      animate(x, 0, { type: "spring", stiffness: 300, damping: 30 });
+      setDragX(0); // Snap back
     }
   };
 
-  // --- 3. TIMER LOGIC (Unwinding) ---
+  const updatePosition = (clientX) => {
+    if (!trackRef.current) return;
+    const rect = trackRef.current.getBoundingClientRect();
+    const offsetX = clientX - rect.left;
+    const width = rect.width;
+    
+    // Clamp between 0 and width
+    let newX = Math.max(0, Math.min(offsetX, width));
+    setDragX(newX);
+    
+    // Calculate minutes (0 to 60)
+    const pct = newX / width;
+    setMinutes(Math.round(pct * 60));
+
+    // Tick Sound
+    if (Math.abs(newX - lastTickX.current) > 10) {
+      playSound('tick');
+      lastTickX.current = newX;
+    }
+  };
+
+  // --- TIMER LOGIC ---
   const startTimer = () => {
     setIsActive(true);
-    
-    // For demo: 1 real second = 1 timer minute. 
-    // To make it real time, change (minutes * 1) to (minutes * 60)
-    const duration = minutes * 1; 
+    // DEMO SPEED: 1 second = 1 minute.
+    // TO FIX: Change `minutes * 1000` to `minutes * 60000` for real minutes.
+    const totalDuration = minutes * 1000; 
+    const startTime = Date.now();
+    const startX = dragX;
 
-    animate(x, 0, {
-      duration: duration,
-      ease: "linear",
-      onUpdate: (latest) => {
-        const width = constraintsRef.current ? constraintsRef.current.offsetWidth : 1;
-        setMinutes(Math.ceil((latest / width) * 60));
-      },
-      onComplete: () => {
-        setIsActive(false);
-        setMinutes(0);
+    timerRef.current = setInterval(() => {
+      const elapsed = Date.now() - startTime;
+      const remainingPct = 1 - (elapsed / totalDuration);
+      
+      if (remainingPct <= 0) {
+        clearInterval(timerRef.current);
         finishTimer();
+      } else {
+        setDragX(Math.max(0, startX * remainingPct));
+        // Update minute display based on visual position
+        if(trackRef.current) {
+             const currentMins = Math.ceil((startX * remainingPct / trackRef.current.offsetWidth) * 60);
+             setMinutes(currentMins);
+        }
       }
-    });
+    }, 16); // ~60 FPS
   };
 
   const finishTimer = () => {
+    setDragX(0);
+    setMinutes(0);
+    setIsActive(false);
     playSound('success');
     setCheer("FOCUS COMPLETE! 🚀");
     setTimeout(() => setCheer(null), 3000);
   };
 
-  // --- VISUAL TRANSFORMS ---
-  const bg = useTransform(x, [0, 300], ["#1e293b", "#0f172a"]);
-  const barColor = useTransform(x, [0, 300], ["#334155", "#0ea5e9"]);
-  const glow = useTransform(x, [0, 300], [0, 1]);
+  // Global event listeners for drag release outside component
+  useEffect(() => {
+    const onUp = () => handleEnd();
+    const onMove = (e) => isDragging && handleMove(e.clientX);
+    const onTouchMove = (e) => isDragging && handleMove(e.touches[0].clientX);
+
+    if (isDragging) {
+      window.addEventListener('mouseup', onUp);
+      window.addEventListener('mousemove', onMove);
+      window.addEventListener('touchend', onUp);
+      window.addEventListener('touchmove', onTouchMove);
+    }
+    return () => {
+      window.removeEventListener('mouseup', onUp);
+      window.removeEventListener('mousemove', onMove);
+      window.removeEventListener('touchend', onUp);
+      window.removeEventListener('touchmove', onTouchMove);
+      clearInterval(timerRef.current);
+    };
+  }, [isDragging]);
 
   return (
-    <motion.div 
-      style={{ backgroundColor: bg }}
-      className="relative w-full h-48 rounded-xl overflow-hidden border-4 border-slate-800 mt-6 select-none shadow-2xl flex flex-col items-center justify-center p-6"
+    <div 
+      className="relative w-full h-48 bg-slate-900 rounded-xl overflow-hidden border-4 border-slate-800 mt-6 select-none shadow-[0_0_40px_rgba(14,165,233,0.15)] flex flex-col items-center justify-center p-6"
+      style={{ fontFamily: 'monospace' }}
     >
-      {/* GLOW EFFECT */}
-      <motion.div style={{ opacity: glow }} className="absolute inset-0 bg-cyan-900/20 z-0 pointer-events-none" />
+      
+      {/* GLOW BACKGROUND */}
+      <div className={`absolute inset-0 bg-cyan-900/20 pointer-events-none transition-opacity duration-500 ${isActive ? 'opacity-100' : 'opacity-0'}`} />
 
       {/* INSTRUCTIONS */}
       {!isActive && minutes === 0 && (
@@ -122,11 +180,19 @@ export default function PixelGarden() {
       )}
 
       {/* TRACK */}
-      <div className="relative w-full h-16 flex items-center z-10" ref={constraintsRef}>
+      <div 
+        ref={trackRef}
+        className="relative w-full h-16 flex items-center z-10 cursor-pointer"
+        onMouseDown={(e) => handleStart(e.clientX)}
+        onTouchStart={(e) => handleStart(e.touches[0].clientX)}
+      >
         {/* Gray Line */}
         <div className="absolute w-full h-3 bg-slate-700 rounded-full overflow-hidden">
            {/* Colored Fill */}
-           <motion.div style={{ width: x, backgroundColor: barColor }} className="h-full" />
+           <div 
+             className={`h-full transition-colors duration-300 ${isActive ? 'bg-green-500' : 'bg-cyan-500'}`} 
+             style={{ width: `${dragX}px` }} 
+           />
         </div>
 
         {/* Ticks */}
@@ -139,34 +205,24 @@ export default function PixelGarden() {
            ))}
         </div>
 
-        {/* DRAGGABLE HANDLE */}
-        <motion.div
-          drag={isActive ? false : "x"} // No dragging while running
-          dragConstraints={constraintsRef}
-          dragElastic={0.05}
-          dragMomentum={false}
-          style={{ x }}
-          onDrag={handleDrag}
-          onDragEnd={handleDragEnd}
-          whileHover={{ scale: 1.1, cursor: "grab" }}
-          whileTap={{ scale: 0.95, cursor: "grabbing" }}
-          className={`absolute top-1/2 -translate-y-1/2 -ml-6 w-12 h-12 rounded-full border-4 shadow-[0_0_20px_rgba(0,0,0,0.5)] flex items-center justify-center z-20 transition-colors
-            ${isActive ? 'bg-green-500 border-green-300' : 'bg-cyan-500 border-cyan-200'}
+        {/* DRAGGABLE KNOB */}
+        <div 
+          className={`absolute top-1/2 -ml-6 w-12 h-12 rounded-full border-4 shadow-xl flex items-center justify-center z-20 transition-transform duration-75
+            ${isActive ? 'bg-green-500 border-green-300 scale-100' : 'bg-cyan-500 border-cyan-200 hover:scale-110'}
           `}
+          style={{ left: `${dragX}px`, transform: 'translateY(-50%)' }}
         >
           {isActive ? (
-             <motion.div animate={{ rotate: 360 }} transition={{ repeat: Infinity, duration: 2, ease: "linear" }}>
-                <Zap size={20} className="text-white fill-white" />
-             </motion.div>
+             <div className="animate-spin duration-1000"><ZapIcon /></div>
           ) : (
-             <Clock size={24} className="text-white" />
+             <ClockIcon />
           )}
-        </motion.div>
+        </div>
       </div>
 
       {/* DIGITAL DISPLAY */}
       <div className="mt-6 flex flex-col items-center z-10">
-        <div className={`text-5xl font-black font-mono tracking-tighter ${isActive ? 'text-green-400' : 'text-white'}`}>
+        <div className={`text-5xl font-black tracking-tighter transition-colors duration-300 ${isActive ? 'text-green-400' : 'text-white'}`}>
            {minutes < 10 ? `0${minutes}` : minutes}:00
         </div>
         <div className="text-xs font-bold text-slate-500 uppercase tracking-widest mt-1">
@@ -175,20 +231,13 @@ export default function PixelGarden() {
       </div>
 
       {/* CHEER POPUP */}
-      <AnimatePresence>
-        {cheer && (
-          <motion.div 
-            initial={{ scale: 0, rotate: -10 }}
-            animate={{ scale: 1, rotate: 0 }}
-            exit={{ scale: 0, opacity: 0 }}
-            className="absolute inset-0 z-50 bg-black/80 backdrop-blur-md flex flex-col items-center justify-center text-center"
-          >
-             <CheckCircle2 size={60} className="text-green-400 mb-4" />
-             <h2 className="text-3xl font-black text-white italic">{cheer}</h2>
-          </motion.div>
-        )}
-      </AnimatePresence>
+      {cheer && (
+        <div className="absolute inset-0 z-50 bg-black/80 backdrop-blur-md flex flex-col items-center justify-center text-center animate-in fade-in zoom-in duration-300">
+           <div className="mb-4"><CheckIcon /></div>
+           <h2 className="text-3xl font-black text-white italic">{cheer}</h2>
+        </div>
+      )}
 
-    </motion.div>
+    </div>
   );
 }
