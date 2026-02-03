@@ -1,239 +1,234 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
-import { Anchor, Skull } from 'lucide-react';
+import { motion, useMotionValue, useTransform, animate } from 'framer-motion';
+import { Clock, CheckCircle2, Zap, Trophy, Sparkles } from 'lucide-react';
 
 // =======================================================
-// 1. THE COMPLETE CREATURE CATALOG
+// 1. AUDIO ENGINE (Synthetic Tick)
 // =======================================================
-const PREY = [
-  { sprite: '🐟', size: 30 }, { sprite: '🐠', size: 35 },
-  { sprite: '🦐', size: 20 }, { sprite: '🦀', size: 30 },
-  { sprite: '🦞', size: 35 }, { sprite: '🐚', size: 25 },
-  { sprite: '🦪', size: 25 }, { sprite: '🐌', size: 20 }
+// Short, crisp mechanical click sound (Base64 to avoid file issues)
+const TICK_SOUND = "data:audio/wav;base64,UklGRl9vT19XQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YU"; // Placeholder, using Web Audio API below for better control
+
+const CHEERS = [
+  "You crushed it! 🚀",
+  "Focus Master! 🧠",
+  "Time well spent! ⏳",
+  "Victory is yours! 🏆",
+  "Brain gains! 💪",
+  "Zone Unlocked! 🔓"
 ];
 
-const PREDATORS = [
-  { sprite: '🐙', size: 60 }, { sprite: '🦑', size: 55 },
-  { sprite: '🐋', size: 80 }, { sprite: '🐳', size: 85 },
-  { sprite: '🦈', size: 75 }, { sprite: '🐡', size: 45 }, 
-  { sprite: '🐢', size: 50 }, { sprite: '🦭', size: 65 },
-  { sprite: '🦦', size: 50 }, { sprite: '🪼', size: 45 }
-];
+export default function PixelGarden() {
+  const [isDragging, setIsDragging] = useState(false);
+  const [minutes, setMinutes] = useState(0);
+  const [isActive, setIsActive] = useState(false);
+  const [showCheer, setShowCheer] = useState(null);
+  
+  // Motion Values for smooth dragging
+  const x = useMotionValue(0);
+  const widthRef = useRef(null);
+  const constraintsRef = useRef(null);
+  
+  // Audio Refs
+  const audioContextRef = useRef(null);
+  const lastTickPos = useRef(0);
 
-export default function PixelAquarium({ dailyScore }) {
-  // UNIFIED WORLD STATE (Prevents glitches)
-  const [world, setWorld] = useState({
-    fish: [],
-    food: [],
-    bubbles: [],
-    mode: 'feed'
-  });
+  // --- 1. SOUND ENGINE (Web Audio API) ---
+  const playTick = () => {
+    if (!audioContextRef.current) {
+      audioContextRef.current = new (window.AudioContext || window.webkitAudioContext)();
+    }
+    const ctx = audioContextRef.current;
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
 
-  // --- INITIAL SPAWN ---
-  useEffect(() => {
-    const initialFish = [];
-    for (let i = 0; i < 6; i++) initialFish.push(createFish('prey'));
-    for (let i = 0; i < 2; i++) initialFish.push(createFish('predator'));
-    setWorld(prev => ({ ...prev, fish: initialFish }));
-  }, []);
+    osc.type = 'square';
+    osc.frequency.setValueAtTime(800, ctx.currentTime);
+    osc.frequency.exponentialRampToValueAtTime(100, ctx.currentTime + 0.05);
+    
+    gain.gain.setValueAtTime(0.1, ctx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.05);
 
-  // --- HELPER: CREATE FISH ---
-  const createFish = (type) => {
-    const isPredator = type === 'predator';
-    const pool = isPredator ? PREDATORS : PREY;
-    const template = pool[Math.floor(Math.random() * pool.length)];
-    return {
-      id: Math.random(),
-      x: Math.random() * 80 + 10,
-      y: Math.random() * 60 + 10,
-      vx: (Math.random() - 0.5) * 0.5,
-      vy: (Math.random() - 0.5) * 0.2,
-      type: isPredator ? 'predator' : 'prey',
-      ...template,
-      reaction: null
-    };
+    osc.connect(gain);
+    gain.connect(ctx.destination);
+    
+    osc.start();
+    osc.stop(ctx.currentTime + 0.05);
   };
 
-  // --- THE PHYSICS LOOP ---
-  useEffect(() => {
-    const loop = setInterval(() => {
-      setWorld(prev => {
-        let { fish, food, bubbles } = prev;
-        
-        // 1. BUBBLES (Float Up)
-        let newBubbles = bubbles.map(b => ({ ...b, y: b.y - 1 })).filter(b => b.y > -10);
-        if (Math.random() > 0.92) newBubbles.push({ id: Math.random(), x: Math.random() * 100, y: 110, size: Math.random() * 8 + 4 });
+  const playSuccess = () => {
+    if (!audioContextRef.current) return;
+    const ctx = audioContextRef.current;
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    
+    osc.type = 'sine';
+    osc.frequency.setValueAtTime(400, ctx.currentTime);
+    osc.frequency.linearRampToValueAtTime(800, ctx.currentTime + 0.2);
+    
+    gain.gain.setValueAtTime(0.1, ctx.currentTime);
+    gain.gain.linearRampToValueAtTime(0, ctx.currentTime + 0.5);
+    
+    osc.connect(gain);
+    gain.connect(ctx.destination);
+    osc.start();
+    osc.stop(ctx.currentTime + 0.5);
+  };
 
-        // 2. FOOD (Sink Down)
-        let newFood = food.map(f => ({ ...f, y: f.y + 0.8 })).filter(f => f.y < 100);
+  // --- 2. DRAG LOGIC ---
+  const handleDrag = (_, info) => {
+    const currentX = x.get();
+    
+    // Calculate 1-60 minutes based on width (approx 300px = 60mins)
+    const maxW = constraintsRef.current?.offsetWidth || 300;
+    const progress = Math.max(0, Math.min(currentX / maxW, 1));
+    const mins = Math.round(progress * 60);
+    setMinutes(mins);
 
-        // 3. FISH LOGIC
-        let eatenFoodIds = new Set();
-        let deadFishIds = new Set();
-
-        let newFish = fish.map(f => {
-          let { x, y, vx, vy, type, id } = f;
-
-          // -- BOUNDARY WALLS (Stay on screen) --
-          if (x <= 2) { x = 2; vx = Math.abs(vx); }        // Hit Left Wall -> Go Right
-          if (x >= 96) { x = 96; vx = -Math.abs(vx); }     // Hit Right Wall -> Go Left
-          if (y <= 2) { y = 2; vy = Math.abs(vy); }        // Hit Ceiling -> Go Down
-          if (y >= 85) { y = 85; vy = -Math.abs(vy); }     // Hit Floor -> Go Up
-
-          // -- PREDATION --
-          if (type === 'predator') {
-            const victim = fish.find(other => 
-              other.type === 'prey' && 
-              !deadFishIds.has(other.id) &&
-              Math.abs(other.x - x) < 6 && Math.abs(other.y - y) < 6
-            );
-            if (victim) {
-              deadFishIds.add(victim.id);
-              f.reaction = '😋'; 
-            }
-          }
-
-          // -- EATING FOOD --
-          const targetFood = newFood.find(p => !eatenFoodIds.has(p.id) && Math.abs(p.x - x) < 15 && Math.abs(p.y - y) < 15);
-          if (targetFood) {
-            // Swim to food
-            vx += (targetFood.x - x) * 0.02;
-            vy += (targetFood.y - y) * 0.02;
-            
-            // Chomp
-            if (Math.abs(targetFood.x - x) < 3 && Math.abs(targetFood.y - y) < 3) {
-              eatenFoodIds.add(targetFood.id);
-              f.reaction = '❤️';
-            }
-          } else {
-            // Idle Wander
-            if (Math.random() > 0.95) vx += (Math.random() - 0.5) * 0.2;
-            if (Math.random() > 0.95) vy += (Math.random() - 0.5) * 0.2;
-            
-            // Speed Limits
-            vx = Math.max(-1.2, Math.min(1.2, vx));
-            vy = Math.max(-0.6, Math.min(0.6, vy));
-          }
-
-          return { ...f, x: x + vx, y: y + vy, vx, vy };
-        });
-
-        // 4. CLEANUP
-        newFish = newFish.filter(f => !deadFishIds.has(f.id));
-        newFood = newFood.filter(f => !eatenFoodIds.has(f.id));
-
-        return { ...prev, fish: newFish, food: newFood, bubbles: newBubbles };
-      });
-    }, 40);
-
-    return () => clearInterval(loop);
-  }, []);
-
-  // --- INTERACTIONS ---
-  const handleTap = (e) => {
-    if (e.target.closest('button')) return;
-
-    const rect = e.currentTarget.getBoundingClientRect();
-    const x = ((e.clientX - rect.left) / rect.width) * 100;
-    const y = ((e.clientY - rect.top) / rect.height) * 100;
-
-    // Check click on fish
-    const clickedFish = world.fish.find(f => Math.abs(f.x - x) < 6 && Math.abs(f.y - y) < 6);
-
-    if (clickedFish) {
-      if (world.mode === 'kill') {
-        setWorld(prev => ({ ...prev, fish: prev.fish.filter(f => f.id !== clickedFish.id) }));
-      } else {
-        setWorld(prev => ({
-          ...prev,
-          fish: prev.fish.map(f => f.id === clickedFish.id ? { ...f, vx: f.vx * 6, reaction: '💨' } : f)
-        }));
-        setTimeout(() => clearReaction(clickedFish.id), 1000);
-      }
-    } else {
-      // Drop Food
-      setWorld(prev => ({ ...prev, food: [...prev.food, { id: Math.random(), x, y }] }));
+    // TICK SOUND LOGIC: Play tick every 10 pixels moved
+    if (Math.abs(currentX - lastTickPos.current) > 10) {
+      playTick();
+      lastTickPos.current = currentX;
     }
   };
 
-  const spawnNew = () => {
-    setWorld(prev => ({ 
-      ...prev, 
-      fish: [...prev.fish, { ...createFish(Math.random() > 0.7 ? 'predator' : 'prey'), y: 0, vy: 1 }] 
-    }));
+  const handleDragEnd = () => {
+    setIsDragging(false);
+    if (minutes > 0) {
+      setIsActive(true);
+      startTimer();
+    } else {
+      // Snap back if 0
+      animate(x, 0, { type: "spring", stiffness: 300, damping: 30 });
+    }
   };
 
-  const clearReaction = (id) => {
-    setWorld(prev => ({
-      ...prev,
-      fish: prev.fish.map(f => f.id === id ? { ...f, reaction: null } : f)
-    }));
+  // --- 3. TIMER LOGIC (The "Resting Back") ---
+  const startTimer = () => {
+    // We animate the 'x' value back to 0 over the duration of 'minutes'
+    // For demo purposes, I'll speed it up (1 second = 1 real minute) so you can test it.
+    // CHANGE 'minutes * 1' to 'minutes * 60' for real-time minutes.
+    const durationInSeconds = minutes * 1; // currently 1 sec per minute for testing
+    
+    animate(x, 0, {
+      duration: durationInSeconds,
+      ease: "linear",
+      onUpdate: (latest) => {
+        const maxW = constraintsRef.current?.offsetWidth || 1;
+        const progress = Math.max(0, Math.min(latest / maxW, 1));
+        setMinutes(Math.ceil(progress * 60));
+      },
+      onComplete: () => {
+        setIsActive(false);
+        setMinutes(0);
+        handleCompletion();
+      }
+    });
   };
+
+  const handleCompletion = () => {
+    playSuccess();
+    const randomMsg = CHEERS[Math.floor(Math.random() * CHEERS.length)];
+    setShowCheer(randomMsg);
+    setTimeout(() => setShowCheer(null), 3000);
+  };
+
+  // --- VISUAL TRANSFORMS ---
+  const glowOpacity = useTransform(x, [0, 300], [0.2, 1]);
+  const lineColor = useTransform(x, [0, 300], ["#334155", "#0ea5e9"]);
 
   return (
-    // REDUCED HEIGHT: h-64 (was h-80)
-    <div 
-      className="relative w-full h-64 bg-blue-900 rounded-xl overflow-hidden border-4 border-slate-800 mt-6 select-none shadow-[0_0_30px_rgba(0,100,255,0.2)] font-sans isolate group cursor-crosshair"
-      onClick={handleTap}
-    >
+    <div className="relative w-full h-48 bg-slate-900 rounded-xl overflow-hidden border-4 border-slate-800 mt-6 select-none shadow-[0_0_40px_rgba(14,165,233,0.15)] flex flex-col items-center justify-center p-6 group">
       
-      {/* 1. LAYERS: Background */}
-      <div className="absolute inset-0 bg-gradient-to-b from-cyan-400/20 to-blue-950 z-0 pointer-events-none"></div>
-      <div className="absolute bottom-0 left-1/2 -translate-x-1/2 w-3/4 h-24 bg-blue-950/80 rounded-t-full blur-xl z-0 pointer-events-none"></div>
+      {/* 1. BACKGROUND HIGHLIGHT */}
+      <motion.div 
+        style={{ opacity: glowOpacity }}
+        className="absolute inset-0 bg-gradient-to-r from-cyan-900/20 to-blue-900/20 z-0 pointer-events-none"
+      />
 
-      {/* 2. SAND & DECOR */}
-      <div className="absolute bottom-0 w-full h-10 bg-gradient-to-t from-[#e6d5ac] to-[#c2b280] border-t-4 border-[#a69260] z-10 flex items-center justify-around pointer-events-none">
-         {[...Array(20)].map((_, i) => (<div key={i} className="w-1 h-1 bg-yellow-900/20 rounded-full" style={{ marginTop: Math.random() * 20 }}></div>))}
-      </div>
-      <div className="absolute bottom-4 left-5 text-4xl opacity-80 animate-pulse z-10 pointer-events-none">🌿</div>
-      <div className="absolute bottom-4 right-10 text-5xl opacity-80 animate-pulse z-10 pointer-events-none">🪸</div>
-
-      {/* 3. DYNAMIC ITEMS */}
-      {world.bubbles.map(b => (
-        <div key={b.id} className="absolute rounded-full border border-white/40 bg-white/10 backdrop-blur-sm z-0 pointer-events-none" style={{ left: `${b.x}%`, top: `${b.y}%`, width: b.size, height: b.size }} />
-      ))}
-      {world.food.map(f => (
-        <div key={f.id} className="absolute w-2 h-2 bg-yellow-600 rounded-full border border-yellow-800 z-10 animate-spin pointer-events-none" style={{ left: `${f.x}%`, top: `${f.y}%` }} />
-      ))}
-
-      {/* 4. FISH RENDERER */}
-      {world.fish.map(s => (
-        <motion.div 
-          key={s.id}
-          animate={{ left: `${s.x}%`, top: `${s.y}%`, scale: s.type === 'predator' ? 1.3 : 0.9 }}
-          transition={{ duration: 0.05, ease: 'linear' }}
-          className="absolute z-20 flex flex-col items-center pointer-events-none"
-        >
-           <AnimatePresence>
-             {s.reaction && <motion.div initial={{ y: 0, opacity: 1 }} animate={{ y: -20, opacity: 0 }} exit={{ opacity: 0 }} className="absolute -top-8 text-xl z-50 drop-shadow-md">{s.reaction}</motion.div>}
-           </AnimatePresence>
-           {/* Flip logic: scale-x-[-1] if velocity X is positive */}
-           <div className={`filter drop-shadow-xl transition-transform ${s.vx > 0 ? 'scale-x-[-1]' : ''}`} style={{ fontSize: `${s.size}px` }}>{s.sprite}</div>
-        </motion.div>
-      ))}
-
-      {/* 5. UI */}
-      <div className="absolute top-4 right-4 z-50 flex flex-col gap-2">
-         <button onClick={(e) => { e.stopPropagation(); spawnNew(); }} className="w-9 h-9 bg-cyan-600 rounded-full flex items-center justify-center text-white shadow-lg hover:scale-110 active:scale-95 transition-all border-2 border-cyan-300">
-            <Anchor size={18} />
-         </button>
-         <button onClick={(e) => { e.stopPropagation(); setWorld(p => ({ ...p, mode: p.mode === 'kill' ? 'feed' : 'kill' })); }} 
-                 className={`w-9 h-9 rounded-full flex items-center justify-center text-white shadow-lg hover:scale-110 active:scale-95 transition-all border-2 ${world.mode === 'kill' ? 'bg-red-600 border-red-300 animate-pulse' : 'bg-slate-700 border-slate-500'}`}>
-            <Skull size={18} />
-         </button>
-      </div>
-
-      {world.mode === 'kill' && (
-         <div className="absolute top-4 left-4 z-40 bg-red-600/90 text-white px-3 py-1 rounded-full text-[10px] font-bold uppercase tracking-widest pointer-events-none animate-bounce border border-red-400">
-            ☠️ KILL MODE
-         </div>
+      {/* 2. INSTRUCTIONS */}
+      {!isActive && !isDragging && minutes === 0 && (
+        <div className="absolute top-4 text-slate-500 text-xs font-bold uppercase tracking-widest animate-pulse">
+          Drag Clock to Set Focus
+        </div>
       )}
-      
-      {/* Tutorial Text */}
-      <div className="absolute bottom-2 left-0 w-full text-center text-white/20 text-[9px] uppercase tracking-widest pointer-events-none font-bold">
-        {world.mode === 'kill' ? 'Tap fish to delete' : 'Tap to feed • Tap fish to poke'}
+
+      {/* 3. THE TIMELINE TRACK */}
+      <div className="relative w-full h-12 flex items-center z-10" ref={constraintsRef}>
+        {/* The Line */}
+        <div className="absolute w-full h-2 bg-slate-700 rounded-full overflow-hidden">
+           <motion.div 
+             style={{ width: x, backgroundColor: lineColor }} 
+             className="h-full shadow-[0_0_15px_rgba(14,165,233,0.8)]"
+           />
+        </div>
+
+        {/* Ticks on the line */}
+        <div className="absolute w-full flex justify-between px-1 pointer-events-none opacity-30">
+           {[...Array(13)].map((_, i) => (
+             <div key={i} className={`w-0.5 h-4 bg-white ${i % 3 === 0 ? 'h-6' : 'h-3'}`} />
+           ))}
+        </div>
+
+        {/* 4. THE DRAGGABLE CLOCK */}
+        <motion.div
+          drag={isActive ? false : "x"} // Disable drag while timer is running
+          dragConstraints={constraintsRef}
+          dragElastic={0.05}
+          dragMomentum={false}
+          style={{ x }}
+          onDragStart={() => setIsDragging(true)}
+          onDrag={handleDrag}
+          onDragEnd={handleDragEnd}
+          whileHover={{ scale: 1.1 }}
+          whileTap={{ scale: 0.95, cursor: "grabbing" }}
+          className={`absolute top-1/2 -translate-y-1/2 -ml-6 w-12 h-12 rounded-full border-4 shadow-2xl flex items-center justify-center z-20 transition-colors
+            ${isActive ? 'bg-green-500 border-green-300 shadow-[0_0_30px_rgba(34,197,94,0.6)] cursor-not-allowed' : 'bg-cyan-500 border-cyan-200 shadow-[0_0_30px_rgba(6,182,212,0.6)] cursor-grab'}
+          `}
+        >
+          {isActive ? (
+             <motion.div animate={{ rotate: 360 }} transition={{ duration: 2, repeat: Infinity, ease: "linear" }}>
+               <Zap className="text-white fill-white" size={20} />
+             </motion.div>
+          ) : (
+             <Clock className="text-white" size={24} />
+          )}
+        </motion.div>
       </div>
 
+      {/* 5. TIME DISPLAY */}
+      <div className="mt-8 text-4xl font-black text-white font-mono flex items-center gap-3 z-10">
+         <span className={isActive ? "text-green-400" : "text-cyan-400"}>
+            {minutes < 10 ? `0${minutes}` : minutes}:00
+         </span>
+         <span className="text-sm font-bold text-slate-500 uppercase tracking-widest mt-3">
+            {isActive ? "Remaining" : "Minutes"}
+         </span>
+      </div>
+
+      {/* 6. CHEERING POPUP */}
+      <AnimatePresence>
+        {showCheer && (
+          <motion.div 
+            initial={{ scale: 0, rotate: -10 }} 
+            animate={{ scale: 1, rotate: 0 }} 
+            exit={{ scale: 0, opacity: 0 }}
+            className="absolute inset-0 z-50 flex flex-col items-center justify-center bg-black/80 backdrop-blur-sm"
+          >
+            <motion.div 
+               animate={{ y: [0, -20, 0] }} 
+               transition={{ repeat: Infinity, duration: 1 }}
+               className="text-6xl mb-4"
+            >
+               🏆
+            </motion.div>
+            <div className="text-3xl font-black text-transparent bg-clip-text bg-gradient-to-r from-yellow-400 to-orange-500">
+               {showCheer}
+            </div>
+            <div className="text-white/50 text-sm mt-2">Ready for the next round?</div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+      
     </div>
   );
 }
