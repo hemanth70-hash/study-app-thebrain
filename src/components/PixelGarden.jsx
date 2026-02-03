@@ -1,234 +1,299 @@
-import React, { useState, useEffect, useRef } from 'react';
-import { motion, useMotionValue, useTransform, animate } from 'framer-motion';
-import { Clock, CheckCircle2, Zap, Trophy, Sparkles } from 'lucide-react';
+import React, { useState, useRef, useEffect } from 'react';
 
-// =======================================================
-// 1. AUDIO ENGINE (Synthetic Tick)
-// =======================================================
-// Short, crisp mechanical click sound (Base64 to avoid file issues)
-const TICK_SOUND = "data:audio/wav;base64,UklGRl9vT19XQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YU"; // Placeholder, using Web Audio API below for better control
-
-const CHEERS = [
-  "You crushed it! 🚀",
-  "Focus Master! 🧠",
-  "Time well spent! ⏳",
-  "Victory is yours! 🏆",
-  "Brain gains! 💪",
-  "Zone Unlocked! 🔓"
-];
+// Standard CSS Animations embedded in JS
+const styles = {
+  container: {
+    position: 'relative',
+    width: '100%',
+    height: '12rem', // h-48
+    backgroundColor: '#0f172a', // slate-900
+    borderRadius: '0.75rem', // rounded-xl
+    border: '4px solid #1e293b', // border-slate-800
+    marginTop: '1.5rem',
+    display: 'flex',
+    flexDirection: 'column',
+    alignItems: 'center',
+    justifyContent: 'center',
+    userSelect: 'none',
+    overflow: 'hidden',
+    boxShadow: '0 0 40px rgba(14,165,233,0.15)',
+    fontFamily: 'monospace'
+  },
+  track: {
+    position: 'relative',
+    width: '90%',
+    height: '4rem',
+    display: 'flex',
+    alignItems: 'center',
+    zIndex: 10
+  },
+  lineBase: {
+    position: 'absolute',
+    width: '100%',
+    height: '0.75rem',
+    backgroundColor: '#334155', // slate-700
+    borderRadius: '9999px',
+    overflow: 'hidden'
+  },
+  lineFill: {
+    height: '100%',
+    backgroundColor: '#0ea5e9', // cyan-500
+    transition: 'width 0.1s linear'
+  },
+  knob: {
+    position: 'absolute',
+    top: '50%',
+    left: '0',
+    width: '3rem',
+    height: '3rem',
+    borderRadius: '50%',
+    border: '4px solid white',
+    transform: 'translate(-50%, -50%)',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    cursor: 'grab',
+    boxShadow: '0 4px 6px rgba(0,0,0,0.3)',
+    transition: 'background-color 0.3s, left 0.1s linear',
+    zIndex: 20
+  },
+  display: {
+    marginTop: '2rem',
+    textAlign: 'center',
+    zIndex: 10
+  },
+  timeText: {
+    fontSize: '3rem',
+    fontWeight: '900',
+    color: 'white',
+    lineHeight: 1
+  },
+  subText: {
+    fontSize: '0.75rem',
+    fontWeight: 'bold',
+    color: '#64748b', // slate-500
+    textTransform: 'uppercase',
+    letterSpacing: '0.1em',
+    marginTop: '0.5rem'
+  },
+  cheerPopup: {
+    position: 'absolute',
+    inset: 0,
+    backgroundColor: 'rgba(0,0,0,0.85)',
+    backdropFilter: 'blur(4px)',
+    display: 'flex',
+    flexDirection: 'column',
+    alignItems: 'center',
+    justifyContent: 'center',
+    zIndex: 50,
+    animation: 'popIn 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275)'
+  }
+};
 
 export default function PixelGarden() {
-  const [isDragging, setIsDragging] = useState(false);
   const [minutes, setMinutes] = useState(0);
   const [isActive, setIsActive] = useState(false);
-  const [showCheer, setShowCheer] = useState(null);
+  const [cheer, setCheer] = useState(null);
+  const [dragX, setDragX] = useState(0);
+  const [isDragging, setIsDragging] = useState(false);
   
-  // Motion Values for smooth dragging
-  const x = useMotionValue(0);
-  const widthRef = useRef(null);
-  const constraintsRef = useRef(null);
-  
-  // Audio Refs
-  const audioContextRef = useRef(null);
-  const lastTickPos = useRef(0);
+  const trackRef = useRef(null);
+  const audioCtx = useRef(null);
+  const lastTickX = useRef(0);
+  const timerRef = useRef(null);
 
-  // --- 1. SOUND ENGINE (Web Audio API) ---
-  const playTick = () => {
-    if (!audioContextRef.current) {
-      audioContextRef.current = new (window.AudioContext || window.webkitAudioContext)();
+  // --- AUDIO ENGINE ---
+  const playSound = (type) => {
+    if (!audioCtx.current) {
+      audioCtx.current = new (window.AudioContext || window.webkitAudioContext)();
     }
-    const ctx = audioContextRef.current;
+    const ctx = audioCtx.current;
     const osc = ctx.createOscillator();
     const gain = ctx.createGain();
 
-    osc.type = 'square';
-    osc.frequency.setValueAtTime(800, ctx.currentTime);
-    osc.frequency.exponentialRampToValueAtTime(100, ctx.currentTime + 0.05);
-    
-    gain.gain.setValueAtTime(0.1, ctx.currentTime);
-    gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.05);
-
-    osc.connect(gain);
-    gain.connect(ctx.destination);
-    
-    osc.start();
-    osc.stop(ctx.currentTime + 0.05);
-  };
-
-  const playSuccess = () => {
-    if (!audioContextRef.current) return;
-    const ctx = audioContextRef.current;
-    const osc = ctx.createOscillator();
-    const gain = ctx.createGain();
-    
-    osc.type = 'sine';
-    osc.frequency.setValueAtTime(400, ctx.currentTime);
-    osc.frequency.linearRampToValueAtTime(800, ctx.currentTime + 0.2);
-    
-    gain.gain.setValueAtTime(0.1, ctx.currentTime);
-    gain.gain.linearRampToValueAtTime(0, ctx.currentTime + 0.5);
-    
-    osc.connect(gain);
-    gain.connect(ctx.destination);
-    osc.start();
-    osc.stop(ctx.currentTime + 0.5);
-  };
-
-  // --- 2. DRAG LOGIC ---
-  const handleDrag = (_, info) => {
-    const currentX = x.get();
-    
-    // Calculate 1-60 minutes based on width (approx 300px = 60mins)
-    const maxW = constraintsRef.current?.offsetWidth || 300;
-    const progress = Math.max(0, Math.min(currentX / maxW, 1));
-    const mins = Math.round(progress * 60);
-    setMinutes(mins);
-
-    // TICK SOUND LOGIC: Play tick every 10 pixels moved
-    if (Math.abs(currentX - lastTickPos.current) > 10) {
-      playTick();
-      lastTickPos.current = currentX;
+    if (type === 'tick') {
+      osc.type = 'square';
+      osc.frequency.setValueAtTime(600, ctx.currentTime);
+      osc.frequency.exponentialRampToValueAtTime(100, ctx.currentTime + 0.05);
+      gain.gain.setValueAtTime(0.05, ctx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.05);
+      osc.start();
+      osc.stop(ctx.currentTime + 0.05);
+    } else {
+      osc.type = 'sine';
+      osc.frequency.setValueAtTime(400, ctx.currentTime);
+      osc.frequency.linearRampToValueAtTime(800, ctx.currentTime + 0.2);
+      gain.gain.setValueAtTime(0.1, ctx.currentTime);
+      gain.gain.linearRampToValueAtTime(0, ctx.currentTime + 0.5);
+      osc.start();
+      osc.stop(ctx.currentTime + 0.5);
     }
+    osc.connect(gain);
+    gain.connect(ctx.destination);
   };
 
-  const handleDragEnd = () => {
+  // --- MOUSE HANDLERS ---
+  const handleMouseDown = (e) => {
+    if (isActive) return;
+    setIsDragging(true);
+    updatePosition(e.clientX);
+  };
+
+  const handleMouseMove = (e) => {
+    if (!isDragging) return;
+    updatePosition(e.clientX);
+  };
+
+  const handleMouseUp = () => {
+    if (!isDragging) return;
     setIsDragging(false);
     if (minutes > 0) {
-      setIsActive(true);
       startTimer();
     } else {
-      // Snap back if 0
-      animate(x, 0, { type: "spring", stiffness: 300, damping: 30 });
+      setDragX(0); // Snap back
     }
   };
 
-  // --- 3. TIMER LOGIC (The "Resting Back") ---
-  const startTimer = () => {
-    // We animate the 'x' value back to 0 over the duration of 'minutes'
-    // For demo purposes, I'll speed it up (1 second = 1 real minute) so you can test it.
-    // CHANGE 'minutes * 1' to 'minutes * 60' for real-time minutes.
-    const durationInSeconds = minutes * 1; // currently 1 sec per minute for testing
+  // Support Touch Events for Mobile
+  const handleTouchStart = (e) => handleMouseDown(e.touches[0]);
+  const handleTouchMove = (e) => handleMouseMove(e.touches[0]);
+
+  const updatePosition = (clientX) => {
+    if (!trackRef.current) return;
+    const rect = trackRef.current.getBoundingClientRect();
+    const offsetX = clientX - rect.left;
+    const width = rect.width;
     
-    animate(x, 0, {
-      duration: durationInSeconds,
-      ease: "linear",
-      onUpdate: (latest) => {
-        const maxW = constraintsRef.current?.offsetWidth || 1;
-        const progress = Math.max(0, Math.min(latest / maxW, 1));
-        setMinutes(Math.ceil(progress * 60));
-      },
-      onComplete: () => {
-        setIsActive(false);
-        setMinutes(0);
-        handleCompletion();
+    // Clamp between 0 and width
+    let newX = Math.max(0, Math.min(offsetX, width));
+    
+    setDragX(newX);
+    
+    // Calculate minutes (0 to 60)
+    const pct = newX / width;
+    setMinutes(Math.round(pct * 60));
+
+    // Tick Sound
+    if (Math.abs(newX - lastTickX.current) > 10) {
+      playSound('tick');
+      lastTickX.current = newX;
+    }
+  };
+
+  // --- TIMER LOGIC ---
+  const startTimer = () => {
+    setIsActive(true);
+    const totalTime = minutes * 1000; // 1 second per minute for demo
+    const startTime = Date.now();
+    const startX = dragX;
+
+    timerRef.current = setInterval(() => {
+      const elapsed = Date.now() - startTime;
+      const remainingPct = 1 - (elapsed / totalTime);
+      
+      if (remainingPct <= 0) {
+        clearInterval(timerRef.current);
+        finishTimer();
+      } else {
+        setDragX(startX * remainingPct);
+        // Calculate remaining minutes based on original max width logic
+        const currentMins = Math.ceil((startX * remainingPct / trackRef.current.offsetWidth) * 60);
+        // Fallback if width ref is tricky during resize, simple math:
+        setMinutes(Math.ceil(minutes * remainingPct)); 
       }
-    });
+    }, 16); // 60fps
   };
 
-  const handleCompletion = () => {
-    playSuccess();
-    const randomMsg = CHEERS[Math.floor(Math.random() * CHEERS.length)];
-    setShowCheer(randomMsg);
-    setTimeout(() => setShowCheer(null), 3000);
+  const finishTimer = () => {
+    setDragX(0);
+    setMinutes(0);
+    setIsActive(false);
+    playSound('success');
+    setCheer("YOU CRUSHED IT! 🚀");
+    setTimeout(() => setCheer(null), 3000);
   };
 
-  // --- VISUAL TRANSFORMS ---
-  const glowOpacity = useTransform(x, [0, 300], [0.2, 1]);
-  const lineColor = useTransform(x, [0, 300], ["#334155", "#0ea5e9"]);
+  // Cleanup on unmount
+  useEffect(() => {
+    window.addEventListener('mouseup', handleMouseUp);
+    window.addEventListener('touchend', handleMouseUp);
+    return () => {
+      window.removeEventListener('mouseup', handleMouseUp);
+      window.removeEventListener('touchend', handleMouseUp);
+      clearInterval(timerRef.current);
+    };
+  }, [isDragging, minutes]);
 
   return (
-    <div className="relative w-full h-48 bg-slate-900 rounded-xl overflow-hidden border-4 border-slate-800 mt-6 select-none shadow-[0_0_40px_rgba(14,165,233,0.15)] flex flex-col items-center justify-center p-6 group">
+    <div style={styles.container} onMouseMove={handleMouseMove} onTouchMove={handleTouchMove}>
       
-      {/* 1. BACKGROUND HIGHLIGHT */}
-      <motion.div 
-        style={{ opacity: glowOpacity }}
-        className="absolute inset-0 bg-gradient-to-r from-cyan-900/20 to-blue-900/20 z-0 pointer-events-none"
-      />
-
-      {/* 2. INSTRUCTIONS */}
-      {!isActive && !isDragging && minutes === 0 && (
-        <div className="absolute top-4 text-slate-500 text-xs font-bold uppercase tracking-widest animate-pulse">
-          Drag Clock to Set Focus
+      {/* INSTRUCTIONS */}
+      {!isActive && minutes === 0 && (
+        <div style={{ position: 'absolute', top: '10px', color: '#64748b', fontSize: '10px', fontWeight: 'bold', letterSpacing: '2px', animation: 'pulse 2s infinite' }}>
+          DRAG TO SET FOCUS
         </div>
       )}
 
-      {/* 3. THE TIMELINE TRACK */}
-      <div className="relative w-full h-12 flex items-center z-10" ref={constraintsRef}>
-        {/* The Line */}
-        <div className="absolute w-full h-2 bg-slate-700 rounded-full overflow-hidden">
-           <motion.div 
-             style={{ width: x, backgroundColor: lineColor }} 
-             className="h-full shadow-[0_0_15px_rgba(14,165,233,0.8)]"
-           />
+      {/* TRACK */}
+      <div style={styles.track} ref={trackRef}>
+        <div style={styles.lineBase}>
+          <div style={{ ...styles.lineFill, width: `${dragX}px`, backgroundColor: isActive ? '#22c55e' : '#0ea5e9' }}></div>
         </div>
 
-        {/* Ticks on the line */}
-        <div className="absolute w-full flex justify-between px-1 pointer-events-none opacity-30">
-           {[...Array(13)].map((_, i) => (
-             <div key={i} className={`w-0.5 h-4 bg-white ${i % 3 === 0 ? 'h-6' : 'h-3'}`} />
-           ))}
-        </div>
-
-        {/* 4. THE DRAGGABLE CLOCK */}
-        <motion.div
-          drag={isActive ? false : "x"} // Disable drag while timer is running
-          dragConstraints={constraintsRef}
-          dragElastic={0.05}
-          dragMomentum={false}
-          style={{ x }}
-          onDragStart={() => setIsDragging(true)}
-          onDrag={handleDrag}
-          onDragEnd={handleDragEnd}
-          whileHover={{ scale: 1.1 }}
-          whileTap={{ scale: 0.95, cursor: "grabbing" }}
-          className={`absolute top-1/2 -translate-y-1/2 -ml-6 w-12 h-12 rounded-full border-4 shadow-2xl flex items-center justify-center z-20 transition-colors
-            ${isActive ? 'bg-green-500 border-green-300 shadow-[0_0_30px_rgba(34,197,94,0.6)] cursor-not-allowed' : 'bg-cyan-500 border-cyan-200 shadow-[0_0_30px_rgba(6,182,212,0.6)] cursor-grab'}
-          `}
+        {/* DRAGGABLE KNOB */}
+        <div 
+          onMouseDown={handleMouseDown}
+          onTouchStart={handleTouchStart}
+          style={{ 
+            ...styles.knob, 
+            left: `${dragX}px`, 
+            backgroundColor: isActive ? '#22c55e' : '#06b6d4',
+            borderColor: isActive ? '#86efac' : '#cffafe'
+          }}
         >
           {isActive ? (
-             <motion.div animate={{ rotate: 360 }} transition={{ duration: 2, repeat: Infinity, ease: "linear" }}>
-               <Zap className="text-white fill-white" size={20} />
-             </motion.div>
+             // Lightning Icon (SVG)
+             <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+               <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon>
+             </svg>
           ) : (
-             <Clock className="text-white" size={24} />
+             // Clock Icon (SVG)
+             <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+               <circle cx="12" cy="12" r="10"></circle>
+               <polyline points="12 6 12 12 16 14"></polyline>
+             </svg>
           )}
-        </motion.div>
+        </div>
       </div>
 
-      {/* 5. TIME DISPLAY */}
-      <div className="mt-8 text-4xl font-black text-white font-mono flex items-center gap-3 z-10">
-         <span className={isActive ? "text-green-400" : "text-cyan-400"}>
-            {minutes < 10 ? `0${minutes}` : minutes}:00
-         </span>
-         <span className="text-sm font-bold text-slate-500 uppercase tracking-widest mt-3">
-            {isActive ? "Remaining" : "Minutes"}
-         </span>
+      {/* DIGITAL DISPLAY */}
+      <div style={styles.display}>
+        <div style={{ ...styles.timeText, color: isActive ? '#4ade80' : 'white' }}>
+          {minutes < 10 ? `0${minutes}` : minutes}:00
+        </div>
+        <div style={styles.subText}>
+          {isActive ? 'REMAINING' : 'MINUTES'}
+        </div>
       </div>
 
-      {/* 6. CHEERING POPUP */}
-      <AnimatePresence>
-        {showCheer && (
-          <motion.div 
-            initial={{ scale: 0, rotate: -10 }} 
-            animate={{ scale: 1, rotate: 0 }} 
-            exit={{ scale: 0, opacity: 0 }}
-            className="absolute inset-0 z-50 flex flex-col items-center justify-center bg-black/80 backdrop-blur-sm"
-          >
-            <motion.div 
-               animate={{ y: [0, -20, 0] }} 
-               transition={{ repeat: Infinity, duration: 1 }}
-               className="text-6xl mb-4"
-            >
-               🏆
-            </motion.div>
-            <div className="text-3xl font-black text-transparent bg-clip-text bg-gradient-to-r from-yellow-400 to-orange-500">
-               {showCheer}
-            </div>
-            <div className="text-white/50 text-sm mt-2">Ready for the next round?</div>
-          </motion.div>
-        )}
-      </AnimatePresence>
-      
+      {/* CHEER POPUP */}
+      {cheer && (
+        <div style={styles.cheerPopup}>
+          <svg width="60" height="60" viewBox="0 0 24 24" fill="none" stroke="#4ade80" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" style={{marginBottom: '10px'}}>
+            <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path>
+            <polyline points="22 4 12 14.01 9 11.01"></polyline>
+          </svg>
+          <h2 style={{ fontSize: '2rem', fontWeight: '900', color: 'white', fontStyle: 'italic', textAlign: 'center' }}>
+            {cheer}
+          </h2>
+        </div>
+      )}
+
+      {/* Animation Styles */}
+      <style>{`
+        @keyframes pulse { 0% { opacity: 0.5; } 50% { opacity: 1; } 100% { opacity: 0.5; } }
+        @keyframes popIn { 0% { transform: scale(0); } 100% { transform: scale(1); } }
+      `}</style>
     </div>
   );
 }
