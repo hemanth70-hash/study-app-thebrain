@@ -47,16 +47,25 @@ export default function Sidebar({ user, activeTab, setActiveTab, setIsDarkMode, 
         {isOpen ? <ChevronLeft size={20} /> : <ChevronRight size={20} />}
       </button>
 
+      {/* SIDEBAR: Explicit White Background for Solar Mode */}
       <motion.div 
         initial={{ x: -260 }}
         animate={{ x: isOpen ? 0 : -260 }}
         transition={{ type: 'spring', damping: 22, stiffness: 120 }}
-        className="w-64 bg-white dark:bg-[#0a0a0f] h-screen shadow-2xl flex flex-col p-6 fixed z-40 border-r border-slate-200 dark:border-slate-800 transition-colors duration-500"
+        className={`w-64 h-screen shadow-2xl flex flex-col p-6 fixed z-40 border-r transition-colors duration-500 
+          ${isDarkMode 
+            ? 'bg-[#0a0a0f] border-slate-800' 
+            : 'bg-white border-white' /* Solar Mode: Pure White */
+          }`}
       >
         <div className="flex flex-col items-center mt-12 mb-10">
           <motion.div 
             whileHover={{ rotate: 5, scale: 1.05 }}
-            className="w-24 h-24 bg-blue-50 dark:bg-slate-900/50 flex items-center justify-center mb-4 shadow-lg border-2 border-blue-100 dark:border-blue-900/30 overflow-hidden relative group" 
+            className={`w-24 h-24 flex items-center justify-center mb-4 shadow-lg border-2 overflow-hidden relative group
+              ${isDarkMode 
+                ? 'bg-slate-900/50 border-blue-900/30' 
+                : 'bg-blue-50 border-blue-100'
+              }`}
             style={{ clipPath: 'polygon(25% 0%, 75% 0%, 100% 50%, 75% 100%, 25% 100%, 0% 50%)' }}
           >
              <div className="absolute inset-0 bg-blue-500/10 group-hover:bg-blue-500/20 transition-colors animate-pulse" />
@@ -68,7 +77,7 @@ export default function Sidebar({ user, activeTab, setActiveTab, setIsDarkMode, 
           </motion.div>
           
           <div className="text-center">
-            <h3 className="font-black text-slate-800 dark:text-white uppercase tracking-tighter text-sm flex items-center justify-center gap-1">
+            <h3 className={`font-black uppercase tracking-tighter text-sm flex items-center justify-center gap-1 ${isDarkMode ? 'text-white' : 'text-slate-900'}`}>
               {user.username}
               {user.total_exams_completed > 15 && (
                 <motion.span initial={{ scale: 0 }} animate={{ scale: 1 }}>
@@ -76,7 +85,7 @@ export default function Sidebar({ user, activeTab, setActiveTab, setIsDarkMode, 
                 </motion.span>
               )}
             </h3>
-            <p className="text-[8px] font-black text-blue-600 dark:text-blue-400 uppercase tracking-[0.2em] mt-1">
+            <p className="text-[8px] font-black text-blue-600 uppercase tracking-[0.2em] mt-1">
               {user.education || 'Neural Aspirant'}
             </p>
           </div>
@@ -105,7 +114,7 @@ export default function Sidebar({ user, activeTab, setActiveTab, setIsDarkMode, 
               className={`w-full flex items-center gap-4 p-4 rounded-2xl transition-all duration-300 group relative ${
                 activeTab === item.id 
                 ? 'bg-blue-600 text-white shadow-xl shadow-blue-600/30 scale-[1.02]' 
-                : 'text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-blue-600 dark:hover:text-blue-400'
+                : `${isDarkMode ? 'text-slate-400 hover:bg-slate-800' : 'text-slate-600 hover:bg-slate-50 hover:text-blue-600'}`
               }`}
             >
               <span className={`transition-all duration-300 ${activeTab === item.id ? 'text-white' : 'text-blue-500 group-hover:scale-110 group-hover:rotate-6'}`}>
@@ -125,10 +134,12 @@ export default function Sidebar({ user, activeTab, setActiveTab, setIsDarkMode, 
           ))}
         </nav>
 
-        {/* THEME TOGGLE WITH TEXT RESTORED */}
+        {/* THEME TOGGLE */}
         <button 
           onClick={() => setIsDarkMode(!isDarkMode)}
-          className="mt-8 flex items-center justify-between p-4 bg-slate-50 dark:bg-slate-900/50 rounded-[1.5rem] border border-slate-200 dark:border-slate-800 transition-all hover:border-blue-500/30 group"
+          className={`mt-8 flex items-center justify-between p-4 rounded-[1.5rem] border transition-all hover:border-blue-500/30 group
+            ${isDarkMode ? 'bg-slate-900/50 border-slate-800' : 'bg-slate-50 border-slate-200'}
+          `}
         >
           <div className="flex items-center gap-3">
             <AnimatePresence mode="wait">
@@ -142,11 +153,11 @@ export default function Sidebar({ user, activeTab, setActiveTab, setIsDarkMode, 
                 {isDarkMode ? <Sun size={16} className="text-yellow-500" /> : <Moon size={16} className="text-indigo-500" />}
               </motion.div>
             </AnimatePresence>
-            <span className="font-black text-[10px] uppercase tracking-widest text-slate-400 group-hover:text-slate-600 dark:group-hover:text-slate-200 transition-colors">
+            <span className={`font-black text-[10px] uppercase tracking-widest transition-colors ${isDarkMode ? 'text-slate-400 group-hover:text-slate-200' : 'text-slate-500 group-hover:text-slate-700'}`}>
               {isDarkMode ? 'Solar Mode' : 'Lunar Mode'}
             </span>
           </div>
-          <div className={`w-10 h-5 rounded-full relative transition-colors duration-500 ${isDarkMode ? 'bg-blue-600' : 'bg-slate-300 dark:bg-slate-700'}`}>
+          <div className={`w-10 h-5 rounded-full relative transition-colors duration-500 ${isDarkMode ? 'bg-blue-600' : 'bg-slate-300'}`}>
             <motion.div 
               animate={{ x: isDarkMode ? 22 : 2 }}
               className="absolute top-1 w-3 h-3 bg-white rounded-full shadow-md" 

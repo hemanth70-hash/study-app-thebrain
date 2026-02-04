@@ -17,7 +17,7 @@ export default function App() {
   const [username, setUsername] = useState('');
   const [activeTab, setActiveTab] = useState('dashboard');
   
-  // 🔥 CHANGED: Default is now FALSE (Solar Mode / Light Mode)
+  // 🔥 DEFAULT: SOLAR MODE (FALSE)
   const [isDarkMode, setIsDarkMode] = useState(false); 
 
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
@@ -110,15 +110,40 @@ export default function App() {
     alert("Signal transmitted.");
   };
 
+  // --- LOGIN SCREEN (SOLAR MODE FIXED) ---
   if (!user) {
     return (
-      <div className={`flex items-center justify-center min-h-screen ${isDarkMode ? 'bg-slate-950' : 'bg-blue-50'}`}>
-        <div className="bg-white dark:bg-slate-900 p-10 rounded-[3rem] shadow-2xl border-2 border-blue-500/20 w-full max-w-md text-center">
-          <div className="w-20 h-20 bg-blue-600 rounded-3xl flex items-center justify-center mx-auto mb-6 shadow-xl rotate-3"><ShieldAlert className="text-white" size={40} /></div>
-          <h1 className="text-4xl font-black mb-2 text-blue-600 italic tracking-tighter uppercase">Neural Portal</h1>
-          <input className="w-full p-5 rounded-2xl border-2 mb-4 dark:bg-slate-800 dark:border-slate-700 dark:text-white text-center font-bold" placeholder="USERNAME" value={username} onChange={(e) => setUsername(e.target.value)} />
-          <button onClick={handleLogin} className="w-full bg-blue-600 text-white p-5 rounded-2xl font-black uppercase">Initialize</button>
-          {loginError && <p className="text-red-500 font-bold mt-4">{loginError}</p>}
+      <div className={`flex items-center justify-center min-h-screen transition-colors duration-500 ${isDarkMode ? 'bg-[#050508]' : 'bg-blue-50'}`}>
+        <div className={`p-12 rounded-[3rem] shadow-2xl border-2 w-full max-w-md text-center transition-all duration-500
+          ${isDarkMode 
+            ? 'bg-[#0a0a0f] border-slate-800 text-white' 
+            : 'bg-white border-white text-slate-900' /* Solar Mode: Pure White Card */
+          }
+        `}>
+          <div className="w-20 h-20 bg-blue-600 rounded-3xl flex items-center justify-center mx-auto mb-6 shadow-xl rotate-3">
+            <ShieldAlert className="text-white" size={40} />
+          </div>
+          <h1 className={`text-4xl font-black mb-2 italic tracking-tighter uppercase ${isDarkMode ? 'text-white' : 'text-slate-900'}`}>
+            Neural Portal
+          </h1>
+          
+          <input 
+            className={`w-full p-5 rounded-2xl border-2 mb-4 font-bold text-center outline-none transition-colors
+              ${isDarkMode 
+                ? 'bg-slate-900 border-slate-700 text-white placeholder:text-slate-600' 
+                : 'bg-slate-50 border-slate-200 text-slate-900 placeholder:text-slate-400' /* Solar Mode Input */
+              }
+            `} 
+            placeholder="USERNAME" 
+            value={username} 
+            onChange={(e) => setUsername(e.target.value)} 
+          />
+          
+          <button onClick={handleLogin} className="w-full bg-blue-600 hover:bg-blue-500 text-white p-5 rounded-2xl font-black uppercase transition-transform active:scale-95 shadow-lg shadow-blue-600/30">
+            Initialize
+          </button>
+          
+          {loginError && <p className="text-red-500 font-bold mt-4 animate-pulse">{loginError}</p>}
         </div>
       </div>
     );
@@ -128,7 +153,6 @@ export default function App() {
 
   return (
     <div className={isDarkMode ? 'dark' : ''}>
-      {/* GLOBAL BACKGROUND: Solar = bg-blue-50 (Clean Light) | Lunar = bg-[#050508] (Deep Dark) */}
       <div className={`flex min-h-screen transition-colors duration-500 ease-in-out ${isDarkMode ? 'bg-[#050508] text-slate-100' : 'bg-blue-50 text-gray-800'}`}>
         
         <div className={`${isExamLocked ? 'pointer-events-none opacity-40 blur-[3px] grayscale select-none' : ''} transition-all duration-700 z-40`}>
@@ -137,7 +161,7 @@ export default function App() {
         
         <main className={`flex-1 p-6 md:p-10 transition-all duration-300 ${isSidebarOpen ? 'ml-64' : 'ml-20'}`}>
           <header className={`mb-10 flex flex-wrap items-center gap-6 transition-all duration-700 ${isExamLocked ? 'opacity-20 pointer-events-none' : ''}`}>
-            <h2 className="text-4xl font-black capitalize text-blue-600 dark:text-blue-400">
+            <h2 className={`text-4xl font-black capitalize ${isDarkMode ? 'text-blue-400' : 'text-blue-700'}`}>
               {activeTab === 'ranking' ? 'Leaderboard' : activeTab === 'study' ? 'Study Hub' : activeTab}
             </h2>
             <div className="flex-1 min-w-[300px]">
@@ -148,7 +172,8 @@ export default function App() {
                 </div>
               )}
             </div>
-            <div className="flex items-center gap-3 bg-white dark:bg-slate-800 px-6 py-2 rounded-2xl shadow-sm border-2 border-orange-50 dark:border-slate-700">
+            {/* Streak Badge - Solar Mode Fixed */}
+            <div className={`flex items-center gap-3 px-6 py-2 rounded-2xl shadow-sm border-2 ${isDarkMode ? 'bg-slate-800 border-slate-700' : 'bg-white border-white'}`}>
               <span className="text-2xl animate-pulse">🔥</span>
               <span className="font-black text-xl text-orange-500">{user.streak_count || 0}</span>
             </div>
