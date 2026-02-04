@@ -9,7 +9,6 @@ import {
 
 export default function AdminPanel({ user }) {
   // --- 0. PERMISSION CHECK ---
-  // The 'isRoot' flag identifies YOU (The Brain). Everyone else is a Moderator.
   const isRoot = user?.username?.toLowerCase() === 'thebrain';
 
   // --- 1. MOCK UPLOAD STATE ---
@@ -21,16 +20,14 @@ export default function AdminPanel({ user }) {
   const [status, setStatus] = useState('');
   const [isPublishing, setIsPublishing] = useState(false);
 
-  // Separate states for separate tables
   const [regularMocks, setRegularMocks] = useState([]);
   const [dailyMocks, setDailyMocks] = useState([]); 
 
   // --- 2. SYSTEM & ROSTER STATE ---
-  // Renamed 'activeKeys' contextually to handle Invite Codes, but keeping state name for stability if you prefer
   const [activeKeys, setActiveKeys] = useState([]); 
   const [userRequests, setUserRequests] = useState([]);
   const [allUsers, setAllUsers] = useState([]); 
-  const [showRoster, setShowRoster] = useState(true); // Default TRUE for visibility
+  const [showRoster, setShowRoster] = useState(true); 
   const [loading, setLoading] = useState(true);
 
   // --- 3. LIBRARY MANAGER STATE ---
@@ -38,7 +35,6 @@ export default function AdminPanel({ user }) {
   const [bookUrl, setBookUrl] = useState('');
   const [bookCategory, setBookCategory] = useState('Computer Science'); 
 
-  // 🔥 EXPANDED SUBJECT LIST
   const librarySubjects = [
     "Computer Science", "Reasoning", "Aptitude", 
     "General Awareness", "Maths", "Physics", 
@@ -55,7 +51,6 @@ export default function AdminPanel({ user }) {
   const fetchAdminData = useCallback(async () => {
     setLoading(true);
     try {
-      // 1. Fetch Data visible to EVERYONE (You + Moderators)
       const [reg, dai, profs] = await Promise.all([
         supabase.from('mocks').select('*').order('created_at', { ascending: false }),
         supabase.from('daily_mocks').select('*').order('created_at', { ascending: false }),
@@ -65,15 +60,10 @@ export default function AdminPanel({ user }) {
       setRegularMocks(reg.data || []);
       setDailyMocks(dai.data || []);
       
-      // 🔥 STEALTH PROTOCOL: Filter 'The Brain' out of the roster immediately
       const civilianNodes = (profs.data || []).filter(u => u.username.toLowerCase() !== 'thebrain');
       setAllUsers(civilianNodes);
 
-      // 2. Fetch INVITE CODES (Replaces Access Keys)
-      // We look at 'invite_codes' table now
       let keyQuery = supabase.from('invite_codes').select('*').order('created_at', { ascending: false });
-      
-      // 🔥 IF NOT ROOT, ONLY SHOW KEYS I CREATED
       if (!isRoot) {
         keyQuery = keyQuery.eq('created_by', user.id);
       }
@@ -81,7 +71,6 @@ export default function AdminPanel({ user }) {
       const { data: keyData } = await keyQuery;
       setActiveKeys(keyData || []);
 
-      // 3. Fetch Sensitive Data ONLY if you are The Brain (isRoot)
       if (isRoot) {
         const [logs, reqs] = await Promise.all([
           supabase.from('dev_logs').select('*').order('created_at', { ascending: false }),
@@ -107,11 +96,10 @@ export default function AdminPanel({ user }) {
     if (gpa >= 85) return { label: 'Genius', color: 'text-blue-500' };
     if (gpa >= 70) return { label: 'Specialist', color: 'text-green-500' };
     if (gpa >= 50) return { label: 'Scholar', color: 'text-orange-500' };
-    return { label: 'Aspirant', color: 'text-gray-400' };
+    return { label: 'Aspirant', color: 'text-slate-400' };
   };
 
   // --- 7. ACTION HANDLERS ---
-
   const handlePublish = async () => {
     if (isPublishing || !mockTitle || !bulkData) return;
     setIsPublishing(true);
@@ -162,28 +150,22 @@ export default function AdminPanel({ user }) {
     }
   };
 
-  // 🔥 NEW: GENERATE INVITE CODE LOGIC
   const generateInvite = async () => {
     try {
-      // Create a random 6-char suffix like 'A9F2B1'
       const suffix = Math.random().toString(36).substring(2, 8).toUpperCase();
       const newCode = `NEURAL-${suffix}`;
-      
-      // Insert into 'invite_codes' table
       const { error } = await supabase.from('invite_codes').insert([{ 
         code: newCode, 
         created_by: user.id 
       }]);
-      
       if (error) throw error;
-      fetchAdminData(); // Refresh list immediately
+      fetchAdminData();
     } catch (err) {
       alert(`Generation Failed: ${err.message}`);
     }
   };
 
   const deleteInvite = async (id) => {
-    // Delete from 'invite_codes'
     await supabase.from('invite_codes').delete().eq('id', id);
     fetchAdminData();
   };
@@ -193,7 +175,6 @@ export default function AdminPanel({ user }) {
     const { error } = await supabase.from('study_materials').insert([
       { title: bookTitle, url: bookUrl, subject: bookCategory, type: 'pdf' }
     ]);
-    
     if (error) alert(`Upload Error: ${error.message}`);
     else {
       setBookTitle(''); setBookUrl(''); 
@@ -201,7 +182,6 @@ export default function AdminPanel({ user }) {
     }
   };
 
-  // --- ROOT ONLY ACTIONS ---
   const toggleModerator = async (userId, currentStatus) => {
     if (!isRoot) return;
     const { error } = await supabase.from('profiles').update({ is_moderator: !currentStatus }).eq('id', userId);
@@ -232,10 +212,10 @@ export default function AdminPanel({ user }) {
           {isRoot ? <ShieldCheck size={24} /> : <Database size={24} />}
         </div>
         <div>
-          <h2 className="text-3xl font-black uppercase tracking-tighter text-gray-800 dark:text-white">
+          <h2 className="text-3xl font-black uppercase tracking-tighter text-slate-900 dark:text-white">
             {isRoot ? 'Central Command' : 'Moderator Panel'}
           </h2>
-          <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">
+          <p className="text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-widest">
             {isRoot ? 'System Root Access' : `Access granted to: ${user.username}`}
           </p>
         </div>
@@ -245,30 +225,29 @@ export default function AdminPanel({ user }) {
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-10 items-start">
         
         {/* 1. MOCK CREATOR (LEFT COLUMN) */}
-        {/* 🔥 THEME: Using bg-slate-900 instead of gray-800 */}
-        <div className="bg-white dark:bg-slate-900 p-8 rounded-[32px] shadow-xl border dark:border-slate-700">
-          <div className="flex items-center gap-3 mb-6 text-blue-600"><UploadCloud size={32} /><h2 className="text-2xl font-black uppercase dark:text-white">Mock Creator</h2></div>
+        <div className="bg-white dark:bg-[#0a0a0f] p-8 rounded-[32px] shadow-xl border border-slate-200 dark:border-slate-800">
+          <div className="flex items-center gap-3 mb-6 text-blue-600"><UploadCloud size={32} /><h2 className="text-2xl font-black uppercase text-slate-900 dark:text-white">Mock Creator</h2></div>
           <div className="space-y-4">
-            <input type="text" placeholder="Mock Title" className="w-full p-4 rounded-2xl border dark:bg-slate-800 dark:text-white font-bold" value={mockTitle} onChange={(e) => setMockTitle(e.target.value)} />
+            <input type="text" placeholder="Mock Title" className="w-full p-4 rounded-2xl border bg-slate-50 dark:bg-slate-900 border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white font-bold placeholder:text-slate-400" value={mockTitle} onChange={(e) => setMockTitle(e.target.value)} />
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-               <div className="relative"><input type="number" className="w-full p-4 rounded-2xl border dark:bg-slate-800 dark:text-white font-black" value={timeLimit} onChange={(e) => setTimeLimit(e.target.value)} /><Clock size={16} className="absolute right-4 top-5 text-gray-400" /></div>
-               <button type="button" onClick={() => setIsDailyQuickMock(!isDailyQuickMock)} className={`p-4 rounded-2xl font-black uppercase text-[10px] flex items-center gap-2 transition-all ${isDailyQuickMock ? 'bg-orange-500 text-white shadow-lg' : 'bg-gray-100 dark:bg-slate-800 text-gray-400'}`}><Zap size={14} /> {isDailyQuickMock ? 'Daily' : 'Regular'}</button>
-               <button type="button" onClick={() => setIsStrict(!isStrict)} className={`p-4 rounded-2xl font-black uppercase text-[10px] flex items-center gap-2 transition-all ${isStrict ? 'bg-red-600 text-white shadow-lg' : 'bg-gray-100 dark:bg-slate-800 text-gray-400'}`}><ShieldAlert size={14} /> Strict: {isStrict ? 'ON' : 'OFF'}</button>
+               <div className="relative"><input type="number" className="w-full p-4 rounded-2xl border bg-slate-50 dark:bg-slate-900 border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white font-black" value={timeLimit} onChange={(e) => setTimeLimit(e.target.value)} /><Clock size={16} className="absolute right-4 top-5 text-slate-400" /></div>
+               <button type="button" onClick={() => setIsDailyQuickMock(!isDailyQuickMock)} className={`p-4 rounded-2xl font-black uppercase text-[10px] flex items-center gap-2 transition-all ${isDailyQuickMock ? 'bg-orange-500 text-white shadow-lg' : 'bg-slate-100 dark:bg-slate-800 text-slate-500'}`}><Zap size={14} /> {isDailyQuickMock ? 'Daily' : 'Regular'}</button>
+               <button type="button" onClick={() => setIsStrict(!isStrict)} className={`p-4 rounded-2xl font-black uppercase text-[10px] flex items-center gap-2 transition-all ${isStrict ? 'bg-red-600 text-white shadow-lg' : 'bg-slate-100 dark:bg-slate-800 text-slate-500'}`}><ShieldAlert size={14} /> Strict: {isStrict ? 'ON' : 'OFF'}</button>
             </div>
-            <textarea className="w-full h-40 p-4 font-mono text-[10px] border dark:bg-slate-800 dark:text-white rounded-2xl outline-none" placeholder='Paste JSON array...' value={bulkData} onChange={(e) => setBulkData(e.target.value)} />
-            <button disabled={isPublishing} onClick={handlePublish} className="w-full bg-blue-600 text-white py-4 rounded-2xl font-black uppercase tracking-widest shadow-xl active:scale-95 transition-all">
+            <textarea className="w-full h-40 p-4 font-mono text-[10px] border bg-slate-50 dark:bg-slate-900 border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white rounded-2xl outline-none placeholder:text-slate-400" placeholder='Paste JSON array...' value={bulkData} onChange={(e) => setBulkData(e.target.value)} />
+            <button disabled={isPublishing} onClick={handlePublish} className="w-full bg-blue-600 text-white py-4 rounded-2xl font-black uppercase tracking-widest shadow-xl active:scale-95 transition-all hover:bg-blue-500">
               {isPublishing ? 'Publishing...' : 'Publish Mock'}
             </button>
             {status && <p className="text-center font-black uppercase text-[10px] text-blue-500 mt-2">{status}</p>}
             
-            <div className="mt-8 pt-8 border-t dark:border-slate-800 grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="mt-8 pt-8 border-t border-slate-200 dark:border-slate-800 grid grid-cols-1 md:grid-cols-2 gap-4">
                <div>
                  <p className="text-[10px] font-black uppercase text-blue-400 mb-2 flex items-center gap-2"><ListFilter size={14}/> Normal Mocks</p>
                  <div className="space-y-2 max-h-48 overflow-y-auto pr-2 custom-scrollbar">
                    {regularMocks.map(m => (
-                     <div key={m.id} className="p-3 bg-gray-50 dark:bg-slate-800 rounded-xl flex justify-between items-center group transition-all border border-transparent hover:border-red-500/30">
-                       <div><p className="font-bold text-[10px] dark:text-white uppercase truncate w-24">{m.mock_title}</p><p className="text-[8px] font-bold text-gray-400 uppercase">{m.time_limit}m</p></div>
-                       <button onClick={() => deleteMock(m.id, 'mocks')} className="p-1.5 text-gray-400 hover:text-red-500"><Trash2 size={14}/></button>
+                     <div key={m.id} className="p-3 bg-slate-50 dark:bg-slate-800 rounded-xl flex justify-between items-center group transition-all border border-transparent hover:border-blue-500/30">
+                       <div><p className="font-bold text-[10px] text-slate-900 dark:text-white uppercase truncate w-24">{m.mock_title}</p><p className="text-[8px] font-bold text-slate-400 uppercase">{m.time_limit}m</p></div>
+                       <button onClick={() => deleteMock(m.id, 'mocks')} className="p-1.5 text-slate-400 hover:text-red-500"><Trash2 size={14}/></button>
                      </div>
                    ))}
                  </div>
@@ -278,8 +257,8 @@ export default function AdminPanel({ user }) {
                  <div className="space-y-2 max-h-48 overflow-y-auto pr-2 custom-scrollbar">
                    {dailyMocks.map(m => (
                      <div key={m.id} className="p-3 bg-orange-50 dark:bg-orange-900/20 rounded-xl flex justify-between items-center group transition-all border border-transparent hover:border-red-500/30">
-                       <div><p className="font-bold text-[10px] dark:text-white uppercase truncate w-24">{m.mock_title}</p><p className="text-[8px] font-bold text-gray-400 uppercase">{m.time_limit}m</p></div>
-                       <button onClick={() => deleteMock(m.id, 'daily_mocks')} className="p-1.5 text-gray-400 hover:text-red-500"><Trash2 size={14}/></button>
+                       <div><p className="font-bold text-[10px] text-slate-900 dark:text-white uppercase truncate w-24">{m.mock_title}</p><p className="text-[8px] font-bold text-slate-400 uppercase">{m.time_limit}m</p></div>
+                       <button onClick={() => deleteMock(m.id, 'daily_mocks')} className="p-1.5 text-slate-400 hover:text-red-500"><Trash2 size={14}/></button>
                      </div>
                    ))}
                  </div>
@@ -291,11 +270,11 @@ export default function AdminPanel({ user }) {
         {/* 2. RIGHT COL: TOOLS STACK (Invite & Library) */}
         <div className="space-y-8 h-full">
           
-          {/* INVITE GENERATOR (Replaced Access Keys) */}
-          <div className="bg-white dark:bg-slate-900 p-8 rounded-[32px] shadow-xl border dark:border-slate-700">
-            <div className="flex items-center gap-3 mb-6 text-indigo-600"><Key size={32} /><h2 className="text-2xl font-black uppercase dark:text-white">Invite Generator</h2></div>
+          {/* INVITE GENERATOR */}
+          <div className="bg-white dark:bg-[#0a0a0f] p-8 rounded-[32px] shadow-xl border border-slate-200 dark:border-slate-800">
+            <div className="flex items-center gap-3 mb-6 text-indigo-600"><Key size={32} /><h2 className="text-2xl font-black uppercase text-slate-900 dark:text-white">Invite Generator</h2></div>
             <div className="mb-6 space-y-4">
-              <p className="text-[10px] font-bold text-gray-400 uppercase leading-relaxed">
+              <p className="text-[10px] font-bold text-slate-400 uppercase leading-relaxed">
                 Generate unique access codes for new recruits. Users enter this code as their username to initialize their account.
               </p>
               <button onClick={generateInvite} className="w-full bg-indigo-600 text-white p-4 rounded-2xl hover:bg-indigo-700 font-black uppercase text-xs tracking-widest shadow-lg flex items-center justify-center gap-2 active:scale-95 transition-all">
@@ -304,55 +283,55 @@ export default function AdminPanel({ user }) {
             </div>
             <div className="space-y-2 max-h-40 overflow-y-auto pr-2 custom-scrollbar">
               {activeKeys.length > 0 ? activeKeys.map(k => (
-                <div key={k.id} className={`p-4 rounded-xl flex justify-between items-center transition-all border ${k.is_used ? 'bg-gray-100 border-gray-200 opacity-60' : 'bg-indigo-50 border-indigo-100 dark:bg-indigo-900/20'}`}>
+                <div key={k.id} className={`p-4 rounded-xl flex justify-between items-center transition-all border ${k.is_used ? 'bg-slate-100 dark:bg-slate-800 border-slate-200 dark:border-slate-700 opacity-60' : 'bg-indigo-50 border-indigo-100 dark:bg-indigo-900/20 dark:border-indigo-900'}`}>
                   <div>
-                    <p className={`font-black text-lg tracking-widest ${k.is_used ? 'text-gray-400 line-through' : 'text-indigo-600'}`}>{k.code}</p>
-                    <p className="text-[8px] font-bold text-gray-400 uppercase">
+                    <p className={`font-black text-lg tracking-widest ${k.is_used ? 'text-slate-400 line-through' : 'text-indigo-600 dark:text-indigo-400'}`}>{k.code}</p>
+                    <p className="text-[8px] font-bold text-slate-400 uppercase">
                       {k.is_used ? 'CLAIMED' : 'ACTIVE'} • {k.created_by === user.id ? 'You' : 'Admin'}
                     </p>
                   </div>
                   {!k.is_used && (
-                    <button onClick={() => deleteInvite(k.id)} className="text-gray-300 hover:text-red-500"><Trash2 size={16} /></button>
+                    <button onClick={() => deleteInvite(k.id)} className="text-slate-300 hover:text-red-500"><Trash2 size={16}/></button>
                   )}
                 </div>
-              )) : <p className="text-center text-[10px] text-gray-400 italic">No active invites.</p>}
+              )) : <p className="text-center text-[10px] text-slate-400 italic">No active invites.</p>}
             </div>
           </div>
 
           {/* LIBRARY MANAGER */}
-          <div className="bg-white dark:bg-slate-900 p-8 rounded-[32px] shadow-xl border dark:border-slate-700">
-            <div className="flex items-center gap-3 mb-6 text-orange-500"><BookOpen size={32} /><h2 className="text-2xl font-black uppercase dark:text-white">Library</h2></div>
+          <div className="bg-white dark:bg-[#0a0a0f] p-8 rounded-[32px] shadow-xl border border-slate-200 dark:border-slate-800">
+            <div className="flex items-center gap-3 mb-6 text-orange-500"><BookOpen size={32} /><h2 className="text-2xl font-black uppercase text-slate-900 dark:text-white">Library</h2></div>
             <div className="space-y-4">
-              <input className="w-full p-4 rounded-2xl border dark:bg-slate-800 dark:text-white outline-none" placeholder="Resource Title" value={bookTitle} onChange={e => setBookTitle(e.target.value)} />
-              <input className="w-full p-4 rounded-2xl border dark:bg-slate-800 dark:text-white outline-none" placeholder="PDF URL" value={bookUrl} onChange={e => setBookUrl(e.target.value)} />
-              <select className="w-full p-4 rounded-2xl border dark:bg-slate-800 dark:text-white outline-none font-bold cursor-pointer" value={bookCategory} onChange={e => setBookCategory(e.target.value)}>
+              <input className="w-full p-4 rounded-2xl border bg-slate-50 dark:bg-slate-900 border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white outline-none placeholder:text-slate-400" placeholder="Resource Title" value={bookTitle} onChange={e => setBookTitle(e.target.value)} />
+              <input className="w-full p-4 rounded-2xl border bg-slate-50 dark:bg-slate-900 border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white outline-none placeholder:text-slate-400" placeholder="PDF URL" value={bookUrl} onChange={e => setBookUrl(e.target.value)} />
+              <select className="w-full p-4 rounded-2xl border bg-slate-50 dark:bg-slate-900 border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white outline-none font-bold cursor-pointer" value={bookCategory} onChange={e => setBookCategory(e.target.value)}>
                 {librarySubjects.map(s => <option key={s} value={s}>{s}</option>)}
               </select>
-              <button onClick={uploadResource} className="w-full bg-orange-500 text-white py-4 rounded-2xl font-black uppercase shadow-lg transition-all active:scale-95">Upload Resource</button>
+              <button onClick={uploadResource} className="w-full bg-orange-500 text-white py-4 rounded-2xl font-black uppercase shadow-lg transition-all active:scale-95 hover:bg-orange-600">Upload Resource</button>
             </div>
           </div>
 
         </div>
       </div>
 
-      {/* --- 🔥 LAYOUT CHANGE: NEURAL ROSTER (Now Full Width, Below Top Section) --- */}
-      <div className="bg-white dark:bg-slate-900 p-8 rounded-[32px] shadow-xl border dark:border-slate-700 mt-8 h-fit">
+      {/* --- NEURAL ROSTER --- */}
+      <div className="bg-white dark:bg-[#0a0a0f] p-8 rounded-[32px] shadow-xl border border-slate-200 dark:border-slate-800 mt-8 h-fit">
         <div className="flex items-center justify-between">
-          <div className="flex items-center gap-3 text-blue-600"><Users size={32} /><h2 className="text-2xl font-black uppercase dark:text-white tracking-tighter">Neural Roster</h2></div>
+          <div className="flex items-center gap-3 text-blue-600"><Users size={32} /><h2 className="text-2xl font-black uppercase text-slate-900 dark:text-white tracking-tighter">Neural Roster</h2></div>
           <button onClick={() => setShowRoster(!showRoster)} className={`p-3 rounded-2xl bg-blue-50 dark:bg-slate-800 text-blue-600 transition-all ${showRoster ? 'rotate-180 bg-blue-600 text-white' : ''}`}><ChevronDown size={28} /></button>
         </div>
         {showRoster && (
           <div className="overflow-x-auto animate-in slide-in-from-top-4 mt-8">
             <table className="w-full text-left border-separate border-spacing-y-3">
-              <thead><tr className="text-[10px] font-black uppercase text-gray-400 tracking-widest"><th className="px-6 pb-2">Node</th><th className="px-6 pb-2 text-center">GPA</th><th className="px-6 pb-2 text-right">Streak</th></tr></thead>
+              <thead><tr className="text-[10px] font-black uppercase text-slate-400 tracking-widest"><th className="px-6 pb-2">Node</th><th className="px-6 pb-2 text-center">GPA</th><th className="px-6 pb-2 text-right">Streak</th></tr></thead>
               <tbody>
                 {allUsers.map((u) => {
                   const r = getNeuralRank(u.total_percentage_points, u.total_exams_completed);
                   return (
-                    <tr key={u.id} className="bg-gray-50 dark:bg-slate-800 rounded-2xl hover:scale-[1.01] transition-transform">
+                    <tr key={u.id} className="bg-slate-50 dark:bg-slate-800/50 rounded-2xl hover:scale-[1.01] transition-transform">
                       <td className="px-6 py-4 rounded-l-2xl flex items-center gap-3">
                         <img src={`https://api.dicebear.com/7.x/${u.gender === 'neutral' ? 'bottts' : 'avataaars'}/svg?seed=${u.username}`} className="w-10 h-10 rounded-xl bg-white p-1" />
-                        <div className="flex flex-col"><span className="font-black dark:text-white uppercase text-sm">{u.username}</span><span className={`text-[8px] font-black uppercase tracking-widest ${r.color}`}>{r.label}</span></div>
+                        <div className="flex flex-col"><span className="font-black text-slate-900 dark:text-white uppercase text-sm">{u.username}</span><span className={`text-[8px] font-black uppercase tracking-widest ${r.color}`}>{r.label}</span></div>
                       </td>
                       <td className="px-6 py-4 text-center"><p className="font-black text-blue-600 text-lg">{(u.total_percentage_points / (u.total_exams_completed || 1)).toFixed(1)}%</p></td>
                       <td className="px-6 py-4 text-right rounded-r-2xl"><div className="inline-flex items-center gap-1 bg-orange-100 dark:bg-orange-900/20 px-3 py-1 rounded-lg"><Flame size={12} className="text-orange-500 fill-orange-500" /><span className="text-xs font-black text-orange-600">{u.streak_count || 0}</span></div></td>
@@ -372,21 +351,21 @@ export default function AdminPanel({ user }) {
       {isRoot && (
         <div className="space-y-10 animate-in slide-in-from-bottom-8">
           
-          <div className="border-t-4 border-dashed border-gray-200 dark:border-slate-700 my-10 relative">
-            <span className="absolute top-[-14px] left-1/2 -translate-x-1/2 bg-gray-100 dark:bg-slate-900 px-4 text-[10px] font-black uppercase text-gray-400">Restricted Zone</span>
+          <div className="border-t-4 border-dashed border-slate-200 dark:border-slate-700 my-10 relative">
+            <span className="absolute top-[-14px] left-1/2 -translate-x-1/2 bg-slate-100 dark:bg-slate-900 px-4 text-[10px] font-black uppercase text-slate-400">Restricted Zone</span>
           </div>
 
           {/* 5. PERMISSIONS MANAGER */}
-          <div className="bg-white dark:bg-slate-900 p-8 rounded-[32px] shadow-xl border-l-8 border-purple-600">
-            <div className="flex items-center gap-3 mb-6 text-purple-600"><ShieldCheck size={32} /><h2 className="text-2xl font-black uppercase dark:text-white">Permission Management</h2></div>
+          <div className="bg-white dark:bg-[#0a0a0f] p-8 rounded-[32px] shadow-xl border border-slate-200 dark:border-slate-800 border-l-8 border-l-purple-600">
+            <div className="flex items-center gap-3 mb-6 text-purple-600"><ShieldCheck size={32} /><h2 className="text-2xl font-black uppercase text-slate-900 dark:text-white">Permission Management</h2></div>
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
               {allUsers.map(u => (
-                <div key={u.id} className={`p-4 rounded-2xl border-2 flex items-center justify-between transition-all ${u.is_moderator ? 'border-purple-500 bg-purple-50 dark:bg-purple-900/20' : 'border-gray-100 dark:border-slate-800'}`}>
+                <div key={u.id} className={`p-4 rounded-2xl border-2 flex items-center justify-between transition-all ${u.is_moderator ? 'border-purple-500 bg-purple-50 dark:bg-purple-900/20' : 'border-slate-100 dark:border-slate-800'}`}>
                   <div>
-                    <p className="font-black uppercase text-xs dark:text-white">{u.username}</p>
-                    <p className="text-[9px] font-bold text-gray-400">{u.is_moderator ? 'MODERATOR' : 'STUDENT'}</p>
+                    <p className="font-black uppercase text-xs text-slate-900 dark:text-white">{u.username}</p>
+                    <p className="text-[9px] font-bold text-slate-400">{u.is_moderator ? 'MODERATOR' : 'STUDENT'}</p>
                   </div>
-                  <button onClick={() => toggleModerator(u.id, u.is_moderator)} className={`text-2xl transition-colors ${u.is_moderator ? 'text-purple-600' : 'text-gray-300'}`}>
+                  <button onClick={() => toggleModerator(u.id, u.is_moderator)} className={`text-2xl transition-colors ${u.is_moderator ? 'text-purple-600' : 'text-slate-300'}`}>
                     {u.is_moderator ? <ToggleRight /> : <ToggleLeft />}
                   </button>
                 </div>
@@ -404,17 +383,17 @@ export default function AdminPanel({ user }) {
           </div>
 
           {/* 7. PORTAL SIGNALS */}
-          <div className="bg-slate-900 text-white p-8 rounded-[32px] shadow-2xl border border-white/5">
-            <div className="flex items-center gap-3 mb-6 text-orange-400"><MessageSquare size={28} /><h2 className="text-xl font-black uppercase tracking-tight">Portal Signals</h2></div>
+          <div className="bg-white dark:bg-[#0a0a0f] p-8 rounded-[32px] shadow-2xl border border-slate-200 dark:border-slate-800">
+            <div className="flex items-center gap-3 mb-6 text-orange-500"><MessageSquare size={28} /><h2 className="text-xl font-black uppercase tracking-tight text-slate-900 dark:text-white">Portal Signals</h2></div>
             <div className="space-y-4 max-h-[300px] overflow-y-auto pr-4 custom-scrollbar">
               {userRequests.map(req => (
-                <div key={req.id} className="p-4 bg-white/5 rounded-2xl border border-white/10 hover:border-orange-500/50 transition-all">
-                  <div className="flex justify-between items-start mb-2"><span className="bg-orange-500/20 text-orange-400 px-2 py-0.5 rounded text-[8px] font-black uppercase tracking-widest">{req.request_type}</span></div>
-                  <p className="text-xs font-black text-gray-300 uppercase tracking-tighter">{req.user_name}</p>
-                  <p className="text-[10px] text-gray-500 italic mt-1 mb-4">"{req.message}"</p>
+                <div key={req.id} className="p-4 bg-slate-50 dark:bg-slate-900/50 rounded-2xl border border-slate-200 dark:border-slate-800 hover:border-orange-500/50 transition-all">
+                  <div className="flex justify-between items-start mb-2"><span className="bg-orange-100 dark:bg-orange-500/20 text-orange-600 dark:text-orange-400 px-2 py-0.5 rounded text-[8px] font-black uppercase tracking-widest">{req.request_type}</span></div>
+                  <p className="text-xs font-black text-slate-800 dark:text-slate-200 uppercase tracking-tighter">{req.user_name}</p>
+                  <p className="text-[10px] text-slate-500 dark:text-slate-400 italic mt-1 mb-4">"{req.message}"</p>
                   <div className="flex gap-2">
-                    <button onClick={async () => { await supabase.from('admin_requests').delete().eq('id', req.id); fetchAdminData(); }} className="flex-1 bg-green-600/20 text-green-400 py-2 rounded-xl font-black text-[10px] hover:bg-green-600/40">RESOLVE</button>
-                    <button onClick={async () => { await supabase.from('admin_requests').delete().eq('id', req.id); fetchAdminData(); }} className="p-2 bg-red-600/20 text-red-400 rounded-xl hover:bg-red-600/40"><X size={14} /></button>
+                    <button onClick={async () => { await supabase.from('admin_requests').delete().eq('id', req.id); fetchAdminData(); }} className="flex-1 bg-green-100 dark:bg-green-600/20 text-green-600 dark:text-green-400 py-2 rounded-xl font-black text-[10px] hover:bg-green-200 dark:hover:bg-green-600/40">RESOLVE</button>
+                    <button onClick={async () => { await supabase.from('admin_requests').delete().eq('id', req.id); fetchAdminData(); }} className="p-2 bg-red-100 dark:bg-red-600/20 text-red-600 dark:text-red-400 rounded-xl hover:bg-red-200 dark:hover:bg-red-600/40"><X size={14} /></button>
                   </div>
                 </div>
               ))}
@@ -422,18 +401,18 @@ export default function AdminPanel({ user }) {
           </div>
 
           {/* 8. DEV LOGS */}
-          <div className="bg-white dark:bg-slate-900 p-8 rounded-[32px] shadow-xl border dark:border-slate-700">
+          <div className="bg-white dark:bg-[#0a0a0f] p-8 rounded-[32px] shadow-xl border border-slate-200 dark:border-slate-800">
               <h3 className="text-xl font-black mb-6 flex items-center gap-3 text-blue-600 uppercase tracking-tighter"><History size={24} /> Dev Logs</h3>
               <div className="space-y-3 mb-6">
-              <input className="w-full bg-gray-50 dark:bg-slate-800 p-4 rounded-2xl text-sm border dark:border-slate-700 outline-none" placeholder="Version Name" value={verName} onChange={e => setVerName(e.target.value)} />
-              <textarea className="w-full bg-gray-50 dark:bg-slate-800 p-4 rounded-2xl text-sm border dark:border-slate-700 outline-none h-20 resize-none" placeholder="Commit details..." value={verDesc} onChange={e => setVerDesc(e.target.value)} />
+              <input className="w-full bg-slate-50 dark:bg-slate-900 p-4 rounded-2xl text-sm border border-slate-200 dark:border-slate-700 outline-none text-slate-900 dark:text-white" placeholder="Version Name" value={verName} onChange={e => setVerName(e.target.value)} />
+              <textarea className="w-full bg-slate-50 dark:bg-slate-900 p-4 rounded-2xl text-sm border border-slate-200 dark:border-slate-700 outline-none h-20 resize-none text-slate-900 dark:text-white" placeholder="Commit details..." value={verDesc} onChange={e => setVerDesc(e.target.value)} />
               <button onClick={saveLog} className="w-full bg-indigo-600 text-white py-4 rounded-2xl font-black uppercase text-xs shadow-lg hover:bg-indigo-700 transition-all">Commit Update</button>
             </div>
             <div className="space-y-4 max-h-40 overflow-y-auto pr-2 custom-scrollbar">
               {history.map(log => (
-                <div key={log.id} className="border-l-4 border-blue-600 pl-4 py-1 hover:bg-blue-50 dark:hover:bg-slate-800 transition-all">
-                  <p className="text-blue-600 font-black text-xs uppercase">{log.version_name} • <span className="text-gray-400 text-[10px]">{new Date(log.created_at).toLocaleDateString()}</span></p>
-                  <p className="text-gray-500 text-[10px] leading-relaxed mt-1">{log.description}</p>
+                <div key={log.id} className="border-l-4 border-blue-600 pl-4 py-1 hover:bg-slate-50 dark:hover:bg-slate-800 transition-all">
+                  <p className="text-blue-600 font-black text-xs uppercase">{log.version_name} • <span className="text-slate-400 text-[10px]">{new Date(log.created_at).toLocaleDateString()}</span></p>
+                  <p className="text-slate-500 text-[10px] leading-relaxed mt-1">{log.description}</p>
                 </div>
               ))}
             </div>
