@@ -8,7 +8,7 @@ import Profile from './components/Profile';
 import SubjectNotes from './components/SubjectNotes';
 import StudyHub from './components/StudyHub'; 
 import TypingMaster from './components/TypingMaster';
-import ChronosDashboard from './components/ChronosDashboard'; // 🔥 NEW IMPORT
+import ChronosDashboard from './components/ChronosDashboard';
 
 import { Megaphone, ShieldAlert } from 'lucide-react';
 
@@ -16,7 +16,10 @@ export default function App() {
   const [user, setUser] = useState(null);
   const [username, setUsername] = useState('');
   const [activeTab, setActiveTab] = useState('dashboard');
-  const [isDarkMode, setIsDarkMode] = useState(true); // Default Dark
+  
+  // 🔥 CHANGED: Default is now FALSE (Solar Mode / Light Mode)
+  const [isDarkMode, setIsDarkMode] = useState(false); 
+
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
   const [globalMsg, setGlobalMsg] = useState(null);
   const [isExamLocked, setIsExamLocked] = useState(false); 
@@ -125,7 +128,8 @@ export default function App() {
 
   return (
     <div className={isDarkMode ? 'dark' : ''}>
-      <div className={`flex min-h-screen transition-colors duration-300 ${isDarkMode ? 'bg-slate-950 text-slate-100' : 'bg-blue-50 text-gray-800'}`}>
+      {/* GLOBAL BACKGROUND: Solar = bg-blue-50 (Clean Light) | Lunar = bg-[#050508] (Deep Dark) */}
+      <div className={`flex min-h-screen transition-colors duration-500 ease-in-out ${isDarkMode ? 'bg-[#050508] text-slate-100' : 'bg-blue-50 text-gray-800'}`}>
         
         <div className={`${isExamLocked ? 'pointer-events-none opacity-40 blur-[3px] grayscale select-none' : ''} transition-all duration-700 z-40`}>
           <Sidebar user={user} activeTab={activeTab} setActiveTab={setActiveTab} setIsDarkMode={setIsDarkMode} isDarkMode={isDarkMode} isOpen={isSidebarOpen} setIsOpen={setIsSidebarOpen} />
@@ -151,8 +155,7 @@ export default function App() {
           </header>
 
           <div className="max-w-7xl mx-auto space-y-8">
-            {/* 🔥 NEW CHRONOS DASHBOARD */}
-            {activeTab === 'dashboard' && <ChronosDashboard user={user} />}
+            {activeTab === 'dashboard' && <ChronosDashboard user={user} isDarkMode={isDarkMode} />}
             
             {activeTab === 'study' && <StudyHub user={user} />}
             {activeTab === 'subjects' && <SubjectNotes user={user} />}
