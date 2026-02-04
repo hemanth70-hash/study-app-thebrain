@@ -5,10 +5,10 @@ import autoTable from 'jspdf-autotable';
 import { 
   Award, BookOpen, Clock, Zap, Trash2, ShieldAlert, 
   Loader2, TrendingUp, Save, RefreshCw, Dice5, 
-  ChevronDown, ChevronUp, GraduationCap, Target, Edit3, Activity, ShieldCheck, FileText, Download, Megaphone
+  ChevronDown, ChevronUp, GraduationCap, Target, Edit3, Activity, ShieldCheck, FileText, Download, Megaphone, ArrowRight
 } from 'lucide-react';
 
-export default function Profile({ user }) {
+export default function Profile({ user, isDarkMode }) {
   // --- CORE STATES ---
   const [stats, setStats] = useState({ history: [] });
   const [loading, setLoading] = useState(true);
@@ -27,11 +27,11 @@ export default function Profile({ user }) {
     : 0;
 
   const getNeuralRank = (gpa) => {
-    if (gpa >= 95) return { label: 'Architect', color: 'text-purple-500 bg-purple-50 dark:bg-purple-900/30 border-purple-200' };
-    if (gpa >= 85) return { label: 'Genius', color: 'text-blue-600 bg-blue-50 dark:bg-blue-900/30 border-blue-200' };
-    if (gpa >= 70) return { label: 'Specialist', color: 'text-green-600 bg-green-50 dark:bg-green-900/30 border-green-200' };
-    if (gpa >= 50) return { label: 'Scholar', color: 'text-orange-600 bg-orange-50 dark:bg-orange-900/30 border-orange-200' };
-    return { label: 'Aspirant', color: 'text-gray-500 bg-gray-50 dark:bg-gray-800 border-gray-200' };
+    if (gpa >= 95) return { label: 'Architect', color: isDarkMode ? 'text-purple-400 bg-purple-900/30 border-purple-800' : 'text-purple-500 bg-purple-50 border-purple-200' };
+    if (gpa >= 85) return { label: 'Genius', color: isDarkMode ? 'text-blue-400 bg-blue-900/30 border-blue-800' : 'text-blue-600 bg-blue-50 border-blue-200' };
+    if (gpa >= 70) return { label: 'Specialist', color: isDarkMode ? 'text-green-400 bg-green-900/30 border-green-800' : 'text-green-600 bg-green-50 border-green-200' };
+    if (gpa >= 50) return { label: 'Scholar', color: isDarkMode ? 'text-orange-400 bg-orange-900/30 border-orange-800' : 'text-orange-600 bg-orange-50 border-orange-200' };
+    return { label: 'Aspirant', color: isDarkMode ? 'text-gray-400 bg-gray-800 border-gray-700' : 'text-gray-500 bg-gray-50 border-gray-200' };
   };
 
   const rank = getNeuralRank(parseFloat(lifetimeGPA));
@@ -54,13 +54,11 @@ export default function Profile({ user }) {
     const doc = new jsPDF();
     const result = user.last_regular_result;
 
-    // Header
     doc.setFontSize(18);
     doc.text(`NEURAL PORTAL REPORT: ${user.username.toUpperCase()}`, 14, 20);
     doc.setFontSize(10);
     doc.text(`Mock: ${result.title} | Score: ${result.score}/${result.total} | ${new Date(result.timestamp).toLocaleDateString()}`, 14, 28);
 
-    // Data Table
     const tableData = result.breakdown.map((item, index) => [
       index + 1,
       item.question.substring(0, 50) + "...",
@@ -128,7 +126,7 @@ export default function Profile({ user }) {
     }
   };
 
-  // --- 5. ADMIN REQUEST LOGIC (New) ---
+  // --- 5. ADMIN REQUEST LOGIC ---
   const sendAdminRequest = async () => {
     const msg = window.prompt("Transmission to The Brain (Admin):");
     if (!msg) return;
@@ -151,7 +149,6 @@ export default function Profile({ user }) {
   const clearHistory = async () => {
     if (window.confirm("Wipe all neural records permanently? This cannot be undone.")) {
       const { error } = await supabase.from('scores').delete().eq('user_id', user.id);
-      // Also clear the last result slot
       await supabase.from('profiles').update({ last_regular_result: null }).eq('id', user.id);
       
       if (!error) { 
@@ -165,10 +162,14 @@ export default function Profile({ user }) {
     <div className="space-y-10 pb-20 animate-in fade-in duration-700">
       
       {/* --- IDENTITY HUB --- */}
-      <div className="bg-white dark:bg-gray-800 p-10 rounded-[3rem] shadow-2xl border-b-8 border-blue-600 relative overflow-hidden">
+      <div className={`p-10 rounded-[3rem] shadow-2xl border-b-8 border-blue-600 relative overflow-hidden transition-colors duration-500 ${
+        isDarkMode ? 'bg-gray-800 text-white' : 'bg-white text-gray-900'
+      }`}>
         <div className="flex flex-col md:flex-row items-center gap-10 relative z-10">
           <div className="relative group">
-            <div className="w-44 h-44 rounded-[2.5rem] bg-gray-100 dark:bg-gray-900 flex items-center justify-center border-4 border-white dark:border-gray-700 shadow-xl overflow-hidden">
+            <div className={`w-44 h-44 rounded-[2.5rem] flex items-center justify-center border-4 shadow-xl overflow-hidden transition-colors ${
+              isDarkMode ? 'bg-gray-900 border-gray-700' : 'bg-gray-100 border-white'
+            }`}>
               <img src={getAvatarUrl(currentSeed, gender)} alt="Avatar" className="w-36 h-36" />
             </div>
             <button 
@@ -181,46 +182,52 @@ export default function Profile({ user }) {
 
           <div className="text-center md:text-left flex-1 space-y-4">
             <div className="flex flex-wrap items-center justify-center md:justify-start gap-4">
-              <h2 className="text-5xl font-black uppercase tracking-tighter dark:text-white">{user.username}</h2>
+              <h2 className="text-5xl font-black uppercase tracking-tighter">{user.username}</h2>
               <div className={`flex items-center gap-2 px-4 py-1.5 rounded-full border-2 font-black text-[10px] uppercase tracking-widest shadow-sm transition-all ${rank.color}`}>
                 <ShieldCheck size={14} />
                 {rank.label}
               </div>
               <button 
                 onClick={() => setShowTools(!showTools)}
-                className="p-2 bg-blue-50 dark:bg-gray-700 rounded-full text-blue-600 hover:scale-110 transition-all"
+                className={`p-2 rounded-full hover:scale-110 transition-all ${
+                  isDarkMode ? 'bg-gray-700 text-blue-400' : 'bg-blue-50 text-blue-600'
+                }`}
               >
                 {showTools ? <ChevronUp size={24} /> : <ChevronDown size={24} />}
               </button>
             </div>
             
             <div className="space-y-4 max-w-sm mx-auto md:mx-0">
-              <div className="flex items-center gap-3 p-3 bg-gray-50 dark:bg-gray-900/50 rounded-2xl border border-transparent focus-within:border-blue-500/50 transition-all">
+              <div className={`flex items-center gap-3 p-3 rounded-2xl border transition-all ${
+                isDarkMode ? 'bg-gray-900 border-gray-700' : 'bg-gray-50 border-transparent'
+              }`}>
                 <GraduationCap size={20} className="text-blue-500" />
                 <div className="flex-1 text-left">
                   <p className="text-[8px] font-black text-gray-400 uppercase tracking-widest">Education Background</p>
                   <input 
-                    className="bg-transparent border-none outline-none focus:ring-0 text-sm font-bold uppercase tracking-widest w-full dark:text-white"
+                    className="bg-transparent border-none outline-none focus:ring-0 text-sm font-bold uppercase tracking-widest w-full"
                     value={education}
                     onChange={(e) => setEducation(e.target.value)}
                     placeholder="E.G. BSC COMPUTER SCIENCE"
                   />
                 </div>
-                <Edit3 size={14} className="text-gray-300" />
+                <Edit3 size={14} className="text-gray-400" />
               </div>
 
-              <div className="flex items-center gap-3 p-3 bg-gray-50 dark:bg-gray-900/50 rounded-2xl border border-transparent focus-within:border-red-500/50 transition-all">
+              <div className={`flex items-center gap-3 p-3 rounded-2xl border transition-all ${
+                isDarkMode ? 'bg-gray-900 border-gray-700' : 'bg-gray-50 border-transparent'
+              }`}>
                 <Target size={20} className="text-red-500" />
                 <div className="flex-1 text-left">
                   <p className="text-[8px] font-black text-gray-400 uppercase tracking-widest text-red-400">Target Goal</p>
                   <input 
-                    className="bg-transparent border-none outline-none focus:ring-0 text-sm font-black uppercase tracking-widest w-full text-red-600 dark:text-red-400"
+                    className="bg-transparent border-none outline-none focus:ring-0 text-sm font-black uppercase tracking-widest w-full text-red-600"
                     value={preparingFor}
                     onChange={(e) => setPreparingFor(e.target.value)}
                     placeholder="E.G. NEET / JEE 2026"
                   />
                 </div>
-                <Edit3 size={14} className="text-gray-300" />
+                <Edit3 size={14} className="text-gray-400" />
               </div>
             </div>
 
@@ -231,7 +238,7 @@ export default function Profile({ user }) {
                     key={g}
                     onClick={() => setGender(g)}
                     className={`px-6 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${
-                      gender === g ? 'bg-blue-600 text-white shadow-lg' : 'bg-gray-100 dark:bg-gray-700 text-gray-400'
+                      gender === g ? 'bg-blue-600 text-white shadow-lg' : isDarkMode ? 'bg-gray-700 text-gray-400' : 'bg-gray-100 text-gray-400'
                     }`}
                   >
                     {g}
@@ -295,13 +302,17 @@ export default function Profile({ user }) {
 
       {/* --- NEURAL ANALYTICS GRID --- */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-        <div className="bg-white dark:bg-gray-800 p-8 rounded-[2.5rem] shadow-xl border-b-8 border-blue-500 flex items-center gap-6 group transition-all hover:scale-105">
-          <div className="p-4 bg-blue-100 dark:bg-blue-900/30 rounded-2xl text-blue-600 transition-transform group-hover:rotate-12">
+        <div className={`p-8 rounded-[2.5rem] shadow-xl border-b-8 border-blue-500 flex items-center gap-6 group transition-all hover:scale-105 ${
+          isDarkMode ? 'bg-gray-800 text-white' : 'bg-white text-gray-900'
+        }`}>
+          <div className={`p-4 rounded-2xl transition-transform group-hover:rotate-12 ${
+            isDarkMode ? 'bg-blue-900/30 text-blue-400' : 'bg-blue-100 text-blue-600'
+          }`}>
             <BookOpen size={32} />
           </div>
           <div>
             <p className="text-[10px] font-black uppercase text-gray-400 tracking-widest">Lifetime Exams</p>
-            <h4 className="text-3xl font-black dark:text-white tracking-tighter">{user.total_exams_completed || 0}</h4>
+            <h4 className="text-3xl font-black tracking-tighter">{user.total_exams_completed || 0}</h4>
           </div>
         </div>
 
@@ -315,7 +326,9 @@ export default function Profile({ user }) {
           </div>
         </div>
 
-        <div className="bg-white dark:bg-gray-800 p-8 rounded-[2.5rem] shadow-xl border-b-8 border-purple-500 transition-all hover:scale-105">
+        <div className={`p-8 rounded-[2.5rem] shadow-xl border-b-8 border-purple-500 transition-all hover:scale-105 ${
+          isDarkMode ? 'bg-gray-800 text-white' : 'bg-white text-gray-900'
+        }`}>
           <div className="flex items-center gap-3 mb-4">
              <Activity size={24} className="text-purple-500" />
              <p className="text-[10px] font-black uppercase text-gray-400 tracking-widest">Trend</p>
@@ -338,13 +351,19 @@ export default function Profile({ user }) {
       </div>
 
       {/* --- NEURAL TRANSCRIPT TABLE --- */}
-      <div className="bg-white dark:bg-gray-800 rounded-[32px] shadow-2xl overflow-hidden border dark:border-gray-700">
-        <div className="p-8 border-b dark:border-gray-700 flex justify-between items-center bg-gray-50/50 dark:bg-gray-900/50">
+      <div className={`rounded-[32px] shadow-2xl overflow-hidden border transition-colors duration-500 ${
+        isDarkMode ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-100'
+      }`}>
+        <div className={`p-8 border-b flex justify-between items-center transition-colors ${
+          isDarkMode ? 'bg-gray-900/50 border-gray-700' : 'bg-gray-50/50 border-gray-100'
+        }`}>
           <div className="flex items-center gap-3">
             <Clock size={24} className="text-blue-600" />
-            <h3 className="text-2xl font-black uppercase tracking-tighter dark:text-white">Neural Transcript</h3>
+            <h3 className="text-2xl font-black uppercase tracking-tighter">Neural Transcript</h3>
           </div>
-          <span className="text-[10px] font-black text-blue-600 uppercase tracking-widest bg-blue-50 dark:bg-blue-900/40 px-4 py-2 rounded-xl">Permanent Storage Enabled</span>
+          <span className={`text-[10px] font-black uppercase tracking-widest px-4 py-2 rounded-xl ${
+            isDarkMode ? 'bg-blue-900/40 text-blue-400' : 'bg-blue-50 text-blue-600'
+          }`}>Permanent Storage Enabled</span>
         </div>
 
         <div className="p-8 overflow-x-auto min-h-[300px]">
@@ -356,19 +375,19 @@ export default function Profile({ user }) {
           ) : stats.history.length > 0 ? (
             <table className="w-full text-left">
               <thead>
-                <tr className="text-gray-400 text-[10px] font-black uppercase tracking-widest border-b dark:border-gray-700">
+                <tr className="text-gray-400 text-[10px] font-black uppercase tracking-widest border-b">
                   <th className="pb-6 px-4">Exam Record</th>
                   <th className="pb-6 px-4">Date</th>
                   <th className="pb-6 px-4">Score</th>
                   <th className="pb-6 px-4 text-right">Status</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-gray-50 dark:divide-gray-700">
+              <tbody className={`divide-y ${isDarkMode ? 'divide-gray-700' : 'divide-gray-50'}`}>
                 {stats.history.map((item, i) => (
-                  <tr key={item.id || i} className="hover:bg-blue-50/30 transition-all group">
+                  <tr key={item.id || i} className={`transition-all group ${isDarkMode ? 'hover:bg-gray-900/50' : 'hover:bg-blue-50/30'}`}>
                     <td className="py-6 px-4">
                       <div className="flex flex-col text-left">
-                        <span className="text-lg font-bold dark:text-white tracking-tight">{item.mock_title}</span>
+                        <span className="text-lg font-bold tracking-tight">{item.mock_title}</span>
                         {item.is_daily && <span className="text-[8px] text-orange-500 font-black uppercase mt-1">Daily Sequence</span>}
                       </div>
                     </td>
@@ -380,7 +399,9 @@ export default function Profile({ user }) {
                       </div>
                     </td>
                     <td className="py-6 px-4 text-right">
-                      <span className={`px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest ${item.percentage >= 50 ? 'bg-green-100 text-green-600' : 'bg-red-100 text-red-600'}`}>
+                      <span className={`px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest ${
+                        item.percentage >= 50 ? 'bg-green-100 text-green-600' : 'bg-red-100 text-red-600'
+                      }`}>
                         {item.percentage >= 50 ? 'Validated' : 'Retake'}
                       </span>
                     </td>
@@ -397,8 +418,8 @@ export default function Profile({ user }) {
         </div>
       </div>
 
-      {/* --- 🔥 NEW: NEURAL UPLINK (ADMIN REQUEST) --- */}
-      <div className="bg-gradient-to-r from-gray-900 to-gray-800 text-white p-8 rounded-[2.5rem] shadow-xl border border-gray-700 relative overflow-hidden group">
+      {/* --- NEURAL UPLINK (ADMIN REQUEST) --- */}
+      <div className="bg-gradient-to-r from-gray-900 to-gray-800 text-white p-8 rounded-[2.5rem] shadow-xl border border-gray-700 relative overflow-hidden group transition-all">
         <div className="relative z-10 flex flex-col md:flex-row items-center justify-between gap-6">
           <div>
             <h3 className="text-2xl font-black uppercase tracking-tight mb-2 flex items-center gap-2">
@@ -415,7 +436,6 @@ export default function Profile({ user }) {
             Establish Connection
           </button>
         </div>
-        {/* Decor */}
         <div className="absolute top-0 right-0 p-24 bg-yellow-500/10 rounded-full blur-3xl transform translate-x-1/2 -translate-y-1/2 group-hover:bg-yellow-500/20 transition-colors"></div>
       </div>
 

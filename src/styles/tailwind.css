@@ -1,7 +1,6 @@
 @tailwind base;
-@tailwind components;
+@tailwind components; 
 @tailwind utilities;
-
 @keyframes glow {
   0% { box-shadow: 0 0 5px #2563eb, 0 0 10px #2563eb; }
   50% { box-shadow: 0 0 20px #3b82f6, 0 0 30px #3b82f6; }

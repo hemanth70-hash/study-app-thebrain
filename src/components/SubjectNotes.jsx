@@ -1,296 +1,296 @@
 import React, { useState, useEffect } from 'react';
 import { supabase } from '../supabaseClient';
 import { 
-  Save, Edit3, Loader2, BookOpen, Clock, Download, 
-  FileText, Zap, Database, ExternalLink, X, Maximize2 
+  Save, Edit3, Loader2, BookOpen, Clock, Download, 
+  FileText, Zap, Database, ExternalLink, X, Maximize2 
 } from 'lucide-react';
 import { jsPDF } from "jspdf";
 
 export default function SubjectNotes({ user }) {
-  // --- 1. CONFIGURATION ---
-  const coreSubjects = [
-    "Computer Science", "Reasoning", "Aptitude", 
-    "General Awareness", "Maths", "Physics", 
-    "Chemistry", "English"
-  ];
-  
-  const [selectedSubject, setSelectedSubject] = useState(coreSubjects[0]);
-  const [personalNote, setPersonalNote] = useState('');
-  const [isSaving, setIsSaving] = useState(false);
-  const [lastSaved, setLastSaved] = useState(null);
-  const [libraryResources, setLibraryResources] = useState([]); 
-  const [allNotes, setAllNotes] = useState([]); 
-  const [loading, setLoading] = useState(true);
+  // --- 1. CONFIGURATION ---
+  const coreSubjects = [
+    "Computer Science", "Reasoning", "Aptitude", 
+    "General Awareness", "Maths", "Physics", 
+    "Chemistry", "English"
+  ];
+  
+  const [selectedSubject, setSelectedSubject] = useState(coreSubjects[0]);
+  const [personalNote, setPersonalNote] = useState('');
+  const [isSaving, setIsSaving] = useState(false);
+  const [lastSaved, setLastSaved] = useState(null);
+  const [libraryResources, setLibraryResources] = useState([]); 
+  const [allNotes, setAllNotes] = useState([]); 
+  const [loading, setLoading] = useState(true);
 
-  // 🔥 NEW STATE: Controls the Main View (Editor vs PDF)
-  const [activePdf, setActivePdf] = useState(null);
+  // 🔥 NEW STATE: Controls the Main View (Editor vs PDF)
+  const [activePdf, setActivePdf] = useState(null);
 
-  // --- 2. DATA SYNCHRONIZATION ---
-  useEffect(() => {
-    fetchLibraryAndHistory();
-  }, [user.id]);
+  // --- 2. DATA SYNCHRONIZATION ---
+  useEffect(() => {
+    fetchLibraryAndHistory();
+  }, [user.id]);
 
-  useEffect(() => {
-    fetchNoteForSubject(selectedSubject);
-    setActivePdf(null); // Reset view to notes when changing subjects
-  }, [selectedSubject, user.id]);
+  useEffect(() => {
+    fetchNoteForSubject(selectedSubject);
+    setActivePdf(null); // Reset view to notes when changing subjects
+  }, [selectedSubject, user.id]);
 
-  const fetchLibraryAndHistory = async () => {
-    setLoading(true);
-    const { data: notes } = await supabase
-      .from('subject_notes')
-      .select('id, subject, updated_at')
-      .eq('user_id', user.id)
-      .order('updated_at', { ascending: false });
-      
-    const { data: pdfs } = await supabase
-      .from('study_materials')
-      .select('*')
-      .order('created_at', { ascending: false });
+  const fetchLibraryAndHistory = async () => {
+    setLoading(true);
+    const { data: notes } = await supabase
+      .from('subject_notes')
+      .select('id, subject, updated_at')
+      .eq('user_id', user.id)
+      .order('updated_at', { ascending: false });
+      
+    const { data: pdfs } = await supabase
+      .from('study_materials')
+      .select('*')
+      .order('created_at', { ascending: false });
 
-    if (notes) setAllNotes(notes);
-    if (pdfs) setLibraryResources(pdfs);
-    setLoading(false);
-  };
+    if (notes) setAllNotes(notes);
+    if (pdfs) setLibraryResources(pdfs);
+    setLoading(false);
+  };
 
-  const fetchNoteForSubject = async (subject) => {
-    setPersonalNote('');
-    setLastSaved(null);
-    const { data } = await supabase
-      .from('subject_notes')
-      .select('content, updated_at')
-      .eq('user_id', user.id)
-      .eq('subject', subject)
-      .maybeSingle(); 
-    
-    if (data) {
-      setPersonalNote(data.content);
-      setLastSaved(new Date(data.updated_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }));
-    }
-  };
+  const fetchNoteForSubject = async (subject) => {
+    setPersonalNote('');
+    setLastSaved(null);
+    const { data } = await supabase
+      .from('subject_notes')
+      .select('content, updated_at')
+      .eq('user_id', user.id)
+      .eq('subject', subject)
+      .maybeSingle(); 
+    
+    if (data) {
+      setPersonalNote(data.content);
+      setLastSaved(new Date(data.updated_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }));
+    }
+  };
 
-  // --- 3. ACTIONS ---
-  const handleSaveNote = async () => {
-    if (!personalNote.trim()) return;
-    setIsSaving(true);
-    const { error } = await supabase
-      .from('subject_notes')
-      .upsert({ 
-        user_id: user.id, 
-        subject: selectedSubject, 
-        content: personalNote,
-        updated_at: new Date()
-      }, { onConflict: 'user_id,subject' });
-    
-    if (!error) {
-        const now = new Date();
-        setLastSaved(now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }));
-        fetchLibraryAndHistory();
-    }
-    setTimeout(() => setIsSaving(false), 500);
-  };
+  // --- 3. ACTIONS ---
+  const handleSaveNote = async () => {
+    if (!personalNote.trim()) return;
+    setIsSaving(true);
+    const { error } = await supabase
+      .from('subject_notes')
+      .upsert({ 
+        user_id: user.id, 
+        subject: selectedSubject, 
+        content: personalNote,
+        updated_at: new Date()
+      }, { onConflict: 'user_id,subject' });
+    
+    if (!error) {
+        const now = new Date();
+        setLastSaved(now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }));
+        fetchLibraryAndHistory();
+    }
+    setTimeout(() => setIsSaving(false), 500);
+  };
 
-  const downloadAsPDF = () => {
-    if (!personalNote) return;
-    const doc = new jsPDF();
-    doc.setFont("helvetica", "bold");
-    doc.setTextColor(37, 99, 235);
-    doc.setFontSize(22);
-    doc.text(`${selectedSubject} // Neural Transcript`, 20, 20);
-    doc.setFontSize(10);
-    doc.setFont("helvetica", "normal");
-    doc.setTextColor(150);
-    doc.text(`Generated by The Brain Portal | ${new Date().toLocaleString()}`, 20, 30);
-    doc.line(20, 35, 190, 35);
-    doc.setFontSize(12);
-    doc.setTextColor(0);
-    const splitText = doc.splitTextToSize(personalNote, 170);
-    doc.text(splitText, 20, 45);
-    doc.save(`${selectedSubject}_Notes.pdf`);
-  };
+  const downloadAsPDF = () => {
+    if (!personalNote) return;
+    const doc = new jsPDF();
+    doc.setFont("helvetica", "bold");
+    doc.setTextColor(37, 99, 235);
+    doc.setFontSize(22);
+    doc.text(`${selectedSubject} // Neural Transcript`, 20, 20);
+    doc.setFontSize(10);
+    doc.setFont("helvetica", "normal");
+    doc.setTextColor(150);
+    doc.text(`Generated by The Brain Portal | ${new Date().toLocaleString()}`, 20, 30);
+    doc.line(20, 35, 190, 35);
+    doc.setFontSize(12);
+    doc.setTextColor(0);
+    const splitText = doc.splitTextToSize(personalNote, 170);
+    doc.text(splitText, 20, 45);
+    doc.save(`${selectedSubject}_Notes.pdf`);
+  };
 
-  const relevantPDFs = libraryResources.filter(res => 
-    res.subject === selectedSubject || res.subject === 'General'
-  );
+  const relevantPDFs = libraryResources.filter(res => 
+    res.subject === selectedSubject || res.subject === 'General'
+  );
 
-  return (
-    <div className="space-y-8 pb-20 animate-in fade-in duration-500">
-      
-      {/* 1. SUBJECT NAVIGATION */}
-      <div className="flex gap-3 overflow-x-auto pb-2 custom-scrollbar p-1">
-        {coreSubjects.map((sub) => (
-          <button 
-            key={sub}
-            onClick={() => setSelectedSubject(sub)}
-            className={`px-6 py-3 rounded-2xl font-black transition-all text-[10px] uppercase tracking-widest whitespace-nowrap ${
-              selectedSubject === sub 
-              ? 'bg-blue-600 text-white shadow-lg shadow-blue-500/30 scale-105' 
-              : 'bg-white dark:bg-gray-800 text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-700'
-            }`}
-          >
-            {sub}
-          </button>
-        ))}
-      </div>
+  return (
+    <div className="space-y-8 pb-20 animate-in fade-in duration-500">
+      
+      {/* 1. SUBJECT NAVIGATION */}
+      <div className="flex gap-3 overflow-x-auto pb-2 custom-scrollbar p-1">
+        {coreSubjects.map((sub) => (
+          <button 
+            key={sub}
+            onClick={() => setSelectedSubject(sub)}
+            className={`px-6 py-3 rounded-2xl font-black transition-all text-[10px] uppercase tracking-widest whitespace-nowrap ${
+              selectedSubject === sub 
+              ? 'bg-blue-600 text-white shadow-lg shadow-blue-500/30 scale-105' 
+              : 'bg-white dark:bg-gray-800 text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-700'
+            }`}
+          >
+            {sub}
+          </button>
+        ))}
+      </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 items-start">
-        
-        {/* 2. DYNAMIC WORKSPACE (EDITOR OR PDF VIEWER) */}
-        <div className="lg:col-span-2 space-y-6">
-          <div className="bg-white dark:bg-gray-800 p-8 rounded-[2.5rem] shadow-xl border dark:border-gray-700 relative overflow-hidden h-[650px] flex flex-col">
-            
-            {/* Header Area */}
-            <div className="flex justify-between items-center mb-6 relative z-10">
-              <div>
-                <h3 className="text-3xl font-black text-gray-800 dark:text-white uppercase tracking-tighter flex items-center gap-3">
-                  {activePdf ? (
-                    <>
-                      <FileText className="text-orange-500" /> 
-                      <span className="truncate max-w-[300px]">{activePdf.title}</span>
-                    </>
-                  ) : (
-                    <>
-                      {selectedSubject} <span className="text-gray-300 text-lg">/ NOTES</span>
-                    </>
-                  )}
-                </h3>
-                
-                {!activePdf && (
-                  <div className="flex items-center gap-2 mt-1">
-                    {lastSaved ? (
-                      <span className="text-[10px] text-green-500 font-bold uppercase tracking-widest flex items-center gap-1"><Zap size={10} /> Synced {lastSaved}</span>
-                    ) : (
-                      <span className="text-[10px] text-gray-400 font-bold uppercase tracking-widest">Unsaved Changes</span>
-                    )}
-                  </div>
-                )}
-              </div>
-              
-              <div className="flex gap-2">
-                {activePdf ? (
-                  <button 
-                    onClick={() => setActivePdf(null)} 
-                    className="flex items-center gap-2 bg-red-100 text-red-600 px-6 py-3 rounded-xl font-black uppercase text-xs hover:bg-red-200 transition-all"
-                  >
-                    <X size={16} /> Close PDF
-                  </button>
-                ) : (
-                  <>
-                    <button onClick={downloadAsPDF} className="p-3 bg-gray-100 dark:bg-gray-700 rounded-xl text-gray-500 hover:text-blue-600 transition-colors">
-                      <Download size={20} />
-                    </button>
-                    <button 
-                      onClick={handleSaveNote}
-                      disabled={isSaving}
-                      className="flex items-center gap-2 bg-blue-600 text-white px-6 py-3 rounded-xl font-black uppercase text-xs tracking-widest hover:bg-blue-700 shadow-lg active:scale-95 disabled:opacity-50 transition-all"
-                    >
-                      {isSaving ? <Loader2 className="animate-spin" size={16} /> : <Save size={16} />}
-                      {isSaving ? 'Syncing...' : 'Save Node'}
-                    </button>
-                  </>
-                )}
-              </div>
-            </div>
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 items-start">
+        
+        {/* 2. DYNAMIC WORKSPACE (EDITOR OR PDF VIEWER) */}
+        <div className="lg:col-span-2 space-y-6">
+          <div className="bg-white dark:bg-gray-800 p-8 rounded-[2.5rem] shadow-xl border dark:border-gray-700 relative overflow-hidden h-[650px] flex flex-col">
+            
+            {/* Header Area */}
+            <div className="flex justify-between items-center mb-6 relative z-10">
+              <div>
+                <h3 className="text-3xl font-black text-gray-800 dark:text-white uppercase tracking-tighter flex items-center gap-3">
+                  {activePdf ? (
+                    <>
+                      <FileText className="text-orange-500" /> 
+                      <span className="truncate max-w-[300px]">{activePdf.title}</span>
+                    </>
+                  ) : (
+                    <>
+                      {selectedSubject} <span className="text-gray-300 text-lg">/ NOTES</span>
+                    </>
+                  )}
+                </h3>
+                
+                {!activePdf && (
+                  <div className="flex items-center gap-2 mt-1">
+                    {lastSaved ? (
+                      <span className="text-[10px] text-green-500 font-bold uppercase tracking-widest flex items-center gap-1"><Zap size={10} /> Synced {lastSaved}</span>
+                    ) : (
+                      <span className="text-[10px] text-gray-400 font-bold uppercase tracking-widest">Unsaved Changes</span>
+                    )}
+                  </div>
+                )}
+              </div>
+              
+              <div className="flex gap-2">
+                {activePdf ? (
+                  <button 
+                    onClick={() => setActivePdf(null)} 
+                    className="flex items-center gap-2 bg-red-100 text-red-600 px-6 py-3 rounded-xl font-black uppercase text-xs hover:bg-red-200 transition-all"
+                  >
+                    <X size={16} /> Close PDF
+                  </button>
+                ) : (
+                  <>
+                    <button onClick={downloadAsPDF} className="p-3 bg-gray-100 dark:bg-gray-700 rounded-xl text-gray-500 hover:text-blue-600 transition-colors">
+                      <Download size={20} />
+                    </button>
+                    <button 
+                      onClick={handleSaveNote}
+                      disabled={isSaving}
+                      className="flex items-center gap-2 bg-blue-600 text-white px-6 py-3 rounded-xl font-black uppercase text-xs tracking-widest hover:bg-blue-700 shadow-lg active:scale-95 disabled:opacity-50 transition-all"
+                    >
+                      {isSaving ? <Loader2 className="animate-spin" size={16} /> : <Save size={16} />}
+                      {isSaving ? 'Syncing...' : 'Save Node'}
+                    </button>
+                  </>
+                )}
+              </div>
+            </div>
 
-            {/* 🔥 CONTENT AREA SWAPPER */}
-            <div className="flex-1 relative bg-gray-50 dark:bg-gray-900 rounded-[2rem] overflow-hidden border-2 border-gray-100 dark:border-gray-700">
-              {activePdf ? (
-                // --- PDF VIEWER (IFRAME) ---
-                <iframe 
-                  // Google Docs Viewer allows embedding ANY public PDF url without CORS issues
-                  src={`https://docs.google.com/gview?url=${activePdf.url}&embedded=true`}
-                  className="w-full h-full"
-                  frameBorder="0"
-                  title="PDF Viewer"
-                />
-              ) : (
-                // --- NOTE EDITOR ---
-                <>
-                  <div className="absolute top-0 right-0 p-10 opacity-5 pointer-events-none"><Edit3 size={120} /></div>
-                  <textarea 
-                    className="w-full h-full p-6 bg-transparent border-none focus:ring-0 text-lg font-medium leading-loose outline-none resize-none custom-scrollbar dark:text-white"
-                    placeholder={`Initialize neural stream for ${selectedSubject}...`}
-                    value={personalNote}
-                    onChange={(e) => setPersonalNote(e.target.value)}
-                  />
-                </>
-              )}
-            </div>
+            {/* 🔥 CONTENT AREA SWAPPER */}
+            <div className="flex-1 relative bg-gray-50 dark:bg-gray-900 rounded-[2rem] overflow-hidden border-2 border-gray-100 dark:border-gray-700">
+              {activePdf ? (
+                // --- PDF VIEWER (IFRAME) ---
+                <iframe 
+                  // Google Docs Viewer allows embedding ANY public PDF url without CORS issues
+                  src={`https://docs.google.com/gview?url=${activePdf.url}&embedded=true`}
+                  className="w-full h-full"
+                  frameBorder="0"
+                  title="PDF Viewer"
+                />
+              ) : (
+                // --- NOTE EDITOR ---
+                <>
+                  <div className="absolute top-0 right-0 p-10 opacity-5 pointer-events-none"><Edit3 size={120} /></div>
+                  <textarea 
+                    className="w-full h-full p-6 bg-transparent border-none focus:ring-0 text-lg font-medium leading-loose outline-none resize-none custom-scrollbar dark:text-white"
+                    placeholder={`Initialize neural stream for ${selectedSubject}...`}
+                    value={personalNote}
+                    onChange={(e) => setPersonalNote(e.target.value)}
+                  />
+                </>
+              )}
+            </div>
 
-          </div>
-        </div>
+          </div>
+        </div>
 
-        {/* 3. SIDEBAR */}
-        <div className="space-y-6">
-          
-          {/* A. LIBRARY RESOURCES (Click to View) */}
-          <div className="bg-white dark:bg-gray-800 p-6 rounded-[2.5rem] shadow-xl border dark:border-gray-700">
-            <div className="flex items-center gap-3 mb-6 pb-4 border-b dark:border-gray-700">
-              <Database size={20} className="text-orange-500" />
-              <h4 className="font-black uppercase text-sm dark:text-white tracking-wide">Library Nodes</h4>
-            </div>
-            
-            {relevantPDFs.length > 0 ? (
-              <div className="space-y-3 max-h-[300px] overflow-y-auto custom-scrollbar pr-2">
-                {relevantPDFs.map((res) => (
-                  <button 
-                    key={res.id} 
-                    onClick={() => setActivePdf(res)} // 🔥 Set Active PDF
-                    className={`w-full text-left p-4 rounded-2xl border transition-all group relative overflow-hidden ${
-                      activePdf?.id === res.id 
-                      ? 'bg-orange-500 text-white border-orange-600 shadow-lg' 
-                      : 'bg-gray-50 dark:bg-gray-900/50 hover:bg-orange-50 border-transparent hover:border-orange-200'
-                    }`}
-                  >
-                    <div className="flex justify-between items-start relative z-10">
-                      <div className="flex-1">
-                        <h5 className={`font-bold text-xs line-clamp-2 leading-tight ${activePdf?.id === res.id ? 'text-white' : 'dark:text-white group-hover:text-orange-600'}`}>{res.title}</h5>
-                        <p className={`text-[8px] font-black uppercase mt-2 flex items-center gap-1 ${activePdf?.id === res.id ? 'text-white/80' : 'text-gray-400'}`}>
-                          <FileText size={8} /> PDF Resource
-                        </p>
-                      </div>
-                      {activePdf?.id === res.id ? <Maximize2 size={12} className="text-white animate-pulse" /> : <ExternalLink size={12} className="text-gray-300 group-hover:text-orange-500" />}
-                    </div>
-                  </button>
-                ))}
-              </div>
-            ) : (
-              <div className="text-center py-10 opacity-50">
-                <BookOpen size={32} className="mx-auto text-gray-300 mb-2" />
-                <p className="text-[10px] font-black uppercase text-gray-400">No PDFs Indexed</p>
-                <p className="text-[8px] text-gray-300 mt-1">Check other nodes</p>
-              </div>
-            )}
-          </div>
+        {/* 3. SIDEBAR */}
+        <div className="space-y-6">
+          
+          {/* A. LIBRARY RESOURCES (Click to View) */}
+          <div className="bg-white dark:bg-gray-800 p-6 rounded-[2.5rem] shadow-xl border dark:border-gray-700">
+            <div className="flex items-center gap-3 mb-6 pb-4 border-b dark:border-gray-700">
+              <Database size={20} className="text-orange-500" />
+              <h4 className="font-black uppercase text-sm dark:text-white tracking-wide">Library Nodes</h4>
+            </div>
+            
+            {relevantPDFs.length > 0 ? (
+              <div className="space-y-3 max-h-[300px] overflow-y-auto custom-scrollbar pr-2">
+                {relevantPDFs.map((res) => (
+                  <button 
+                    key={res.id} 
+                    onClick={() => setActivePdf(res)} // 🔥 Set Active PDF
+                    className={`w-full text-left p-4 rounded-2xl border transition-all group relative overflow-hidden ${
+                      activePdf?.id === res.id 
+                      ? 'bg-orange-500 text-white border-orange-600 shadow-lg' 
+                      : 'bg-gray-50 dark:bg-gray-900/50 hover:bg-orange-50 border-transparent hover:border-orange-200'
+                    }`}
+                  >
+                    <div className="flex justify-between items-start relative z-10">
+                      <div className="flex-1">
+                        <h5 className={`font-bold text-xs line-clamp-2 leading-tight ${activePdf?.id === res.id ? 'text-white' : 'dark:text-white group-hover:text-orange-600'}`}>{res.title}</h5>
+                        <p className={`text-[8px] font-black uppercase mt-2 flex items-center gap-1 ${activePdf?.id === res.id ? 'text-white/80' : 'text-gray-400'}`}>
+                          <FileText size={8} /> PDF Resource
+                        </p>
+                      </div>
+                      {activePdf?.id === res.id ? <Maximize2 size={12} className="text-white animate-pulse" /> : <ExternalLink size={12} className="text-gray-300 group-hover:text-orange-500" />}
+                    </div>
+                  </button>
+                ))}
+              </div>
+            ) : (
+              <div className="text-center py-10 opacity-50">
+                <BookOpen size={32} className="mx-auto text-gray-300 mb-2" />
+                <p className="text-[10px] font-black uppercase text-gray-400">No PDFs Indexed</p>
+                <p className="text-[8px] text-gray-300 mt-1">Check other nodes</p>
+              </div>
+            )}
+          </div>
 
-          {/* B. RECENT EDITS */}
-          <div className="bg-white dark:bg-gray-800 p-6 rounded-[2.5rem] shadow-xl border dark:border-gray-700">
-            <div className="flex items-center gap-3 mb-6 pb-4 border-b dark:border-gray-700">
-              <Clock size={20} className="text-blue-600" />
-              <h4 className="font-black uppercase text-sm dark:text-white tracking-wide">Recent Edits</h4>
-            </div>
-            
-            <div className="space-y-3 max-h-[250px] overflow-y-auto custom-scrollbar pr-2">
-              {allNotes.map((note) => (
-                <button 
-                  key={note.id} 
-                  onClick={() => { setSelectedSubject(note.subject); setActivePdf(null); }}
-                  className="w-full group flex items-center justify-between p-3 rounded-xl hover:bg-blue-50 dark:hover:bg-blue-900/20 transition-all text-left"
-                >
-                  <div className="flex items-center gap-3 overflow-hidden">
-                    <div className={`w-1.5 h-8 rounded-full ${note.subject === selectedSubject ? 'bg-blue-600' : 'bg-gray-200'}`}></div>
-                    <div>
-                      <p className="font-bold text-[10px] dark:text-white uppercase truncate w-32">{note.subject}</p>
-                      <p className="text-[8px] text-gray-400 font-bold">{new Date(note.updated_at).toLocaleDateString()}</p>
-                    </div>
-                  </div>
-                </button>
-              ))}
-            </div>
-          </div>
+          {/* B. RECENT EDITS */}
+          <div className="bg-white dark:bg-gray-800 p-6 rounded-[2.5rem] shadow-xl border dark:border-gray-700">
+            <div className="flex items-center gap-3 mb-6 pb-4 border-b dark:border-gray-700">
+              <Clock size={20} className="text-blue-600" />
+              <h4 className="font-black uppercase text-sm dark:text-white tracking-wide">Recent Edits</h4>
+            </div>
+            
+            <div className="space-y-3 max-h-[250px] overflow-y-auto custom-scrollbar pr-2">
+              {allNotes.map((note) => (
+                <button 
+                  key={note.id} 
+                  onClick={() => { setSelectedSubject(note.subject); setActivePdf(null); }}
+                  className="w-full group flex items-center justify-between p-3 rounded-xl hover:bg-blue-50 dark:hover:bg-blue-900/20 transition-all text-left"
+                >
+                  <div className="flex items-center gap-3 overflow-hidden">
+                    <div className={`w-1.5 h-8 rounded-full ${note.subject === selectedSubject ? 'bg-blue-600' : 'bg-gray-200'}`}></div>
+                    <div>
+                      <p className="font-bold text-[10px] dark:text-white uppercase truncate w-32">{note.subject}</p>
+                      <p className="text-[8px] text-gray-400 font-bold">{new Date(note.updated_at).toLocaleDateString()}</p>
+                    </div>
+                  </div>
+                </button>
+              ))}
+            </div>
+          </div>
 
-        </div>
-      </div>
-    </div>
-  );
+        </div>
+      </div>
+    </div>
+  );
 }
