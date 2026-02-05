@@ -54,11 +54,13 @@ export default function Profile({ user, isDarkMode }) {
     const doc = new jsPDF();
     const result = user.last_regular_result;
 
+    // Header
     doc.setFontSize(18);
     doc.text(`NEURAL PORTAL REPORT: ${user.username.toUpperCase()}`, 14, 20);
     doc.setFontSize(10);
     doc.text(`Mock: ${result.title} | Score: ${result.score}/${result.total} | ${new Date(result.timestamp).toLocaleDateString()}`, 14, 28);
 
+    // Data Table
     const tableData = result.breakdown.map((item, index) => [
       index + 1,
       item.question.substring(0, 50) + "...",
@@ -199,13 +201,13 @@ export default function Profile({ user, isDarkMode }) {
             
             <div className="space-y-4 max-w-sm mx-auto md:mx-0">
               <div className={`flex items-center gap-3 p-3 rounded-2xl border transition-all ${
-                isDarkMode ? 'bg-gray-900 border-gray-700' : 'bg-gray-50 border-transparent'
+                isDarkMode ? 'bg-gray-900/50 border-gray-700' : 'bg-gray-50 border-transparent'
               }`}>
                 <GraduationCap size={20} className="text-blue-500" />
                 <div className="flex-1 text-left">
                   <p className="text-[8px] font-black text-gray-400 uppercase tracking-widest">Education Background</p>
                   <input 
-                    className="bg-transparent border-none outline-none focus:ring-0 text-sm font-bold uppercase tracking-widest w-full"
+                    className={`bg-transparent border-none outline-none focus:ring-0 text-sm font-bold uppercase tracking-widest w-full ${isDarkMode ? 'text-white' : 'text-gray-900'}`}
                     value={education}
                     onChange={(e) => setEducation(e.target.value)}
                     placeholder="E.G. BSC COMPUTER SCIENCE"
@@ -215,7 +217,7 @@ export default function Profile({ user, isDarkMode }) {
               </div>
 
               <div className={`flex items-center gap-3 p-3 rounded-2xl border transition-all ${
-                isDarkMode ? 'bg-gray-900 border-gray-700' : 'bg-gray-50 border-transparent'
+                isDarkMode ? 'bg-gray-900/50 border-gray-700' : 'bg-gray-50 border-transparent'
               }`}>
                 <Target size={20} className="text-red-500" />
                 <div className="flex-1 text-left">

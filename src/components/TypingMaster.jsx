@@ -1,16 +1,17 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { supabase } from '../supabaseClient';
 import { 
-  Keyboard, Activity, CheckCircle, Target, 
-  Zap, Lock, FastForward, Award, Volume2, VolumeX,
-  Gamepad2, Flame, RefreshCw, ChevronLeft, ChevronRight, Unlock, Star
+  Keyboard, Activity, Target, Volume2, VolumeX,
+  Gamepad2, Flame, RefreshCw, ChevronLeft, ChevronRight, Unlock, Star, FastForward, Lock
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
 
-// --- ASSETS & CONFIG ---
-const SOUND_PATHS = { correct: '/sounds/bubble.mp3', error: '/sounds/thud.mp3' };
+// --- CONFIG ---
+const AUDIO_URLS = {
+  correct: '/sounds/bubble.mp3', 
+  error: '/sounds/thud.mp3'
+};
 
-// --- VIRTUAL KEYBOARD DATA ---
 const KEY_ZONES = {
   'q': 'pinky-l', 'a': 'pinky-l', 'z': 'pinky-l', '1': 'pinky-l',
   'w': 'ring-l', 's': 'ring-l', 'x': 'ring-l', '2': 'ring-l',
@@ -29,22 +30,15 @@ const KEYBOARD_ROWS = [
   ['z', 'x', 'c', 'v', 'b', 'n', 'm', ',', '.', '/']
 ];
 
-// --- CAMPAIGN GENERATOR ---
 const ROWS = { middle: "asdfghjkl;", top: "qwertyuiop", bottom: "zxcvbnm" };
-const WORDS_MED = ["the", "quick", "brown", "fox", "jumps", "over", "lazy", "dog", "neural", "grid", "system", "logic", "code", "react", "data", "node", "loop", "array", "function", "variable", "constant", "string", "number", "boolean", "object", "syntax", "error", "debug", "compile", "deploy", "server", "client", "socket", "packet", "latency", "bandwidth"];
-const WORDS_HARD = ["synchronization", "infrastructure", "authentication", "cryptography", "decentralized", "architecture", "implementation", "polymorphism", "encapsulation", "asynchronous", "middleware", "virtualization", "scalability", "redundancy", "throughput", "latency", "instantiation", "inheritance", "abstraction", "algorithm"];
+const WORDS_MED = ["neural", "grid", "system", "logic", "code", "react", "data", "node", "loop", "array", "function", "variable", "constant", "string", "number", "boolean", "object", "syntax"];
+const WORDS_HARD = ["synchronization", "infrastructure", "authentication", "cryptography", "decentralized", "architecture", "implementation", "polymorphism", "encapsulation"];
 
 const generateCampaignText = (lvl) => {
-  // 🔥 EXPANDED TEXT GENERATION (3-4 Lines Minimum)
-  // SECTOR 1: Row Drills
   if (lvl <= 10) return generateRowString(ROWS.middle, 150 + (lvl * 5));
   if (lvl <= 20) return generateRowString(ROWS.top, 150 + (lvl * 5));
   if (lvl <= 30) return generateRowString(ROWS.bottom, 150 + (lvl * 5));
-  
-  // SECTOR 2: Fluency
   if (lvl <= 60) return generateParagraph(WORDS_MED, 50 + Math.ceil((lvl-30)));
-
-  // SECTOR 3: Mastery
   return generateParagraph(WORDS_HARD, 40 + Math.ceil((lvl-60)));
 };
 
@@ -63,8 +57,7 @@ const generateParagraph = (wordList, count) => {
   return res.join(" ");
 };
 
-export default function TypingMaster({ user }) {
-  // GLOBAL
+export default function TypingMaster({ user, isDarkMode }) {
   const [mode, setMode] = useState('campaign'); 
   const [gameType, setGameType] = useState('balloon'); 
   const [soundEnabled, setSoundEnabled] = useState(true);
@@ -94,10 +87,31 @@ export default function TypingMaster({ user }) {
   const gameInputRef = useRef(null);
   const requestRef = useRef();
   
-  const audioCorrect = useRef(new Audio(SOUND_PATHS.correct));
-  const audioError = useRef(new Audio(SOUND_PATHS.error));
+  // 🔥 AUDIO FIX: Initialize inside useRef as NULL to prevent "Illegal Constructor"
+  const soundsRef = useRef(null);
 
-  // --- 1. LOADERS ---
+  // 🔥 Initialize Audio ONLY on mount (Client-side)
+  useEffect(() => {
+    soundsRef.current = {
+      correct: new Audio(AUDIO_URLS.correct),
+      error: new Audio(AUDIO_URLS.error)
+    };
+    // Preload
+    soundsRef.current.correct.load();
+    soundsRef.current.error.load();
+  }, []);
+
+  const playSound = (type) => {
+    if (!soundEnabled || !soundsRef.current) return;
+    try {
+      const sound = soundsRef.current[type].cloneNode();
+      sound.volume = 0.5;
+      sound.play().catch(() => {});
+    } catch (e) {
+      console.warn("Audio Error", e);
+    }
+  };
+
   const loadLevel = useCallback(() => {
     setIsFinished(false); 
     setInput(''); 
@@ -113,25 +127,15 @@ export default function TypingMaster({ user }) {
     if (mode === 'campaign') loadLevel();
   }, [mode, currentLevel, loadLevel]);
 
-  // --- 2. AUDIO HANDLER ---
-  const playSound = (type) => {
-    if (!soundEnabled) return;
-    const audio = type === 'correct' ? audioCorrect.current : audioError.current;
-    audio.currentTime = 0; audio.play().catch(()=>{});
-  };
-
-  // --- 3. TYPING LOGIC (CAMPAIGN) ---
   const handleTyping = async (e) => {
     if (isFinished) return;
     const val = e.target.value;
     const lastChar = val.slice(-1);
     const expectedChar = text[val.length - 1];
 
-    // Visuals
     setActiveKey(lastChar.toLowerCase());
     setTimeout(() => setActiveKey(null), 150);
 
-    // Audio
     if (val.length > input.length) {
       if (lastChar === expectedChar) playSound('correct');
       else playSound('error');
@@ -140,18 +144,15 @@ export default function TypingMaster({ user }) {
     if (!startTime && val.length === 1) setStartTime(Date.now());
     setInput(val);
 
-    // Metrics
     const time = (Date.now() - startTime) / 60000;
     const words = val.length / 5;
     setWpm(Math.round(words / (time || 0.001)));
     
-    // Accuracy Calc
     let correct = 0;
     for (let i = 0; i < val.length; i++) if (val[i] === text[i]) correct++;
     const acc = Math.round((correct / val.length) * 100) || 100;
     setAccuracy(acc);
 
-    // 🔥 FIX: FINISH WHEN LENGTH MATCHES (Prevents getting stuck on error)
     if (val.length >= text.length) {
       setIsFinished(true);
       await handleLevelComplete(acc);
@@ -159,7 +160,6 @@ export default function TypingMaster({ user }) {
   };
 
   const handleLevelComplete = async (acc) => {
-    // Star Calc
     let stars = 0;
     if (acc === 100) stars = 3;
     else if (acc >= 95) stars = 2;
@@ -167,7 +167,6 @@ export default function TypingMaster({ user }) {
     
     setResultStars(stars);
 
-    // Reward Logic (Streak Freeze)
     if (stars === 3) {
       const newStreak = perfectStreak + 1;
       setPerfectStreak(newStreak);
@@ -183,7 +182,6 @@ export default function TypingMaster({ user }) {
       setPerfectStreak(0);
     }
 
-    // Unlock Next Level
     if (stars >= 1 && currentLevel === maxLevel) {
       const nextLevel = maxLevel + 1;
       await supabase.from('profiles').update({ typing_level: nextLevel }).eq('id', user.id);
@@ -191,18 +189,11 @@ export default function TypingMaster({ user }) {
     }
   };
 
-  // --- 4. LEVEL NAVIGATION ---
   const jumpLevel = (direction) => {
-    if (direction === 'prev' && currentLevel > 1) {
-        setCurrentLevel(c => c - 1);
-    }
-    // Can only move next if we aren't at the max unlocked level
-    if (direction === 'next' && currentLevel < maxLevel) {
-        setCurrentLevel(c => c + 1);
-    }
+    if (direction === 'prev' && currentLevel > 1) setCurrentLevel(c => c - 1);
+    if (direction === 'next' && currentLevel < maxLevel) setCurrentLevel(c => c + 1);
   };
 
-  // --- 5. BALLOON GAME ENGINE ---
   const startBalloonGame = () => {
     setGameActive(true); setBalloonScore(0); setBalloonLives(3); setBalloons([]); setInput('');
     if (gameInputRef.current) gameInputRef.current.focus();
@@ -213,7 +204,6 @@ export default function TypingMaster({ user }) {
     let lastTime = Date.now();
     const loop = () => {
       const now = Date.now();
-      const dt = (now - lastTime) / 1000;
       lastTime = now;
 
       setBalloons(prev => {
@@ -256,39 +246,56 @@ export default function TypingMaster({ user }) {
     }
   };
 
-  // --- 6. RENDER HELPERS ---
   const getFingerClass = (keyChar) => {
     const zone = KEY_ZONES[keyChar.toLowerCase()];
-    if (!zone) return 'border-slate-700 text-slate-500'; 
+    const baseClass = isDarkMode ? 'bg-slate-800 border-slate-700 text-slate-400' : 'bg-slate-100 border-slate-300 text-slate-500';
+    if (!zone) return baseClass; 
+    
     const nextChar = text[input.length]?.toLowerCase();
+    
     if (nextChar === keyChar.toLowerCase()) {
-      if (zone.includes('pinky')) return 'bg-pink-500 text-white shadow-lg border-pink-400 scale-110';
-      if (zone.includes('ring')) return 'bg-blue-500 text-white shadow-lg border-blue-400 scale-110';
-      if (zone.includes('middle')) return 'bg-emerald-500 text-white shadow-lg border-emerald-400 scale-110';
-      return 'bg-orange-500 text-white shadow-lg border-orange-400 scale-110';
+      if (zone.includes('pinky')) return 'bg-pink-500 text-white shadow-[0_0_15px_#ec4899] border-pink-400 scale-110';
+      if (zone.includes('ring')) return 'bg-blue-500 text-white shadow-[0_0_15px_#3b82f6] border-blue-400 scale-110';
+      if (zone.includes('middle')) return 'bg-emerald-500 text-white shadow-[0_0_15px_#10b981] border-emerald-400 scale-110';
+      return 'bg-orange-500 text-white shadow-[0_0_15px_#f97316] border-orange-400 scale-110';
     }
-    if (activeKey === keyChar.toLowerCase()) return 'bg-white text-slate-900 scale-95';
-    return 'border-slate-700 text-slate-400 dark:bg-slate-800/50';
+    
+    if (activeKey === keyChar.toLowerCase()) return 'bg-white text-slate-900 scale-95 border-white';
+    return baseClass;
   };
 
   const renderText = () => {
     return text.split('').map((char, index) => {
-      let color = "text-slate-500 opacity-50";
+      let color = isDarkMode ? "text-slate-600" : "text-slate-300";
       let bg = "";
+      let glow = "";
+      
       if (index < input.length) {
-        if (input[index] === char) color = "text-cyan-400 opacity-100 shadow-[0_0_10px_rgba(34,211,238,0.5)]";
-        else { color = "text-red-500 opacity-100"; bg = "bg-red-500/20"; }
+        if (input[index] === char) {
+            color = isDarkMode ? "text-cyan-400" : "text-blue-600";
+            glow = isDarkMode ? "drop-shadow-[0_0_8px_rgba(34,211,238,0.8)]" : "";
+        } else { 
+            color = "text-red-500"; 
+            bg = "bg-red-500/20"; 
+        }
       } else if (index === input.length) {
-        bg = "bg-cyan-500/20 animate-pulse border-b-2 border-cyan-400"; 
+        bg = isDarkMode ? "bg-cyan-500/20 border-b-2 border-cyan-400" : "bg-blue-500/20 border-b-2 border-blue-400"; 
+        color = isDarkMode ? "text-white" : "text-slate-900";
       }
-      return <span key={index} className={`${color} ${bg} transition-all duration-75 px-[1px] rounded-sm`}>{char}</span>;
+      return <span key={index} className={`${color} ${bg} ${glow} transition-all duration-75 px-[1px] rounded-sm`}>{char}</span>;
     });
   };
 
+  const theme = {
+      bg: isDarkMode ? 'bg-slate-900' : 'bg-white',
+      border: isDarkMode ? 'border-slate-800' : 'border-slate-200',
+      text: isDarkMode ? 'text-white' : 'text-slate-900',
+      subText: isDarkMode ? 'text-slate-400' : 'text-slate-500',
+  };
+
   return (
-    <div className="max-w-6xl mx-auto space-y-6 pb-20 animate-in fade-in slide-in-from-bottom-8">
+    <div className={`max-w-6xl mx-auto space-y-6 pb-20 animate-in fade-in slide-in-from-bottom-8`}>
       
-      {/* HEADER */}
       <div className="flex flex-col md:flex-row gap-6 items-center justify-between">
         <div className="flex items-center gap-4">
           <div className="p-4 bg-gradient-to-br from-cyan-500 to-blue-600 rounded-2xl shadow-lg shadow-cyan-500/20 text-white">
@@ -298,34 +305,34 @@ export default function TypingMaster({ user }) {
             <h2 className="text-4xl font-black uppercase tracking-tighter text-transparent bg-clip-text bg-gradient-to-r from-cyan-500 to-blue-600">
               Neural Typer 2.0
             </h2>
-            <p className="text-[10px] font-bold text-slate-400 uppercase tracking-[0.3em]">
+            <p className={`text-[10px] font-bold uppercase tracking-[0.3em] ${theme.subText}`}>
               Level {currentLevel} • {perfectStreak}/5 Perfect Streak
             </p>
           </div>
         </div>
         <div className="flex gap-4">
-           <button onClick={() => setSoundEnabled(!soundEnabled)} className={`p-3 rounded-xl ${soundEnabled ? 'bg-indigo-600 text-white' : 'bg-slate-800 text-slate-500'}`}>{soundEnabled ? <Volume2 size={20} /> : <VolumeX size={20} />}</button>
-           <div className="bg-white dark:bg-slate-900 p-1.5 rounded-2xl border border-slate-200 dark:border-slate-800 flex">
-             <button onClick={() => setMode('campaign')} className={`px-6 py-2 rounded-xl font-black text-xs uppercase tracking-widest transition-all ${mode === 'campaign' ? 'bg-cyan-600 text-white shadow-lg' : 'text-slate-400'}`}>Campaign</button>
-             <button onClick={() => setMode('games')} className={`px-6 py-2 rounded-xl font-black text-xs uppercase tracking-widest transition-all ${mode === 'games' ? 'bg-pink-600 text-white shadow-lg' : 'text-slate-400'}`}>Games</button>
+           <button onClick={() => setSoundEnabled(!soundEnabled)} className={`p-3 rounded-xl transition-all ${soundEnabled ? 'bg-indigo-600 text-white' : `${isDarkMode ? 'bg-slate-800 text-slate-500' : 'bg-slate-200 text-slate-400'}`}`}>
+             {soundEnabled ? <Volume2 size={20} /> : <VolumeX size={20} />}
+           </button>
+           <div className={`p-1.5 rounded-2xl border flex ${theme.bg} ${theme.border}`}>
+             <button onClick={() => setMode('campaign')} className={`px-6 py-2 rounded-xl font-black text-xs uppercase tracking-widest transition-all ${mode === 'campaign' ? 'bg-cyan-600 text-white shadow-lg' : theme.subText}`}>Campaign</button>
+             <button onClick={() => setMode('games')} className={`px-6 py-2 rounded-xl font-black text-xs uppercase tracking-widest transition-all ${mode === 'games' ? 'bg-pink-600 text-white shadow-lg' : theme.subText}`}>Games</button>
            </div>
         </div>
       </div>
 
-      {/* --- CAMPAIGN VIEW --- */}
       {mode === 'campaign' && (
         <>
-          {/* 🔥 STATS & REWARD HUD (ENSURED VISIBILITY) */}
           <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
-            <div className="bg-white dark:bg-slate-900 p-4 rounded-2xl border border-slate-200 dark:border-slate-800 flex items-center justify-between">
-               <div><p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Velocity</p><p className="text-3xl font-black text-slate-800 dark:text-white">{wpm}</p></div>
-               <Activity className="text-slate-300" />
+            <div className={`p-4 rounded-2xl border flex items-center justify-between ${theme.bg} ${theme.border}`}>
+               <div><p className={`text-[10px] font-bold uppercase tracking-widest ${theme.subText}`}>Velocity</p><p className={`text-3xl font-black ${theme.text}`}>{wpm}</p></div>
+               <Activity className={theme.subText} />
             </div>
-            <div className="bg-white dark:bg-slate-900 p-4 rounded-2xl border border-slate-200 dark:border-slate-800 flex items-center justify-between">
-               <div><p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Precision</p><p className="text-3xl font-black text-slate-800 dark:text-white">{accuracy}%</p></div>
-               <Target className="text-slate-300" />
+            <div className={`p-4 rounded-2xl border flex items-center justify-between ${theme.bg} ${theme.border}`}>
+               <div><p className={`text-[10px] font-bold uppercase tracking-widest ${theme.subText}`}>Precision</p><p className={`text-3xl font-black ${theme.text}`}>{accuracy}%</p></div>
+               <Target className={theme.subText} />
             </div>
-            <div className="md:col-span-2 bg-gradient-to-r from-orange-500 to-red-600 p-4 rounded-2xl text-white relative overflow-hidden flex items-center justify-between">
+            <div className="md:col-span-2 bg-gradient-to-r from-orange-500 to-red-600 p-4 rounded-2xl text-white relative overflow-hidden flex items-center justify-between shadow-lg shadow-orange-500/20">
                <div className="relative z-10 w-full">
                  <div className="flex justify-between items-center mb-2">
                     <p className="font-bold text-[10px] uppercase tracking-widest opacity-90">Streak Freeze Progress</p>
@@ -341,45 +348,41 @@ export default function TypingMaster({ user }) {
             </div>
           </div>
 
-          {/* SECTOR MAP */}
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-             <div className={`p-4 rounded-xl border-2 transition-all ${currentLevel <= 30 ? 'border-cyan-500 bg-cyan-500/10' : 'border-slate-700 opacity-60'}`}>
-               <div className="flex justify-between"><p className="font-black uppercase text-xs">Sector 1: Basics</p>{currentLevel <= 30 && <Unlock size={14} className="text-cyan-500"/>}</div>
-               <p className="text-[10px] text-slate-400">Levels 1-30</p>
+             <div className={`p-4 rounded-xl border-2 transition-all ${currentLevel <= 30 ? 'border-cyan-500 bg-cyan-500/10' : `${isDarkMode ? 'border-slate-700 bg-slate-800/30' : 'border-slate-200 bg-slate-100'} opacity-60`}`}>
+               <div className={`flex justify-between ${isDarkMode ? 'text-white' : 'text-slate-800'}`}><p className="font-black uppercase text-xs">Sector 1: Basics</p>{currentLevel <= 30 && <Unlock size={14} className="text-cyan-500"/>}</div>
+               <p className={`text-[10px] ${theme.subText}`}>Levels 1-30</p>
              </div>
-             <div className={`p-4 rounded-xl border-2 transition-all ${maxLevel >= 31 ? (currentLevel > 30 && currentLevel <= 60 ? 'border-blue-500 bg-blue-500/10' : 'border-slate-700') : 'border-slate-800 opacity-40 grayscale'}`}>
-               <div className="flex justify-between"><p className="font-black uppercase text-xs">Sector 2: Fluency</p>{maxLevel < 31 && <Lock size={14}/>}</div>
-               <p className="text-[10px] text-slate-400">Levels 31-60</p>
+             <div className={`p-4 rounded-xl border-2 transition-all ${maxLevel >= 31 ? (currentLevel > 30 && currentLevel <= 60 ? 'border-blue-500 bg-blue-500/10' : theme.border) : `${isDarkMode ? 'border-slate-800 bg-slate-900' : 'border-slate-200 bg-slate-100'} opacity-40 grayscale`}`}>
+               <div className={`flex justify-between ${isDarkMode ? 'text-white' : 'text-slate-800'}`}><p className="font-black uppercase text-xs">Sector 2: Fluency</p>{maxLevel < 31 && <Lock size={14}/>}</div>
+               <p className={`text-[10px] ${theme.subText}`}>Levels 31-60</p>
              </div>
-             <div className={`p-4 rounded-xl border-2 transition-all ${maxLevel >= 61 ? (currentLevel > 60 ? 'border-purple-500 bg-purple-500/10' : 'border-slate-700') : 'border-slate-800 opacity-40 grayscale'}`}>
-               <div className="flex justify-between"><p className="font-black uppercase text-xs">Sector 3: Mastery</p>{maxLevel < 61 && <Lock size={14}/>}</div>
-               <p className="text-[10px] text-slate-400">Levels 61-100</p>
+             <div className={`p-4 rounded-xl border-2 transition-all ${maxLevel >= 61 ? (currentLevel > 60 ? 'border-purple-500 bg-purple-500/10' : theme.border) : `${isDarkMode ? 'border-slate-800 bg-slate-900' : 'border-slate-200 bg-slate-100'} opacity-40 grayscale`}`}>
+               <div className={`flex justify-between ${isDarkMode ? 'text-white' : 'text-slate-800'}`}><p className="font-black uppercase text-xs">Sector 3: Mastery</p>{maxLevel < 61 && <Lock size={14}/>}</div>
+               <p className={`text-[10px] ${theme.subText}`}>Levels 61-100</p>
              </div>
           </div>
 
-          {/* LEVEL CONTROLLER */}
-          <div className="flex items-center justify-between bg-white dark:bg-slate-900 p-4 rounded-2xl shadow-sm border border-slate-200 dark:border-slate-800 mt-4">
-             <button onClick={() => jumpLevel('prev')} disabled={currentLevel <= 1} className="p-2 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg disabled:opacity-30"><ChevronLeft/></button>
+          <div className={`flex items-center justify-between p-4 rounded-2xl shadow-sm border mt-4 ${theme.bg} ${theme.border}`}>
+             <button onClick={() => jumpLevel('prev')} disabled={currentLevel <= 1} className={`p-2 rounded-lg disabled:opacity-30 hover:bg-slate-100 dark:hover:bg-slate-800 ${theme.text}`}><ChevronLeft/></button>
              <div className="text-center">
-               <h3 className="text-2xl font-black uppercase text-slate-800 dark:text-white">Level {currentLevel}</h3>
-               <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Max Unlocked: {maxLevel}</p>
+               <h3 className={`text-2xl font-black uppercase ${theme.text}`}>Level {currentLevel}</h3>
+               <p className={`text-[10px] font-bold uppercase tracking-widest ${theme.subText}`}>Max Unlocked: {maxLevel}</p>
              </div>
-             <button onClick={() => jumpLevel('next')} disabled={currentLevel >= maxLevel} className="p-2 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg disabled:opacity-30"><ChevronRight/></button>
+             <button onClick={() => jumpLevel('next')} disabled={currentLevel >= maxLevel} className={`p-2 rounded-lg disabled:opacity-30 hover:bg-slate-100 dark:hover:bg-slate-800 ${theme.text}`}><ChevronRight/></button>
           </div>
 
-          {/* TYPING ARENA */}
-          <div className="relative bg-white dark:bg-[#0f172a] p-10 md:p-14 rounded-[2.5rem] shadow-2xl border border-slate-200 dark:border-slate-800 min-h-[200px] flex flex-col justify-center text-center mt-4">
+          <div className={`relative p-10 md:p-14 rounded-[2.5rem] shadow-2xl border min-h-[200px] flex flex-col justify-center text-center mt-4 transition-colors duration-500 ${isDarkMode ? 'bg-[#0f172a] border-slate-800' : 'bg-white border-slate-100'}`}>
             {isFinished ? (
                <div className="animate-in zoom-in space-y-6">
-                 {/* RESULT STARS */}
                  <div className="flex justify-center gap-4">
                    {[...Array(3)].map((_, i) => (
                      <Star key={i} size={48} className={`transition-all duration-500 ${i < resultStars ? 'fill-yellow-400 text-yellow-500 scale-110 drop-shadow-[0_0_15px_rgba(250,204,21,0.6)]' : 'text-slate-700'}`} />
                    ))}
                  </div>
                  <div>
-                    <h3 className="text-3xl font-black uppercase dark:text-white">{resultStars === 3 ? 'Perfect Sync' : resultStars > 0 ? 'Passed' : 'Sync Failed'}</h3>
-                    <p className="text-slate-400 font-bold mt-2">Accuracy: {accuracy}% • WPM: {wpm}</p>
+                    <h3 className={`text-3xl font-black uppercase ${theme.text}`}>{resultStars === 3 ? 'Perfect Sync' : resultStars > 0 ? 'Passed' : 'Sync Failed'}</h3>
+                    <p className={`font-bold mt-2 ${theme.subText}`}>Accuracy: {accuracy}% • WPM: {wpm}</p>
                  </div>
                  <div className="flex justify-center gap-4">
                     <button onClick={loadLevel} className="bg-slate-700 text-white px-8 py-3 rounded-xl font-black uppercase tracking-widest hover:bg-slate-600 transition-all flex items-center gap-2"><RefreshCw size={18}/> Re-Attempt</button>
@@ -392,12 +395,18 @@ export default function TypingMaster({ user }) {
               <>
                  <div className="font-mono text-xl md:text-2xl leading-loose tracking-wide mb-8 break-words select-none pointer-events-none text-left opacity-90">{renderText()}</div>
                  <textarea ref={inputRef} value={input} onChange={handleTyping} className="absolute inset-0 w-full h-full opacity-0 cursor-text resize-none" autoFocus spellCheck="false" />
-                 {!startTime && <div className="absolute bottom-4 left-1/2 -translate-x-1/2 text-slate-400 font-bold text-xs uppercase tracking-widest animate-bounce">Type to Initialize</div>}
+                 
+                 {!startTime && (
+                   <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+                     <div className={`font-black text-xs uppercase tracking-[0.3em] animate-pulse px-6 py-3 rounded-full border shadow-lg backdrop-blur-sm ${isDarkMode ? 'text-cyan-400 border-cyan-500/30 bg-cyan-500/10' : 'text-blue-500 border-blue-200 bg-blue-50'}`}>
+                       Tap to Initialize
+                     </div>
+                   </div>
+                 )}
               </>
             )}
           </div>
 
-          {/* VIRTUAL KEYBOARD (ALWAYS VISIBLE) */}
           <div className="flex flex-col items-center gap-2 mt-8 opacity-90 select-none">
             {KEYBOARD_ROWS.map((row, rIdx) => (
               <div key={rIdx} className="flex gap-1.5">
@@ -405,13 +414,12 @@ export default function TypingMaster({ user }) {
               </div>
             ))}
             <div className="flex gap-1.5 w-full justify-center">
-               <div className={`w-40 md:w-64 h-8 md:h-10 rounded-lg border-b-4 transition-all duration-75 ${text[input.length] === ' ' ? 'bg-orange-500 border-orange-400' : 'border-slate-700 dark:bg-slate-800/50'}`}></div>
+               <div className={`w-40 md:w-64 h-8 md:h-10 rounded-lg border-b-4 transition-all duration-75 ${text[input.length] === ' ' ? 'bg-orange-500 border-orange-400' : isDarkMode ? 'border-slate-700 bg-slate-800/50' : 'border-slate-300 bg-white'}`}></div>
             </div>
           </div>
         </>
       )}
 
-      {/* --- GAMES VIEW --- */}
       {mode === 'games' && (
         <div className="bg-slate-900 rounded-[2.5rem] p-4 h-[600px] relative overflow-hidden border-4 border-pink-500/30 shadow-2xl">
            {!gameActive ? (

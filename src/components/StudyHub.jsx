@@ -1,198 +1,288 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { supabase } from '../supabaseClient';
 import { 
-  Youtube, PenTool, Save, Trash2, FileDown, 
-  Loader2, Book, ExternalLink, PlayCircle 
+  Youtube, PenTool, Save, Trash2, FileDown, 
+  Loader2, Book, ExternalLink, PlayCircle, UploadCloud, Plus, X // 🔥 Added X here
 } from 'lucide-react';
 import { jsPDF } from 'jspdf';
 
-export default function StudyHub({ user }) {
-  // --- STATES ---
-  const [videoUrl, setVideoUrl] = useState("");
-  const [videoId, setVideoId] = useState("");
-  const [note, setNote] = useState("");
-  const [saving, setSaving] = useState(false);
-  const [lastSaved, setLastSaved] = useState(null);
-  const [books, setBooks] = useState([]);
-  const [loadingBooks, setLoadingBooks] = useState(true);
+export default function StudyHub({ user, isDarkMode }) {
+  // --- STATES ---
+  const [videoUrl, setVideoUrl] = useState("");
+  const [videoId, setVideoId] = useState("");
+  const [note, setNote] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [lastSaved, setLastSaved] = useState(null);
+  
+  // Library States
+  const [books, setBooks] = useState([]);
+  const [loadingBooks, setLoadingBooks] = useState(true);
+  
+  // Upload States
+  const [newTitle, setNewTitle] = useState("");
+  const [newUrl, setNewUrl] = useState("");
+  const [newCategory, setNewCategory] = useState("Computer Science");
+  const [isUploading, setIsUploading] = useState(false);
+  const [showUpload, setShowUpload] = useState(false); 
 
-  // --- 1. INITIAL LOAD: FETCH PDF LIBRARY ---
-  useEffect(() => {
-    const fetchBooks = async () => {
-      setLoadingBooks(true);
-      const { data, error } = await supabase.from('study_resources').select('*').order('created_at', { ascending: false });
-      if (!error && data) setBooks(data);
-      setLoadingBooks(false);
-    };
-    fetchBooks();
-  }, []);
+  const categories = ["Computer Science", "Physics", "Maths", "General", "Notes"];
 
-  // --- 2. VIDEO LOGIC: EXTRACT & LOAD EXISTING NOTES ---
-  const extractAndLoad = async () => {
-    const id = videoUrl.split('v=')[1]?.split('&')[0] || videoUrl.split('/').pop();
-    if (!id) return;
-    setVideoId(id);
+  // --- 1. FETCH PDF LIBRARY ---
+  const fetchBooks = useCallback(async () => {
+    setLoadingBooks(true);
+    const { data, error } = await supabase
+      .from('study_resources')
+      .select('*')
+      .order('created_at', { ascending: false });
+      
+    if (!error && data) setBooks(data);
+    setLoadingBooks(false);
+  }, []);
 
-    // Fetch existing note for this specific video + user
-    const { data, error } = await supabase
-      .from('video_notes')
-      .select('note_content')
-      .eq('user_id', user.id)
-      .eq('video_id', id)
-      .maybeSingle();
+  useEffect(() => {
+    fetchBooks();
+  }, [fetchBooks]);
 
-    if (data) setNote(data.note_content);
-    else setNote(""); // Reset notepad for new video
-  };
+  // --- UPLOAD FUNCTION ---
+  const handleUpload = async () => {
+    if (!newTitle || !newUrl) return alert("Please enter a Title and PDF Link.");
+    
+    setIsUploading(true);
+    
+    const { error } = await supabase.from('study_resources').insert([
+      { 
+        title: newTitle, 
+        file_url: newUrl, 
+        category: newCategory,
+      }
+    ]);
 
-  // --- 3. PERSISTENCE: SAVE TO SUPABASE ---
-  const saveNotes = async () => {
-    if (!videoId) return alert("Load a video first.");
-    setSaving(true);
-    
-    const { error } = await supabase
-      .from('video_notes')
-      .upsert({ 
-        user_id: user.id, 
-        video_id: videoId, 
-        note_content: note,
-        updated_at: new Date() 
-      }, { onConflict: 'user_id, video_id' });
+    if (error) {
+      alert(`Upload Failed: ${error.message}`);
+    } else {
+      setNewTitle("");
+      setNewUrl("");
+      setShowUpload(false); 
+      fetchBooks(); 
+    }
+    setIsUploading(false);
+  };
 
-    if (!error) {
-      setLastSaved(new Date().toLocaleTimeString());
-    } else {
-      console.error("Save Error:", error.message);
-    }
-    setSaving(false);
-  };
+  // --- 2. VIDEO LOGIC ---
+  const extractAndLoad = async () => {
+    const id = videoUrl.split('v=')[1]?.split('&')[0] || videoUrl.split('/').pop();
+    if (!id) return;
+    setVideoId(id);
 
-  // --- 4. EXPORT: CONVERT TO PDF ---
-  const exportPDF = () => {
-    if (!note) return alert("Note is empty.");
-    const doc = new jsPDF();
-    doc.setFont("helvetica", "bold");
-    doc.text(`Neural Study Notes - Video ID: ${videoId}`, 10, 10);
-    doc.setFont("helvetica", "normal");
-    doc.setFontSize(11);
-    
-    const splitText = doc.splitTextToSize(note, 180);
-    doc.text(splitText, 10, 20);
-    
-    doc.save(`Neural_Notes_${videoId}.pdf`);
-  };
+    const { data } = await supabase
+      .from('video_notes')
+      .select('note_content')
+      .eq('user_id', user.id)
+      .eq('video_id', id)
+      .maybeSingle();
 
-  // --- 5. CLEANUP: DELETE FROM GRID ---
-  const deleteNotes = async () => {
-    if (!window.confirm("Wipe these notes from the Neural Grid permanently?")) return;
-    const { error } = await supabase
-      .from('video_notes')
-      .delete()
-      .eq('user_id', user.id)
-      .eq('video_id', videoId);
-    
-    if (!error) {
-      setNote("");
-      setLastSaved(null);
-    }
-  };
+    if (data) setNote(data.note_content);
+    else setNote(""); 
+  };
 
-  return (
-    <div className="space-y-10 pb-20 animate-in fade-in duration-700">
-      
-      {/* 📘 SECTION 1: NEURAL LIBRARY (PDFs) */}
-      <div className="bg-white dark:bg-gray-800 p-8 rounded-[3rem] shadow-2xl border-b-8 border-orange-500 overflow-hidden relative">
-        <div className="flex items-center gap-3 mb-8">
-          <Book className="text-orange-500" size={32} />
-          <h2 className="text-2xl font-black uppercase tracking-tighter dark:text-white">Neural Library</h2>
-        </div>
-        
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {loadingBooks ? (
-            <div className="col-span-full py-10 flex justify-center"><Loader2 className="animate-spin text-orange-500" /></div>
-          ) : books.length > 0 ? (
-            books.map(book => (
-              <div key={book.id} className="p-6 bg-gray-50 dark:bg-gray-900 rounded-[2rem] border-2 border-transparent hover:border-orange-500 transition-all group shadow-sm">
-                <span className="text-[9px] font-black uppercase text-orange-500 bg-orange-100 dark:bg-orange-900/30 px-3 py-1 rounded-full">{book.category}</span>
-                <h4 className="font-bold dark:text-white mt-3 mb-4 line-clamp-1">{book.title}</h4>
-                <a 
-                  href={book.file_url} 
-                  target="_blank" 
-                  rel="noreferrer" 
-                  className="flex items-center justify-between bg-white dark:bg-gray-800 p-3 rounded-xl text-xs font-black uppercase text-gray-500 hover:text-orange-500 transition-all border border-gray-100 dark:border-gray-700 shadow-sm"
-                >
-                  Access PDF <ExternalLink size={14} />
-                </a>
-              </div>
-            ))
-          ) : (
-            <div className="col-span-full py-10 text-center text-gray-400 font-bold uppercase text-xs italic tracking-widest opacity-50">No resources synced to grid yet.</div>
-          )}
-        </div>
-      </div>
+  // --- 3. SAVE NOTES ---
+  const saveNotes = async () => {
+    if (!videoId) return alert("Load a video first.");
+    setSaving(true);
+    
+    const { error } = await supabase
+      .from('video_notes')
+      .upsert({ 
+        user_id: user.id, 
+        video_id: videoId, 
+        note_content: note,
+        updated_at: new Date() 
+      }, { onConflict: 'user_id, video_id' });
 
-      {/* 🎥 SECTION 2: STUDY WORKSPACE (SIDE-BY-SIDE) */}
-      <div className="space-y-6">
-        <div className="bg-white dark:bg-gray-800 p-6 rounded-[2.5rem] shadow-xl flex flex-wrap gap-4 border dark:border-gray-700">
-          <div className="flex-1 relative min-w-[300px]">
-            <input 
-              className="w-full bg-gray-50 dark:bg-gray-900 p-4 pl-12 rounded-2xl outline-none font-bold text-sm border-2 border-transparent focus:border-red-500 transition-all dark:text-white"
-              placeholder="Paste YouTube Lecture Link..." 
-              value={videoUrl} 
-              onChange={e => setVideoUrl(e.target.value)} 
-            />
-            <Youtube className="absolute left-4 top-4 text-red-500" size={20} />
-          </div>
-          <button onClick={extractAndLoad} className="bg-red-600 text-white px-8 py-4 rounded-2xl font-black uppercase text-xs tracking-widest hover:bg-red-700 shadow-lg active:scale-95 transition-all">
-            Load Lecture
-          </button>
-        </div>
+    if (!error) setLastSaved(new Date().toLocaleTimeString());
+    setSaving(false);
+  };
 
-        <div className="grid grid-cols-1 lg:grid-cols-5 gap-6 h-[700px]">
-          {/* LEFT: VIDEO PLAYER (3/5) */}
-          <div className="lg:col-span-3 bg-black rounded-[3rem] overflow-hidden shadow-2xl border-4 border-gray-100 dark:border-gray-800 relative">
-            {videoId ? (
-              <iframe width="100%" height="100%" src={`https://www.youtube.com/embed/${videoId}`} title="Neural Player" frameBorder="0" allowFullScreen></iframe>
-            ) : (
-              <div className="h-full flex flex-col items-center justify-center text-gray-500 gap-4">
-                 <PlayCircle size={80} className="opacity-10 animate-pulse" />
-                 <p className="font-black uppercase text-xs tracking-[0.3em]">Awaiting Visual Input</p>
-              </div>
-            )}
-          </div>
+  // --- 4. EXPORT PDF ---
+  const exportPDF = () => {
+    if (!note) return alert("Note is empty.");
+    const doc = new jsPDF();
+    doc.setFont("helvetica", "bold");
+    doc.text(`Neural Study Notes - Video ID: ${videoId}`, 10, 10);
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(11);
+    const splitText = doc.splitTextToSize(note, 180);
+    doc.text(splitText, 10, 20);
+    doc.save(`Neural_Notes_${videoId}.pdf`);
+  };
 
-          {/* RIGHT: NEURAL NOTEPAD (2/5) */}
-          <div className="lg:col-span-2 bg-white dark:bg-gray-800 rounded-[3rem] shadow-2xl border dark:border-gray-700 flex flex-col overflow-hidden">
-             <div className="p-6 border-b dark:border-gray-700 flex justify-between items-center bg-gray-50/50 dark:bg-gray-900/50">
-                <div className="flex items-center gap-2 text-blue-600">
-                  <PenTool size={20} />
-                  <h3 className="font-black uppercase text-xs tracking-widest">Neural Notepad</h3>
-                </div>
-                <div className="flex gap-2">
-                  <button onClick={exportPDF} title="Export PDF" className="p-2 text-gray-400 hover:text-blue-600 transition-colors"><FileDown size={20}/></button>
-                  <button onClick={deleteNotes} title="Delete Notes" className="p-2 text-gray-400 hover:text-red-500 transition-colors"><Trash2 size={20}/></button>
-                  <button onClick={saveNotes} disabled={saving} className="p-2 text-green-600 hover:scale-110 transition-all">
-                    {saving ? <Loader2 className="animate-spin" size={20} /> : <Save size={20} />}
-                  </button>
-                </div>
-             </div>
-             
-             <div className="flex-1 relative">
-               <textarea 
-                 className="w-full h-full p-8 bg-transparent outline-none font-medium text-sm leading-relaxed dark:text-gray-200 resize-none custom-scrollbar"
-                 placeholder="Begin knowledge synthesis... (Notes auto-save when you click save button)"
-                 value={note}
-                 onChange={e => setNote(e.target.value)}
-               />
-               {lastSaved && (
-                 <div className="absolute bottom-4 right-6 text-[8px] font-black text-green-500 uppercase bg-green-50 dark:bg-green-900/20 px-2 py-1 rounded">
-                   Grid Synced at {lastSaved}
-                 </div>
-               )}
-             </div>
-          </div>
-        </div>
-      </div>
-    </div>
-  );
+  // --- 5. DELETE NOTES ---
+  const deleteNotes = async () => {
+    if (!window.confirm("Delete these notes?")) return;
+    const { error } = await supabase
+      .from('video_notes')
+      .delete()
+      .eq('user_id', user.id)
+      .eq('video_id', videoId);
+    
+    if (!error) {
+      setNote("");
+      setLastSaved(null);
+    }
+  };
+
+  // --- THEME ---
+  const theme = {
+    bg: isDarkMode ? 'bg-slate-900' : 'bg-white',
+    cardBg: isDarkMode ? 'bg-gray-800' : 'bg-white',
+    border: isDarkMode ? 'border-slate-700' : 'border-gray-100',
+    text: isDarkMode ? 'text-white' : 'text-slate-900',
+    subText: isDarkMode ? 'text-slate-400' : 'text-gray-500',
+    inputBg: isDarkMode ? 'bg-slate-950' : 'bg-gray-50',
+    hoverBorder: isDarkMode ? 'hover:border-orange-500' : 'hover:border-orange-500'
+  };
+
+  return (
+    <div className="space-y-10 pb-20 animate-in fade-in duration-700">
+      
+      {/* 📘 SECTION 1: NEURAL LIBRARY (With Upload) */}
+      <div className={`p-8 rounded-[3rem] shadow-2xl border-b-8 border-orange-500 overflow-hidden relative transition-colors duration-500 ${theme.cardBg}`}>
+        
+        <div className="flex items-center justify-between mb-8">
+          <div className="flex items-center gap-3">
+            <Book className="text-orange-500" size={32} />
+            <h2 className={`text-2xl font-black uppercase tracking-tighter ${theme.text}`}>Neural Library</h2>
+          </div>
+          {/* Toggle Upload Button */}
+          <button 
+            onClick={() => setShowUpload(!showUpload)} 
+            className={`p-3 rounded-2xl border-2 transition-all ${showUpload ? 'bg-orange-500 text-white border-orange-500' : `${theme.inputBg} ${theme.text} ${theme.border}`}`}
+          >
+            {showUpload ? <X size={20} /> : <Plus size={20} />}
+          </button>
+        </div>
+
+        {/* 🔥 UPLOAD FORM (Collapsible) */}
+        {showUpload && (
+          <div className="mb-8 p-6 rounded-[2rem] border-2 border-orange-500/30 bg-orange-500/5 animate-in slide-in-from-top-4">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
+              <input 
+                className={`p-4 rounded-xl outline-none font-bold text-sm ${theme.inputBg} ${theme.text}`}
+                placeholder="Book Title"
+                value={newTitle}
+                onChange={e => setNewTitle(e.target.value)}
+              />
+              <input 
+                className={`p-4 rounded-xl outline-none font-bold text-sm ${theme.inputBg} ${theme.text}`}
+                placeholder="PDF Link (URL)"
+                value={newUrl}
+                onChange={e => setNewUrl(e.target.value)}
+              />
+              <select 
+                className={`p-4 rounded-xl outline-none font-bold text-sm ${theme.inputBg} ${theme.text}`}
+                value={newCategory}
+                onChange={e => setNewCategory(e.target.value)}
+              >
+                {categories.map(c => <option key={c} value={c}>{c}</option>)}
+              </select>
+            </div>
+            <button 
+              onClick={handleUpload} 
+              disabled={isUploading}
+              className="w-full bg-orange-500 text-white py-3 rounded-xl font-black uppercase tracking-widest hover:bg-orange-600 transition-all flex justify-center items-center gap-2"
+            >
+              {isUploading ? <Loader2 className="animate-spin" /> : <><UploadCloud size={18} /> Upload Resource</>}
+            </button>
+          </div>
+        )}
+        
+        {/* BOOKS GRID */}
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 max-h-[400px] overflow-y-auto custom-scrollbar pr-2">
+          {loadingBooks ? (
+            <div className="col-span-full py-10 flex justify-center"><Loader2 className="animate-spin text-orange-500" /></div>
+          ) : books.length > 0 ? (
+            books.map(book => (
+              <div key={book.id} className={`p-6 rounded-[2rem] border-2 border-transparent transition-all group shadow-sm ${theme.inputBg} ${theme.hoverBorder}`}>
+                <span className={`text-[9px] font-black uppercase px-3 py-1 rounded-full ${isDarkMode ? 'text-orange-400 bg-orange-900/30' : 'text-orange-500 bg-orange-100'}`}>{book.category}</span>
+                <h4 className={`font-bold mt-3 mb-4 line-clamp-1 ${theme.text}`}>{book.title}</h4>
+                <a 
+                  href={book.file_url} 
+                  target="_blank" 
+                  rel="noreferrer" 
+                  className={`flex items-center justify-between p-3 rounded-xl text-xs font-black uppercase transition-all border shadow-sm ${theme.bg} ${theme.border} ${theme.subText} hover:text-orange-500`}
+                >
+                  Access PDF <ExternalLink size={14} />
+                </a>
+              </div>
+            ))
+          ) : (
+            <div className={`col-span-full py-10 text-center font-bold uppercase text-xs italic tracking-widest opacity-50 ${theme.subText}`}>No resources found. Upload one!</div>
+          )}
+        </div>
+      </div>
+
+      {/* 🎥 SECTION 2: STUDY WORKSPACE */}
+      <div className="space-y-6">
+        <div className={`p-6 rounded-[2.5rem] shadow-xl flex flex-wrap gap-4 border transition-colors duration-500 ${theme.bg} ${theme.border}`}>
+          <div className="flex-1 relative min-w-[300px]">
+            <input 
+              className={`w-full p-4 pl-12 rounded-2xl outline-none font-bold text-sm border-2 border-transparent focus:border-red-500 transition-all ${theme.inputBg} ${theme.text}`}
+              placeholder="Paste YouTube Lecture Link..." 
+              value={videoUrl} 
+              onChange={e => setVideoUrl(e.target.value)} 
+            />
+            <Youtube className="absolute left-4 top-4 text-red-500" size={20} />
+          </div>
+          <button onClick={extractAndLoad} className="bg-red-600 text-white px-8 py-4 rounded-2xl font-black uppercase text-xs tracking-widest hover:bg-red-700 shadow-lg active:scale-95 transition-all">
+            Load Lecture
+          </button>
+        </div>
+
+        <div className="grid grid-cols-1 lg:grid-cols-5 gap-6 h-[700px]">
+          {/* VIDEO PLAYER */}
+          <div className={`lg:col-span-3 bg-black rounded-[3rem] overflow-hidden shadow-2xl border-4 relative ${theme.border}`}>
+            {videoId ? (
+              <iframe width="100%" height="100%" src={`https://www.youtube.com/embed/${videoId}`} title="Neural Player" frameBorder="0" allowFullScreen></iframe>
+            ) : (
+              <div className="h-full flex flex-col items-center justify-center text-gray-500 gap-4">
+                 <PlayCircle size={80} className="opacity-10 animate-pulse" />
+                 <p className="font-black uppercase text-xs tracking-[0.3em]">Awaiting Visual Input</p>
+              </div>
+            )}
+          </div>
+
+          {/* NOTEPAD */}
+          <div className={`lg:col-span-2 rounded-[3rem] shadow-2xl border flex flex-col overflow-hidden transition-colors duration-500 ${theme.bg} ${theme.border}`}>
+             <div className={`p-6 border-b flex justify-between items-center ${theme.border} ${isDarkMode ? 'bg-slate-900/50' : 'bg-gray-50/50'}`}>
+                <div className="flex items-center gap-2 text-blue-600">
+                  <PenTool size={20} />
+                  <h3 className="font-black uppercase text-xs tracking-widest">Neural Notepad</h3>
+                </div>
+                <div className="flex gap-2">
+                  <button onClick={exportPDF} title="Export PDF" className={`p-2 transition-colors hover:text-blue-600 ${theme.subText}`}><FileDown size={20}/></button>
+                  <button onClick={deleteNotes} title="Delete Notes" className={`p-2 transition-colors hover:text-red-500 ${theme.subText}`}><Trash2 size={20}/></button>
+                  <button onClick={saveNotes} disabled={saving} className="p-2 text-green-600 hover:scale-110 transition-all">
+                    {saving ? <Loader2 className="animate-spin" size={20} /> : <Save size={20} />}
+                  </button>
+                </div>
+             </div>
+             
+             <div className="flex-1 relative">
+               <textarea 
+                 className={`w-full h-full p-8 bg-transparent outline-none font-medium text-sm leading-relaxed resize-none custom-scrollbar ${theme.text}`}
+                 placeholder="Begin knowledge synthesis..."
+                 value={note}
+                 onChange={e => setNote(e.target.value)}
+               />
+               {lastSaved && (
+                 <div className={`absolute bottom-4 right-6 text-[8px] font-black text-green-500 uppercase px-2 py-1 rounded ${isDarkMode ? 'bg-green-900/20' : 'bg-green-50'}`}>
+                   Synced at {lastSaved}
+                 </div>
+               )}
+             </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
 }

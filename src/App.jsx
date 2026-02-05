@@ -6,14 +6,15 @@ import AdminPanel from './components/AdminPanel';
 import { supabase } from './supabaseClient';
 import Profile from './components/Profile';
 import SubjectNotes from './components/SubjectNotes';
-import QuickQuiz from './components/QuickQuiz';
+import StudyHub from './components/StudyHub'; 
+import TypingMaster from './components/TypingMaster'; 
+
+// 🔥 WIDGETS
+import CalendarWidget from './components/CalendarWidget'; 
+import WelcomeHeader from './components/WelcomeHeader'; 
 import GoalTracker from './components/GoalTracker';
 import StudyChat from './components/StudyChat';
-import InviteButton from './components/InviteButton';
-import StudyHub from './components/StudyHub'; 
-import TypingMaster from './components/TypingMaster'; // 🔥 IMPORTED
 
-// 🔥 STABILIZED IMPORTS: All required icons for Dashboard & Engine included
 import { 
   Lock, Megaphone, ShieldAlert, Key, Youtube, 
   Layout, Zap, Award, Database, ListFilter, Skull 
@@ -31,24 +32,20 @@ export default function App() {
 
   // --- 1. THE REAPER (AUTO-DELETE LOGIC) ---
   const runTheReaper = async () => {
-    // Only The Brain runs the cleanup to save resources
     const today = new Date();
     const sixtyDaysAgo = new Date(today);
     sixtyDaysAgo.setDate(today.getDate() - 60);
     const dateStr = sixtyDaysAgo.toISOString().split('T')[0];
 
-    // Find Inactive Users (> 60 days)
     const { data: deadNodes } = await supabase
       .from('profiles')
       .select('id, username')
       .lt('last_mock_date', dateStr)
-      .neq('username', 'TheBrain'); // Never delete yourself
+      .neq('username', 'TheBrain'); 
 
     if (deadNodes && deadNodes.length > 0) {
       console.log("💀 THE REAPER: Purging inactive nodes...", deadNodes);
-      
       for (const node of deadNodes) {
-        // Cascade delete related data
         await supabase.from('scores').delete().eq('user_id', node.id);
         await supabase.from('subject_notes').delete().eq('user_id', node.id);
         await supabase.from('profiles').delete().eq('id', node.id);
@@ -75,13 +72,13 @@ export default function App() {
         .eq('active', true)
         .order('created_at', { ascending: false })
         .limit(1)
-        .maybeSingle(); // 🔥 FIXED: Changed from .single() to .maybeSingle() to avoid 406 error
+        .maybeSingle(); 
       if (data) setGlobalMsg(data.message);
     };
     if (user) fetchAnnouncement();
   }, [user?.id]);
 
-  // --- 3. REFINED STREAK LOGIC (PROTECTION VS COLLAPSE) ---
+  // --- 3. REFINED STREAK LOGIC ---
   const handleStreakCheck = async (profile) => {
     if (!profile?.last_mock_date) return;
     
@@ -99,23 +96,20 @@ export default function App() {
 
     if (lastDate.getTime() < yesterday.getTime()) {
       if (profile.streak_points > 0) {
-        // 🔥 STREAK FREEZE: Consume point to save count
         await supabase.from('profiles').update({ 
           streak_points: profile.streak_points - 1,
           last_mock_date: yesterday.toISOString().split('T')[0] 
         }).eq('id', profile.id);
-        
-        alert("🔥 STREAK PROTECTED: 1 Streak Point consumed to maintain your grid connection.");
+        alert("🔥 STREAK PROTECTED: 1 Streak Point consumed.");
         refreshUser(profile.id);
       } else {
-        // ❄️ STREAK COLLAPSE: Points are 0, reset count
         await supabase.from('profiles').update({ streak_count: 0 }).eq('id', profile.id);
         refreshUser(profile.id);
       }
     }
   };
 
-  // --- 4. NEW LOGIN SYSTEM (INVITE CODES) ---
+  // --- 4. LOGIN SYSTEM ---
   const handleLogin = async () => {
     if (!username.trim()) return;
     setLoginError('');
@@ -131,18 +125,15 @@ export default function App() {
         .maybeSingle();
 
       if (existingUser) {
-        // User exists -> Log them in
         setUser(existingUser);
         handleStreakCheck(existingUser);
-        
-        // If "The Brain" logs in, run The Reaper
         if (existingUser.username.toLowerCase() === 'thebrain') {
           runTheReaper();
         }
         return;
       }
 
-      // B. IF USER DOES NOT EXIST -> CHECK INVITE CODES
+      // B. CHECK INVITE CODES
       const { data: invite } = await supabase
         .from('invite_codes')
         .select('*')
@@ -151,26 +142,24 @@ export default function App() {
         .maybeSingle();
 
       if (invite) {
-        // Valid Code Found -> Create Account using the Code as Username
         const { data: newUser, error: createError } = await supabase
           .from('profiles')
           .insert([{ 
-            username: inputName, // The code becomes the username
-            is_verified: true,   // Auto-verified
-            last_mock_date: new Date().toISOString().split('T')[0] // Mark active today
+            username: inputName, 
+            is_verified: true, 
+            last_mock_date: new Date().toISOString().split('T')[0] 
           }])
           .select()
           .single();
 
         if (newUser && !createError) {
-          // Mark invite as used
           await supabase.from('invite_codes').update({ is_used: true }).eq('id', invite.id);
           setUser(newUser);
         } else {
           setLoginError("Error initializing node.");
         }
       } else {
-        setLoginError("❌ Access Denied: User not found or Invalid Invite Code.");
+        setLoginError("❌ Access Denied.");
       }
 
     } catch (err) { 
@@ -179,17 +168,16 @@ export default function App() {
     }
   };
 
-  // Admin Request (for regular users)
   const sendAdminRequest = async () => {
     const msg = window.prompt("Transmission to The Brain:");
     if (!msg) return;
     await supabase.from('admin_requests').insert([{
       user_id: user.id, user_name: user.username, message: msg, request_type: 'USER_REQUEST'
     }]);
-    alert("Signal transmitted to The Brain.");
+    alert("Signal transmitted.");
   };
 
-  // --- VIEW: LOGIN (SOLAR RESTORED) ---
+  // --- VIEW: LOGIN ---
   if (!user) {
     return (
       <div className={`flex items-center justify-center min-h-screen transition-colors duration-500 ${isDarkMode ? 'bg-slate-950' : 'bg-blue-50'}`}>
@@ -216,7 +204,6 @@ export default function App() {
     );
   }
 
-  // Admin Check
   const isAdmin = user.username.toLowerCase() === 'thebrain' || user.is_moderator;
 
   // --- DASHBOARD WRAPPER ---
@@ -224,13 +211,13 @@ export default function App() {
     <div className={isDarkMode ? 'dark' : ''}>
       <div className={`flex min-h-screen transition-colors duration-300 ${isDarkMode ? 'bg-slate-950 text-slate-100' : 'bg-blue-50 text-gray-800'}`}>
         
-        {/* SIDEBAR LOCKDOWN */}
         <div className={`${isExamLocked ? 'pointer-events-none opacity-40 blur-[3px] grayscale select-none' : ''} transition-all duration-700 z-40`}>
           <Sidebar user={user} activeTab={activeTab} setActiveTab={setActiveTab} setIsDarkMode={setIsDarkMode} isDarkMode={isDarkMode} isOpen={isSidebarOpen} setIsOpen={setIsSidebarOpen} />
         </div>
         
         <main className={`flex-1 p-6 md:p-10 transition-all duration-300 ${isSidebarOpen ? 'ml-64' : 'ml-20'}`}>
-          {/* HEADER SECTION */}
+          
+          {/* HEADER */}
           <header className={`mb-10 flex flex-wrap items-center gap-6 transition-all duration-700 ${isExamLocked ? 'opacity-20 pointer-events-none select-none -translate-y-4' : ''}`}>
             <h2 className={`text-4xl font-black capitalize transition-colors ${isDarkMode ? 'text-blue-400' : 'text-blue-600'}`}>
               {activeTab === 'ranking' ? 'Leaderboard' : activeTab === 'study' ? 'Study Hub' : activeTab === 'typing' ? 'Neural Typer' : activeTab}
@@ -252,40 +239,36 @@ export default function App() {
           <div className="max-w-7xl mx-auto space-y-8">
             {activeTab === 'dashboard' && (
               <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-700">
-                <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-                  {/* 🔥 DASHBOARD MAIN CARD: SOLAR (WHITE/BLACK) vs LUNAR (DARK/WHITE) */}
-                  <div className={`lg:col-span-2 p-10 rounded-[2.5rem] shadow-xl border-b-8 border-blue-500 flex flex-col justify-between relative overflow-hidden group transition-all duration-500 ${
-                    isDarkMode ? 'bg-slate-900 text-white' : 'bg-white text-gray-900'
-                  }`}>
-                    <div className="absolute top-0 right-0 p-10 opacity-5 group-hover:rotate-12 transition-transform duration-700"><Layout size={160} /></div>
-                    <div className="relative z-10">
-                      <div className="flex justify-between items-start mb-6">
-                        <div>
-                          <h3 className="text-4xl font-black uppercase tracking-tighter">Welcome, {user.username}</h3>
-                          <p className="text-blue-600 font-black text-[10px] uppercase tracking-[0.3em] mt-2 italic">Identity: {user.education || 'Neural Aspirant'}</p>
-                        </div>
-                        <InviteButton />
-                      </div>
-                      <div className={`p-6 rounded-3xl border backdrop-blur-sm transition-colors ${isDarkMode ? 'bg-blue-900/20 border-blue-800' : 'bg-blue-50 border-blue-100'}`}>
-                        <p className={`text-sm font-bold ${isDarkMode ? 'text-slate-300' : 'text-gray-600'}`}>
-                          Synchronization Active. Global Performance Index: <span className="text-blue-600 font-black">{(user.total_percentage_points / (user.total_exams_completed || 1)).toFixed(1)}%</span>
-                        </p>
-                      </div>
-                    </div>
+                
+                {/* 1. INTEL SEARCH BAR */}
+                <WelcomeHeader isDarkMode={isDarkMode} />
+
+                {/* 2. THREE-COLUMN GRID: Calendar | Chat (WIDE) | Timer */}
+                {/* 🔥 GRID COLS = 4. Chat takes 2 spans (50% width) */}
+                <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
+                  
+                  {/* LEFT: Calendar (25%) */}
+                  <div className="h-full lg:col-span-1">
+                     <CalendarWidget isDarkMode={isDarkMode} />
                   </div>
-                  <div className="lg:col-span-1 min-h-[250px]"><GoalTracker user={user} isDarkMode={isDarkMode} /></div>
+                  
+                  {/* CENTER: CHAT (50% - FILLS THE GAP) */}
+                  <div className="h-full lg:col-span-2">
+                     <StudyChat user={user} isDarkMode={isDarkMode} />
+                  </div>
+
+                  {/* RIGHT: GOALS (25%) */}
+                  <div className="h-full lg:col-span-1">
+                     <GoalTracker user={user} isDarkMode={isDarkMode} />
+                  </div>
+
                 </div>
-                <div className="grid grid-cols-1 lg:grid-cols-5 gap-8">
-                  <div className="lg:col-span-3"><QuickQuiz isDarkMode={isDarkMode} /></div>
-                  <div className="lg:col-span-2 flex flex-col min-h-[400px]"><StudyChat user={user} isDarkMode={isDarkMode} /></div>
-                </div>
+
               </div>
             )}
             
             {activeTab === 'study' && <StudyHub user={user} isDarkMode={isDarkMode} />}
             {activeTab === 'subjects' && <SubjectNotes user={user} isDarkMode={isDarkMode} />}
-            
-            {/* 🔥 ADDED: Neural Typer Rendering Logic */}
             {activeTab === 'typing' && <TypingMaster user={user} isDarkMode={isDarkMode} />}
             
             {activeTab === 'mocks' && (
@@ -303,10 +286,7 @@ export default function App() {
             )}
 
             {activeTab === 'ranking' && <Leaderboard isDarkMode={isDarkMode} />}
-            
-            {/* 🔥 FIXED: Passing user prop for Tiered Admin Access */}
             {activeTab === 'admin' && <AdminPanel user={user} isDarkMode={isDarkMode} />}
-            
             {activeTab === 'profile' && <Profile user={user} isDarkMode={isDarkMode} />}
           </div>
 

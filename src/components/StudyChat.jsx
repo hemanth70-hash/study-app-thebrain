@@ -2,92 +2,112 @@ import React, { useState, useEffect, useRef } from 'react';
 import { supabase } from '../supabaseClient';
 import { Send, MessageSquare } from 'lucide-react';
 
-export default function StudyChat({ user }) {
-  const [messages, setMessages] = useState([]);
-  const [newMessage, setNewMessage] = useState('');
-  const scrollRef = useRef();
+export default function StudyChat({ user, isDarkMode }) {
+  const [messages, setMessages] = useState([]);
+  const [newMessage, setNewMessage] = useState('');
+  const scrollRef = useRef();
 
-  // --- 1. REAL-TIME SYNCHRONIZATION ---
-  useEffect(() => {
-    fetchMessages();
+  // --- 1. REAL-TIME SYNCHRONIZATION ---
+  useEffect(() => {
+    fetchMessages();
 
-    const channel = supabase
-      .channel('public:study_chat')
-      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'study_chat' }, 
-        (payload) => {
-          setMessages((prev) => [...prev, payload.new]);
-        }
-      )
-      .subscribe();
+    const channel = supabase
+      .channel('public:study_chat')
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'study_chat' }, 
+        (payload) => {
+          setMessages((prev) => [...prev, payload.new]);
+        }
+      )
+      .subscribe();
 
-    return () => supabase.removeChannel(channel);
-  }, []);
+    return () => supabase.removeChannel(channel);
+  }, []);
 
-  // --- 2. AUTO-SCROLL LOGIC ---
-  useEffect(() => {
-    scrollRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [messages]);
+  // --- 2. AUTO-SCROLL LOGIC ---
+  useEffect(() => {
+    scrollRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, [messages]);
 
-  const fetchMessages = async () => {
-    const { data } = await supabase
-      .from('study_chat')
-      .select('*')
-      .order('created_at', { ascending: true })
-      .limit(50);
-    setMessages(data || []);
-  };
+  const fetchMessages = async () => {
+    const { data } = await supabase
+      .from('study_chat')
+      .select('*')
+      .order('created_at', { ascending: true })
+      .limit(50);
+    setMessages(data || []);
+  };
 
-  const sendMessage = async (e) => {
-    e.preventDefault();
-    if (!newMessage.trim()) return;
+  const sendMessage = async (e) => {
+    e.preventDefault();
+    if (!newMessage.trim()) return;
 
-    const { error } = await supabase.from('study_chat').insert([
-      { user_name: user.username, message: newMessage }
-    ]);
-    
-    if (!error) setNewMessage('');
-  };
+    const { error } = await supabase.from('study_chat').insert([
+      { user_name: user.username, message: newMessage }
+    ]);
+    
+    if (!error) setNewMessage('');
+  };
 
-  return (
-    /* 🔥 FIXED HEIGHT: Adjust h-[420px] to match your QuickQuiz card exactly */
-    <div className="bg-white dark:bg-gray-800 rounded-[2.5rem] shadow-xl flex flex-col h-[420px] border-b-8 border-blue-600 overflow-hidden transition-all">
-      
-      {/* HEADER: SHRINK-0 prevents title from disappearing */}
-      <div className="p-5 border-b dark:border-gray-700 flex items-center gap-3 text-blue-600 shrink-0">
-        <MessageSquare size={20} />
-        <h3 className="text-xs font-black uppercase tracking-widest">Live Study Chat</h3>
-      </div>
+  // --- STYLES ---
+  const theme = {
+    bg: isDarkMode ? 'bg-slate-950' : 'bg-white',
+    border: isDarkMode ? 'border-slate-800' : 'border-slate-200',
+    text: isDarkMode ? 'text-white' : 'text-slate-900',
+    inputBg: isDarkMode ? 'bg-slate-900 text-white' : 'bg-slate-50 text-slate-900',
+    subText: isDarkMode ? 'text-slate-500' : 'text-slate-400',
+    msgUser: 'bg-blue-600 text-white',
+    msgOther: isDarkMode ? 'bg-slate-900 text-slate-200 border border-slate-800' : 'bg-slate-100 text-slate-800 border border-slate-200'
+  };
 
-      {/* MESSAGES AREA: flex-1 + overflow-y-auto creates the internal scroll */}
-      <div className="flex-1 overflow-y-auto p-5 space-y-4 custom-scrollbar bg-gray-50/30 dark:bg-gray-900/10">
-        {messages.map((msg, i) => (
-          <div key={i} className={`flex flex-col ${msg.user_name === user.username ? 'items-end' : 'items-start'}`}>
-            <span className="text-[10px] font-black text-gray-400 mb-1 px-2 uppercase">{msg.user_name}</span>
-            <div className={`p-3 rounded-2xl max-w-[85%] text-xs font-bold shadow-sm leading-relaxed ${
-              msg.user_name === user.username 
-              ? 'bg-blue-600 text-white rounded-tr-none' 
-              : 'bg-white dark:bg-gray-700 text-gray-800 dark:text-white rounded-tl-none border dark:border-gray-600'
-            }`}>
-              {msg.message}
-            </div>
-          </div>
-        ))}
-        <div ref={scrollRef} />
-      </div>
+  return (
+    // 🔥 FIXED HEIGHT: h-[380px] matches the Calendar Widget exactly
+    <div className={`rounded-3xl shadow-xl flex flex-col h-[380px] border-b-4 border-blue-600 overflow-hidden transition-all duration-500 ${theme.bg} ${theme.text}`}>
+      
+      {/* HEADER */}
+      <div className={`p-4 border-b flex items-center gap-2 shrink-0 ${theme.border}`}>
+        <div className={`p-2 rounded-lg ${isDarkMode ? 'bg-blue-900/20' : 'bg-blue-50'}`}>
+          <MessageSquare size={16} className="text-blue-600" />
+        </div>
+        <h3 className={`text-xs font-black uppercase tracking-widest ${theme.text}`}>Live Signals</h3>
+        <div className="ml-auto flex items-center gap-1">
+          <span className="relative flex h-2 w-2">
+            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75"></span>
+            <span className="relative inline-flex rounded-full h-2 w-2 bg-green-500"></span>
+          </span>
+          <span className="text-[9px] font-bold text-green-500">LIVE</span>
+        </div>
+      </div>
 
-      {/* INPUT AREA: FIXED AT BOTTOM */}
-      <form onSubmit={sendMessage} className="p-4 bg-white dark:bg-gray-800 border-t dark:border-gray-700 flex gap-2 shrink-0">
-        <input 
-          type="text" 
-          className="flex-1 p-3 rounded-xl border-none outline-none focus:ring-2 focus:ring-blue-500 bg-gray-100 dark:bg-gray-900 dark:text-white text-xs font-bold"
-          placeholder="Type a signal..."
-          value={newMessage}
-          onChange={(e) => setNewMessage(e.target.value)}
-        />
-        <button type="submit" className="bg-blue-600 text-white p-3 rounded-xl hover:bg-blue-700 transition-all active:scale-90">
-          <Send size={16} />
-        </button>
-      </form>
-    </div>
-  );
+      {/* MESSAGES AREA */}
+      <div className="flex-1 overflow-y-auto p-4 space-y-3 custom-scrollbar">
+        {messages.map((msg, i) => (
+          <div key={i} className={`flex flex-col ${msg.user_name === user.username ? 'items-end' : 'items-start'}`}>
+            <span className="text-[9px] font-black opacity-40 mb-1 px-1 uppercase">{msg.user_name}</span>
+            <div className={`px-3 py-2 rounded-2xl max-w-[85%] text-xs font-bold shadow-sm leading-relaxed ${
+              msg.user_name === user.username 
+              ? `${theme.msgUser} rounded-tr-none` 
+              : `${theme.msgOther} rounded-tl-none`
+            }`}>
+              {msg.message}
+            </div>
+          </div>
+        ))}
+        <div ref={scrollRef} />
+      </div>
+
+      {/* INPUT AREA */}
+      <form onSubmit={sendMessage} className={`p-3 border-t flex gap-2 shrink-0 ${theme.bg} ${theme.border}`}>
+        <input 
+          type="text" 
+          className={`flex-1 p-2.5 rounded-xl border-none outline-none focus:ring-2 focus:ring-blue-500 text-xs font-bold transition-all ${theme.inputBg}`}
+          placeholder="Transmit message..."
+          value={newMessage}
+          onChange={(e) => setNewMessage(e.target.value)}
+        />
+        <button type="submit" className="bg-blue-600 text-white p-2.5 rounded-xl hover:bg-blue-700 transition-all active:scale-95 shadow-lg shadow-blue-500/20">
+          <Send size={16} />
+        </button>
+      </form>
+    </div>
+  );
 }

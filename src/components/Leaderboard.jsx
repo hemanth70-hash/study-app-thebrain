@@ -2,55 +2,43 @@ import React, { useEffect, useState } from 'react';
 import { supabase } from '../supabaseClient';
 import { Trophy, Medal, Flame, ShieldCheck, GraduationCap, Target, Loader2, Award, Crown, Skull, AlertTriangle } from 'lucide-react';
 
-export default function Leaderboard() {
+export default function Leaderboard({ isDarkMode }) {
   const [rankings, setRankings] = useState([]);
   const [loading, setLoading] = useState(true);
 
   // --- 1. NEURAL RANK HELPER ---
   const getNeuralRank = (totalPoints, totalExams) => {
     const gpa = totalExams > 0 ? (totalPoints / totalExams) : 0;
-    if (gpa >= 95) return { label: 'Architect', color: 'text-purple-500 bg-purple-50 dark:bg-purple-900/30 border-purple-200' };
-    if (gpa >= 85) return { label: 'Genius', color: 'text-blue-600 bg-blue-50 dark:bg-blue-900/30 border-blue-200' };
-    if (gpa >= 70) return { label: 'Specialist', color: 'text-green-600 bg-green-50 dark:bg-green-900/30 border-green-200' };
-    if (gpa >= 50) return { label: 'Scholar', color: 'text-orange-600 bg-orange-50 dark:bg-orange-900/30 border-orange-200' };
-    return { label: 'Aspirant', color: 'text-slate-400 bg-slate-50 dark:bg-slate-800 border-slate-200' };
+    if (gpa >= 95) return { label: 'Architect', color: isDarkMode ? 'text-purple-400 bg-purple-900/30 border-purple-800' : 'text-purple-500 bg-purple-50 border-purple-200' };
+    if (gpa >= 85) return { label: 'Genius', color: isDarkMode ? 'text-blue-400 bg-blue-900/30 border-blue-800' : 'text-blue-600 bg-blue-50 border-blue-200' };
+    if (gpa >= 70) return { label: 'Specialist', color: isDarkMode ? 'text-green-400 bg-green-900/30 border-green-800' : 'text-green-600 bg-green-50 border-green-200' };
+    if (gpa >= 50) return { label: 'Scholar', color: isDarkMode ? 'text-orange-400 bg-orange-900/30 border-orange-800' : 'text-orange-600 bg-orange-50 border-orange-200' };
+    return { label: 'Aspirant', color: isDarkMode ? 'text-slate-400 bg-slate-800 border-slate-700' : 'text-slate-400 bg-slate-50 border-slate-200' };
   };
 
   // --- 2. THE TRUTH ENGINE (Visual Streak Fix) ---
   const calculateRealStreak = (user) => {
     if (!user.last_mock_date || user.streak_count === 0) return 0;
-
     const today = new Date();
     today.setHours(0, 0, 0, 0);
-    
     const yesterday = new Date(today);
     yesterday.setDate(yesterday.getDate() - 1);
-
     const lastDate = new Date(user.last_mock_date);
     lastDate.setHours(0, 0, 0, 0);
-
-    if (lastDate.getTime() < yesterday.getTime()) {
-      return 0; // Streak is dead visually
-    }
+    if (lastDate.getTime() < yesterday.getTime()) return 0;
     return user.streak_count;
   };
 
   // --- 🔥 3. INACTIVITY WATCHDOG ---
   const getInactivityStatus = (lastDateStr) => {
     if (!lastDateStr) return { status: 'dead', days: 99 };
-    
     const last = new Date(lastDateStr);
     const today = new Date();
     const diffTime = Math.abs(today - last);
     const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-
-    // Reaper deletes at 60 days
     if (diffDays > 60) return { status: 'purge', days: diffDays }; 
-    // Danger Zone (30-60 days)
     if (diffDays > 30) return { status: 'danger', days: diffDays, remaining: 60 - diffDays };
-    // Warning Zone (7-30 days)
     if (diffDays > 7) return { status: 'warning', days: diffDays };
-    
     return { status: 'active', days: 0 };
   };
 
@@ -110,8 +98,9 @@ export default function Leaderboard() {
       </div>
 
       {/* --- RANKINGS TABLE --- */}
-      {/* 🔥 THEME FIX: Swapped gray-800 for slate-900 */}
-      <div className="bg-white dark:bg-slate-900 rounded-[3rem] shadow-2xl border dark:border-slate-700 overflow-hidden">
+      <div className={`rounded-[3rem] shadow-2xl border transition-colors duration-500 overflow-hidden ${
+        isDarkMode ? 'bg-slate-900 border-slate-700' : 'bg-white border-slate-100'
+      }`}>
         <div className="overflow-x-auto p-4">
           <table className="w-full text-left border-separate border-spacing-y-4">
             <thead>
@@ -130,23 +119,20 @@ export default function Leaderboard() {
                   ? (u.total_percentage_points / u.total_exams_completed).toFixed(1) 
                   : 0;
                 
-                // Real-time calculations
                 const displayStreak = calculateRealStreak(u);
                 const health = getInactivityStatus(u.last_mock_date);
 
-                // Top 3 Styling Logic
                 let rankDisplay;
-                // 🔥 THEME FIX: Swapped gray-900 for slate-800 for better blue tint
-                let rankStyle = "bg-gray-50 dark:bg-slate-800/50 border-transparent";
+                let rankStyle = isDarkMode ? "bg-slate-800/50 border-slate-700" : "bg-gray-50 border-transparent";
                 
                 if (index === 0) {
-                    rankStyle = "bg-yellow-50/50 dark:bg-yellow-900/10 border-yellow-200 dark:border-yellow-800";
+                    rankStyle = isDarkMode ? "bg-yellow-900/10 border-yellow-800" : "bg-yellow-50/50 border-yellow-200";
                     rankDisplay = <Crown size={32} className="text-yellow-500 fill-yellow-500 animate-bounce" />;
                 } else if (index === 1) {
-                    rankStyle = "bg-slate-100/50 dark:bg-slate-800/80 border-slate-200 dark:border-slate-600";
+                    rankStyle = isDarkMode ? "bg-slate-800/80 border-slate-600" : "bg-slate-100/50 border-slate-200";
                     rankDisplay = <Medal size={28} className="text-slate-400 fill-slate-200" />;
                 } else if (index === 2) {
-                    rankStyle = "bg-orange-50/50 dark:bg-orange-900/10 border-orange-200 dark:border-orange-800";
+                    rankStyle = isDarkMode ? "bg-orange-900/10 border-orange-800" : "bg-orange-50/50 border-orange-200";
                     rankDisplay = <Medal size={28} className="text-amber-700 fill-amber-500" />;
                 } else {
                     rankDisplay = <span className="font-black text-2xl text-slate-300 italic">#{index + 1}</span>;
@@ -165,7 +151,9 @@ export default function Leaderboard() {
                     {/* Identity & Status */}
                     <td className="px-6 py-4">
                       <div className="flex items-center gap-4">
-                        <div className={`w-12 h-12 rounded-2xl bg-white dark:bg-slate-700 border-2 p-0.5 overflow-hidden ${index === 0 ? 'border-yellow-400 shadow-yellow-200 shadow-lg' : 'border-blue-100 dark:border-slate-600'}`}>
+                        <div className={`w-12 h-12 rounded-2xl border-2 p-0.5 overflow-hidden ${
+                          isDarkMode ? 'bg-slate-700 border-slate-600' : 'bg-white border-blue-100'
+                        } ${index === 0 ? 'border-yellow-400 shadow-yellow-200 shadow-lg' : ''}`}>
                           <img 
                             src={`https://api.dicebear.com/7.x/${u.gender === 'neutral' ? 'bottts' : 'avataaars'}/svg?seed=${u.avatar_seed || u.username}${u.gender === 'female' ? '&facialHairProbability=0' : ''}`} 
                             className="w-full h-full object-contain"
@@ -174,9 +162,7 @@ export default function Leaderboard() {
                         </div>
                         <div className="flex flex-col">
                           <div className="flex items-center gap-2">
-                            <span className="font-black dark:text-white uppercase text-sm tracking-tight">{u.username}</span>
-                            
-                            {/* 🔥 INACTIVITY BADGES */}
+                            <span className={`font-black uppercase text-sm tracking-tight ${isDarkMode ? 'text-white' : 'text-slate-900'}`}>{u.username}</span>
                             {health.status === 'warning' && (
                               <span className="bg-yellow-100 text-yellow-600 border border-yellow-200 px-2 py-0.5 rounded text-[8px] font-black uppercase flex items-center gap-1">
                                 <AlertTriangle size={8} /> Inactive
@@ -188,7 +174,6 @@ export default function Leaderboard() {
                               </span>
                             )}
                           </div>
-
                           <div className={`mt-1 inline-flex items-center gap-1.5 px-2 py-0.5 rounded-lg border text-[8px] font-black uppercase tracking-widest w-fit shadow-sm ${nodeRank.color}`}>
                             <ShieldCheck size={10} />
                             {nodeRank.label}
@@ -197,7 +182,7 @@ export default function Leaderboard() {
                       </div>
                     </td>
 
-                    {/* Goal */}
+                    {/* Goal Profile */}
                     <td className="px-6 py-4">
                       <div className="flex flex-col gap-1">
                         <div className="flex items-center gap-2 text-[10px] font-bold text-slate-500 uppercase tracking-widest">
@@ -219,10 +204,10 @@ export default function Leaderboard() {
 
                     {/* Streak */}
                     <td className="px-6 py-4 text-right rounded-r-[2rem]">
-                      <div className={`inline-flex items-center gap-3 bg-white dark:bg-slate-700 px-5 py-2.5 rounded-2xl border-2 shadow-sm transition-all ${
+                      <div className={`inline-flex items-center gap-3 px-5 py-2.5 rounded-2xl border-2 shadow-sm transition-all ${
                         displayStreak > 0 
-                        ? 'border-orange-100 dark:border-orange-900/30' 
-                        : 'border-slate-100 dark:border-slate-600 opacity-60 grayscale'
+                        ? (isDarkMode ? 'bg-slate-700 border-orange-900/30' : 'bg-white border-orange-100') 
+                        : (isDarkMode ? 'bg-slate-800 border-slate-600 opacity-60 grayscale' : 'bg-white border-slate-100 opacity-60 grayscale')
                       }`}>
                         <Flame size={18} className={`${displayStreak > 0 ? 'text-orange-500 fill-orange-500 animate-pulse' : 'text-slate-300'}`} />
                         <span className={`font-black text-xl ${displayStreak > 0 ? 'text-orange-600' : 'text-slate-400'}`}>
