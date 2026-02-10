@@ -35,10 +35,11 @@ export default function AdminPanel({ user, isDarkMode }) {
   const [bookUrl, setBookUrl] = useState('');
   const [bookCategory, setBookCategory] = useState('Computer Science'); 
 
+  // 🔥 Categories List (Same as StudyHub)
   const librarySubjects = [
     "Computer Science", "Reasoning", "Aptitude", 
     "General Awareness", "Maths", "Physics", 
-    "Chemistry", "English"
+    "Chemistry", "English", "General", "Notes"
   ];
 
   // --- 4. DEV LOGS & BROADCAST ---
@@ -161,10 +162,15 @@ export default function AdminPanel({ user, isDarkMode }) {
     fetchAdminData();
   };
 
+  // 🔥 UPDATED: Upload Resource with Category
   const uploadResource = async () => {
     if (!bookTitle || !bookUrl) return alert("Data missing.");
-    const { error } = await supabase.from('study_materials').insert([
-      { title: bookTitle, url: bookUrl, subject: bookCategory, type: 'pdf' }
+    const { error } = await supabase.from('study_resources').insert([
+      { 
+        title: bookTitle, 
+        file_url: bookUrl, 
+        category: bookCategory // <--- Now sending category
+      }
     ]);
     if (error) alert(`Upload Error: ${error.message}`);
     else {
@@ -240,27 +246,27 @@ export default function AdminPanel({ user, isDarkMode }) {
           <div className="space-y-4">
             <input className={`w-full p-4 rounded-2xl border font-bold outline-none ${theme.input} ${theme.border}`} placeholder="Title" value={mockTitle} onChange={e => setMockTitle(e.target.value)} />
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-               <div className="relative">
-                 <input type="number" className={`w-full p-4 rounded-2xl border font-black outline-none ${theme.input} ${theme.border}`} value={timeLimit} onChange={e => setTimeLimit(e.target.value)} placeholder="Mins" />
-                 <Clock size={16} className="absolute right-4 top-5 text-slate-400" />
-               </div>
-               
-               {/* 🔥 LOCKED DAILY TOGGLE */}
-               <button 
-                 onClick={() => canUploadDaily && setIsDailyQuickMock(!isDailyQuickMock)} 
-                 className={`p-4 rounded-2xl font-black uppercase text-[10px] flex items-center gap-2 transition-all ${
-                   isDailyQuickMock 
-                   ? 'bg-orange-500 text-white shadow-lg' 
-                   : !canUploadDaily 
-                     ? 'bg-slate-100 text-slate-400 cursor-not-allowed opacity-50' 
-                     : isDarkMode ? 'bg-slate-800 text-slate-500' : 'bg-slate-100 text-slate-500'
-                 }`}
-               >
-                 {canUploadDaily ? <Zap size={14} /> : <Lock size={14} />} 
-                 {isDailyQuickMock ? 'Daily' : 'Regular'}
-               </button>
+                <div className="relative">
+                  <input type="number" className={`w-full p-4 rounded-2xl border font-black outline-none ${theme.input} ${theme.border}`} value={timeLimit} onChange={e => setTimeLimit(e.target.value)} placeholder="Mins" />
+                  <Clock size={16} className="absolute right-4 top-5 text-slate-400" />
+                </div>
+                
+                {/* 🔥 LOCKED DAILY TOGGLE */}
+                <button 
+                  onClick={() => canUploadDaily && setIsDailyQuickMock(!isDailyQuickMock)} 
+                  className={`p-4 rounded-2xl font-black uppercase text-[10px] flex items-center gap-2 transition-all ${
+                    isDailyQuickMock 
+                    ? 'bg-orange-500 text-white shadow-lg' 
+                    : !canUploadDaily 
+                      ? 'bg-slate-100 text-slate-400 cursor-not-allowed opacity-50' 
+                      : isDarkMode ? 'bg-slate-800 text-slate-500' : 'bg-slate-100 text-slate-500'
+                  }`}
+                >
+                  {canUploadDaily ? <Zap size={14} /> : <Lock size={14} />} 
+                  {isDailyQuickMock ? 'Daily' : 'Regular'}
+                </button>
 
-               <button onClick={() => setIsStrict(!isStrict)} className={`p-4 rounded-2xl font-black uppercase text-[10px] flex items-center gap-2 transition-all ${isStrict ? 'bg-red-600 text-white shadow-lg' : isDarkMode ? 'bg-slate-800 text-slate-500' : 'bg-slate-100 text-slate-500'}`}><ShieldAlert size={14} /> Strict</button>
+                <button onClick={() => setIsStrict(!isStrict)} className={`p-4 rounded-2xl font-black uppercase text-[10px] flex items-center gap-2 transition-all ${isStrict ? 'bg-red-600 text-white shadow-lg' : isDarkMode ? 'bg-slate-800 text-slate-500' : 'bg-slate-100 text-slate-500'}`}><ShieldAlert size={14} /> Strict</button>
             </div>
             <textarea className={`w-full h-32 p-4 font-mono text-[10px] border rounded-2xl outline-none ${theme.input} ${theme.border}`} placeholder='Paste JSON array...' value={bulkData} onChange={e => setBulkData(e.target.value)} />
             <button disabled={isPublishing} onClick={handlePublish} className="w-full bg-blue-600 text-white py-4 rounded-2xl font-black uppercase tracking-widest shadow-xl active:scale-95 transition-all hover:bg-blue-500">
@@ -269,30 +275,30 @@ export default function AdminPanel({ user, isDarkMode }) {
             {status && <p className="text-center font-black uppercase text-[10px] text-blue-500 mt-2">{status}</p>}
             
             <div className={`mt-6 pt-6 border-t grid grid-cols-1 md:grid-cols-2 gap-4 ${theme.border}`}>
-               <div className="space-y-2">
-                 <p className="text-[10px] font-black uppercase text-blue-400 mb-2 flex items-center gap-2"><ListFilter size={14}/> Normal Mocks</p>
-                 <div className="max-h-32 overflow-y-auto custom-scrollbar space-y-1">
-                   {regularMocks.map(m => (
-                     <div key={m.id} className={`p-3 rounded-xl flex justify-between items-center group transition-all border ${isDarkMode ? 'bg-slate-800 border-slate-700' : 'bg-slate-50 border-transparent hover:border-blue-500/30'}`}>
-                       <div><p className={`font-bold text-[10px] uppercase truncate w-24 ${theme.text}`}>{m.mock_title}</p><p className="text-[8px] font-bold text-slate-400 uppercase">{m.time_limit}m</p></div>
-                       <button onClick={() => deleteMock(m.id, 'mocks')} className="p-1.5 text-slate-400 hover:text-red-500"><Trash2 size={14}/></button>
-                     </div>
-                   ))}
-                 </div>
-               </div>
-               <div className="space-y-2">
-                 <p className="text-[10px] font-black uppercase text-orange-400 mb-2 flex items-center gap-2"><Zap size={14}/> Ongoing Daily Mock</p>
-                 <div className="max-h-32 overflow-y-auto custom-scrollbar space-y-1">
-                   {/* 🔥 FILTERED: Only shows TODAY's mock here */}
-                   {dailyMocks.filter(m => m.mock_date === todayStr).map(m => (
-                     <div key={m.id} className={`p-3 rounded-xl flex justify-between items-center group transition-all border ${isDarkMode ? 'bg-slate-800 border-slate-700' : 'bg-orange-50 border-transparent hover:border-red-500/30'}`}>
-                       <div><p className={`font-bold text-[10px] uppercase truncate w-24 ${theme.text}`}>{m.mock_title}</p><p className="text-[8px] font-bold text-slate-400 uppercase">{m.time_limit}m</p></div>
-                       {canUploadDaily && <button onClick={() => deleteMock(m.id, 'daily_mocks')} className="p-1.5 text-slate-400 hover:text-red-500"><Trash2 size={14}/></button>}
-                     </div>
-                   ))}
-                   {dailyMocks.filter(m => m.mock_date === todayStr).length === 0 && <p className="text-[9px] text-slate-400 italic p-2">No active mock for today.</p>}
-                 </div>
-               </div>
+                <div className="space-y-2">
+                  <p className="text-[10px] font-black uppercase text-blue-400 mb-2 flex items-center gap-2"><ListFilter size={14}/> Normal Mocks</p>
+                  <div className="max-h-32 overflow-y-auto custom-scrollbar space-y-1">
+                    {regularMocks.map(m => (
+                      <div key={m.id} className={`p-3 rounded-xl flex justify-between items-center group transition-all border ${isDarkMode ? 'bg-slate-800 border-slate-700' : 'bg-slate-50 border-transparent hover:border-blue-500/30'}`}>
+                        <div><p className={`font-bold text-[10px] uppercase truncate w-24 ${theme.text}`}>{m.mock_title}</p><p className="text-[8px] font-bold text-slate-400 uppercase">{m.time_limit}m</p></div>
+                        <button onClick={() => deleteMock(m.id, 'mocks')} className="p-1.5 text-slate-400 hover:text-red-500"><Trash2 size={14}/></button>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+                <div className="space-y-2">
+                  <p className="text-[10px] font-black uppercase text-orange-400 mb-2 flex items-center gap-2"><Zap size={14}/> Ongoing Daily Mock</p>
+                  <div className="max-h-32 overflow-y-auto custom-scrollbar space-y-1">
+                    {/* 🔥 FILTERED: Only shows TODAY's mock here */}
+                    {dailyMocks.filter(m => m.mock_date === todayStr).map(m => (
+                      <div key={m.id} className={`p-3 rounded-xl flex justify-between items-center group transition-all border ${isDarkMode ? 'bg-slate-800 border-slate-700' : 'bg-orange-50 border-transparent hover:border-red-500/30'}`}>
+                        <div><p className={`font-bold text-[10px] uppercase truncate w-24 ${theme.text}`}>{m.mock_title}</p><p className="text-[8px] font-bold text-slate-400 uppercase">{m.time_limit}m</p></div>
+                        {canUploadDaily && <button onClick={() => deleteMock(m.id, 'daily_mocks')} className="p-1.5 text-slate-400 hover:text-red-500"><Trash2 size={14}/></button>}
+                      </div>
+                    ))}
+                    {dailyMocks.filter(m => m.mock_date === todayStr).length === 0 && <p className="text-[9px] text-slate-400 italic p-2">No active mock for today.</p>}
+                  </div>
+                </div>
             </div>
           </div>
         </div>
@@ -319,6 +325,18 @@ export default function AdminPanel({ user, isDarkMode }) {
             <div className="flex items-center gap-3 mb-6 text-orange-500"><BookOpen size={32} /><h2 className={`text-2xl font-black uppercase ${theme.text}`}>Library</h2></div>
             <div className="space-y-4">
               <input className={`w-full p-4 rounded-2xl border outline-none transition-colors ${theme.input} ${theme.border}`} placeholder="Resource Title" value={bookTitle} onChange={e => setBookTitle(e.target.value)} />
+              
+              {/* 🔥 NEW: SUBJECT DROPDOWN */}
+              <select 
+                className={`w-full p-4 rounded-2xl border outline-none transition-colors cursor-pointer ${theme.input} ${theme.border}`} 
+                value={bookCategory} 
+                onChange={e => setBookCategory(e.target.value)}
+              >
+                {librarySubjects.map(sub => (
+                  <option key={sub} value={sub}>{sub}</option>
+                ))}
+              </select>
+
               <input className={`w-full p-4 rounded-2xl border outline-none transition-colors ${theme.input} ${theme.border}`} placeholder="PDF URL" value={bookUrl} onChange={e => setBookUrl(e.target.value)} />
               <button onClick={uploadResource} className="w-full bg-orange-500 text-white py-4 rounded-2xl font-black uppercase shadow-lg transition-all active:scale-95 hover:bg-orange-600">Upload Resource</button>
             </div>

@@ -1,8 +1,8 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState } from 'react';
 import { supabase } from '../supabaseClient';
 import { 
   Youtube, PenTool, Save, Trash2, FileDown, 
-  Loader2, Book, ExternalLink, PlayCircle, UploadCloud, Plus, X // 🔥 Added X here
+  Loader2, PlayCircle // Removed Library related imports
 } from 'lucide-react';
 import { jsPDF } from 'jspdf';
 
@@ -14,61 +14,7 @@ export default function StudyHub({ user, isDarkMode }) {
   const [saving, setSaving] = useState(false);
   const [lastSaved, setLastSaved] = useState(null);
   
-  // Library States
-  const [books, setBooks] = useState([]);
-  const [loadingBooks, setLoadingBooks] = useState(true);
-  
-  // Upload States
-  const [newTitle, setNewTitle] = useState("");
-  const [newUrl, setNewUrl] = useState("");
-  const [newCategory, setNewCategory] = useState("Computer Science");
-  const [isUploading, setIsUploading] = useState(false);
-  const [showUpload, setShowUpload] = useState(false); 
-
-  const categories = ["Computer Science", "Physics", "Maths", "General", "Notes"];
-
-  // --- 1. FETCH PDF LIBRARY ---
-  const fetchBooks = useCallback(async () => {
-    setLoadingBooks(true);
-    const { data, error } = await supabase
-      .from('study_resources')
-      .select('*')
-      .order('created_at', { ascending: false });
-      
-    if (!error && data) setBooks(data);
-    setLoadingBooks(false);
-  }, []);
-
-  useEffect(() => {
-    fetchBooks();
-  }, [fetchBooks]);
-
-  // --- UPLOAD FUNCTION ---
-  const handleUpload = async () => {
-    if (!newTitle || !newUrl) return alert("Please enter a Title and PDF Link.");
-    
-    setIsUploading(true);
-    
-    const { error } = await supabase.from('study_resources').insert([
-      { 
-        title: newTitle, 
-        file_url: newUrl, 
-        category: newCategory,
-      }
-    ]);
-
-    if (error) {
-      alert(`Upload Failed: ${error.message}`);
-    } else {
-      setNewTitle("");
-      setNewUrl("");
-      setShowUpload(false); 
-      fetchBooks(); 
-    }
-    setIsUploading(false);
-  };
-
-  // --- 2. VIDEO LOGIC ---
+  // --- 1. VIDEO LOGIC ---
   const extractAndLoad = async () => {
     const id = videoUrl.split('v=')[1]?.split('&')[0] || videoUrl.split('/').pop();
     if (!id) return;
@@ -85,7 +31,7 @@ export default function StudyHub({ user, isDarkMode }) {
     else setNote(""); 
   };
 
-  // --- 3. SAVE NOTES ---
+  // --- 2. SAVE NOTES ---
   const saveNotes = async () => {
     if (!videoId) return alert("Load a video first.");
     setSaving(true);
@@ -103,7 +49,7 @@ export default function StudyHub({ user, isDarkMode }) {
     setSaving(false);
   };
 
-  // --- 4. EXPORT PDF ---
+  // --- 3. EXPORT PDF ---
   const exportPDF = () => {
     if (!note) return alert("Note is empty.");
     const doc = new jsPDF();
@@ -116,7 +62,7 @@ export default function StudyHub({ user, isDarkMode }) {
     doc.save(`Neural_Notes_${videoId}.pdf`);
   };
 
-  // --- 5. DELETE NOTES ---
+  // --- 4. DELETE NOTES ---
   const deleteNotes = async () => {
     if (!window.confirm("Delete these notes?")) return;
     const { error } = await supabase
@@ -145,83 +91,7 @@ export default function StudyHub({ user, isDarkMode }) {
   return (
     <div className="space-y-10 pb-20 animate-in fade-in duration-700">
       
-      {/* 📘 SECTION 1: NEURAL LIBRARY (With Upload) */}
-      <div className={`p-8 rounded-[3rem] shadow-2xl border-b-8 border-orange-500 overflow-hidden relative transition-colors duration-500 ${theme.cardBg}`}>
-        
-        <div className="flex items-center justify-between mb-8">
-          <div className="flex items-center gap-3">
-            <Book className="text-orange-500" size={32} />
-            <h2 className={`text-2xl font-black uppercase tracking-tighter ${theme.text}`}>Neural Library</h2>
-          </div>
-          {/* Toggle Upload Button */}
-          <button 
-            onClick={() => setShowUpload(!showUpload)} 
-            className={`p-3 rounded-2xl border-2 transition-all ${showUpload ? 'bg-orange-500 text-white border-orange-500' : `${theme.inputBg} ${theme.text} ${theme.border}`}`}
-          >
-            {showUpload ? <X size={20} /> : <Plus size={20} />}
-          </button>
-        </div>
-
-        {/* 🔥 UPLOAD FORM (Collapsible) */}
-        {showUpload && (
-          <div className="mb-8 p-6 rounded-[2rem] border-2 border-orange-500/30 bg-orange-500/5 animate-in slide-in-from-top-4">
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
-              <input 
-                className={`p-4 rounded-xl outline-none font-bold text-sm ${theme.inputBg} ${theme.text}`}
-                placeholder="Book Title"
-                value={newTitle}
-                onChange={e => setNewTitle(e.target.value)}
-              />
-              <input 
-                className={`p-4 rounded-xl outline-none font-bold text-sm ${theme.inputBg} ${theme.text}`}
-                placeholder="PDF Link (URL)"
-                value={newUrl}
-                onChange={e => setNewUrl(e.target.value)}
-              />
-              <select 
-                className={`p-4 rounded-xl outline-none font-bold text-sm ${theme.inputBg} ${theme.text}`}
-                value={newCategory}
-                onChange={e => setNewCategory(e.target.value)}
-              >
-                {categories.map(c => <option key={c} value={c}>{c}</option>)}
-              </select>
-            </div>
-            <button 
-              onClick={handleUpload} 
-              disabled={isUploading}
-              className="w-full bg-orange-500 text-white py-3 rounded-xl font-black uppercase tracking-widest hover:bg-orange-600 transition-all flex justify-center items-center gap-2"
-            >
-              {isUploading ? <Loader2 className="animate-spin" /> : <><UploadCloud size={18} /> Upload Resource</>}
-            </button>
-          </div>
-        )}
-        
-        {/* BOOKS GRID */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 max-h-[400px] overflow-y-auto custom-scrollbar pr-2">
-          {loadingBooks ? (
-            <div className="col-span-full py-10 flex justify-center"><Loader2 className="animate-spin text-orange-500" /></div>
-          ) : books.length > 0 ? (
-            books.map(book => (
-              <div key={book.id} className={`p-6 rounded-[2rem] border-2 border-transparent transition-all group shadow-sm ${theme.inputBg} ${theme.hoverBorder}`}>
-                <span className={`text-[9px] font-black uppercase px-3 py-1 rounded-full ${isDarkMode ? 'text-orange-400 bg-orange-900/30' : 'text-orange-500 bg-orange-100'}`}>{book.category}</span>
-                <h4 className={`font-bold mt-3 mb-4 line-clamp-1 ${theme.text}`}>{book.title}</h4>
-                <a 
-                  href={book.file_url} 
-                  target="_blank" 
-                  rel="noreferrer" 
-                  className={`flex items-center justify-between p-3 rounded-xl text-xs font-black uppercase transition-all border shadow-sm ${theme.bg} ${theme.border} ${theme.subText} hover:text-orange-500`}
-                >
-                  Access PDF <ExternalLink size={14} />
-                </a>
-              </div>
-            ))
-          ) : (
-            <div className={`col-span-full py-10 text-center font-bold uppercase text-xs italic tracking-widest opacity-50 ${theme.subText}`}>No resources found. Upload one!</div>
-          )}
-        </div>
-      </div>
-
-      {/* 🎥 SECTION 2: STUDY WORKSPACE */}
+      {/* 🎥 SECTION 1: STUDY WORKSPACE (Now the only section) */}
       <div className="space-y-6">
         <div className={`p-6 rounded-[2.5rem] shadow-xl flex flex-wrap gap-4 border transition-colors duration-500 ${theme.bg} ${theme.border}`}>
           <div className="flex-1 relative min-w-[300px]">
