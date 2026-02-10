@@ -6,7 +6,6 @@ import {
 } from 'lucide-react';
 import { jsPDF } from "jspdf";
 
-// 🔥 ACCEPTED isDarkMode PROP
 export default function SubjectNotes({ user, isDarkMode }) {
   // --- 1. CONFIGURATION ---
   const coreSubjects = [
@@ -23,7 +22,7 @@ export default function SubjectNotes({ user, isDarkMode }) {
   const [allNotes, setAllNotes] = useState([]); 
   const [loading, setLoading] = useState(true);
 
-  // NEW STATE: Controls the Main View (Editor vs PDF)
+  // Active PDF State
   const [activePdf, setActivePdf] = useState(null);
 
   // --- 2. DATA SYNCHRONIZATION ---
@@ -33,17 +32,21 @@ export default function SubjectNotes({ user, isDarkMode }) {
 
   useEffect(() => {
     fetchNoteForSubject(selectedSubject);
-    setActivePdf(null); // Reset view to notes when changing subjects
+    setActivePdf(null); 
   }, [selectedSubject, user.id]);
 
   const fetchLibraryAndHistory = async () => {
     setLoading(true);
+    
+    // 1. Fetch User's Notes History
     const { data: notes } = await supabase
       .from('subject_notes')
       .select('id, subject, updated_at')
       .eq('user_id', user.id)
       .order('updated_at', { ascending: false });
       
+    // 2. Fetch Global Library Resources
+    // 🔥 FIXED: Table is 'study_materials' based on your screenshot
     const { data: pdfs } = await supabase
       .from('study_materials')
       .select('*')
@@ -110,17 +113,18 @@ export default function SubjectNotes({ user, isDarkMode }) {
     doc.save(`${selectedSubject}_Notes.pdf`);
   };
 
+  // 🔥 CRITICAL FIX: Filter using 'category' (from screenshot) instead of 'subject'
   const relevantPDFs = libraryResources.filter(res => 
-    res.subject === selectedSubject || res.subject === 'General'
+    res.category === selectedSubject || res.category === 'General'
   );
 
-  // --- STYLES OBJECT ---
+  // --- STYLES ---
   const theme = {
     bg: isDarkMode ? 'bg-slate-900' : 'bg-white',
     border: isDarkMode ? 'border-slate-800' : 'border-slate-200',
     text: isDarkMode ? 'text-white' : 'text-slate-900',
     subText: isDarkMode ? 'text-slate-400' : 'text-slate-500',
-    editorBg: isDarkMode ? 'bg-[#0f172a]' : 'bg-gray-50', // Darker for editor
+    editorBg: isDarkMode ? 'bg-[#0f172a]' : 'bg-gray-50',
     navInactive: isDarkMode ? 'bg-slate-800 text-slate-400 hover:bg-slate-700' : 'bg-white text-gray-400 hover:bg-gray-50',
     navActive: 'bg-blue-600 text-white shadow-lg shadow-blue-500/30'
   };
@@ -207,9 +211,10 @@ export default function SubjectNotes({ user, isDarkMode }) {
             {/* CONTENT AREA SWAPPER */}
             <div className={`flex-1 relative rounded-[2rem] overflow-hidden border-2 transition-colors ${theme.editorBg} ${theme.border}`}>
               {activePdf ? (
-                // --- PDF VIEWER ---
+                // --- PDF VIEWER (Google Docs Viewer) ---
+                // Uses 'file_url' from your database which is exactly what we need
                 <iframe 
-                  src={`https://docs.google.com/gview?url=${activePdf.url}&embedded=true`}
+                  src={`https://docs.google.com/gview?url=${activePdf.file_url}&embedded=true`}
                   className="w-full h-full"
                   frameBorder="0"
                   title="PDF Viewer"
