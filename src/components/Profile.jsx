@@ -428,7 +428,7 @@ export default function Profile({ user, isDarkMode }) {
               <Megaphone size={24} className="text-yellow-400" /> Neural Uplink
             </h3>
             <p className="text-xs text-gray-400 font-bold leading-relaxed max-w-lg">
-              Establish a direct line to Central Command (The Brain). Use this uplink for feature requests, bug reports, or urgent access issues.
+              Establish a direct line to Admin. Use this uplink for feature requests, bug reports, or urgent access issues.
             </p>
           </div>
           <button 

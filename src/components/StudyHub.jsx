@@ -140,7 +140,7 @@ export default function StudyHub({ user, isDarkMode }) {
              <div className="flex-1 relative">
                <textarea 
                  className={`w-full h-full p-8 bg-transparent outline-none font-medium text-sm leading-relaxed resize-none custom-scrollbar ${theme.text}`}
-                 placeholder="Begin knowledge synthesis..."
+                 placeholder="note your thought from the video here and save them..."
                  value={note}
                  onChange={e => setNote(e.target.value)}
                />
