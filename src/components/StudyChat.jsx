@@ -181,15 +181,15 @@ export default function StudyChat({ user, isDarkMode }) {
       )}
 
       {/* MESSAGES AREA */}
-      {/* 🔥 Increased space-y to accommodate hover menu below messages */}
-      <div className={`flex-1 overflow-y-auto p-4 space-y-8 custom-scrollbar ${isDarkMode ? 'bg-slate-950' : 'bg-slate-50'}`}>
+      {/* 🔥 FIX 1: Added pb-20 so last message isn't hidden by input or menu */}
+      <div className={`flex-1 overflow-y-auto p-4 space-y-4 pb-20 custom-scrollbar ${isDarkMode ? 'bg-slate-950' : 'bg-slate-50'}`}>
         {messages.map((msg, i) => {
           const isMe = msg.user_name === user.username;
           const reactions = getReactionSummary(msg.reactions);
           const showPicker = activeReactionId === msg.id;
 
           return (
-            <div id={`msg-${msg.id}`} key={i} className={`flex flex-col ${isMe ? 'items-end' : 'items-start'} group relative mb-2`}>
+            <div id={`msg-${msg.id}`} key={i} className={`flex flex-col ${isMe ? 'items-end' : 'items-start'} group relative`}>
               
               {/* User Info */}
               <div className="flex items-center gap-1 mb-1 px-1">
@@ -201,70 +201,79 @@ export default function StudyChat({ user, isDarkMode }) {
                 )}
               </div>
 
-              {/* Bubble */}
-              <div className={`relative px-4 py-2 rounded-2xl max-w-[85%] text-xs font-bold shadow-sm leading-relaxed ${isMe ? `${theme.msgUser} rounded-tr-none` : `${theme.msgOther} rounded-tl-none`}`}>
-                {msg.message}
-                {msg.file_url && (
-                  <div className="mt-2">
-                    {msg.file_type === 'image' ? (
-                      <a href={msg.file_url} target="_blank" rel="noreferrer"><img src={msg.file_url} alt="Shared" className="rounded-lg max-h-32 border border-white/20" /></a>
-                    ) : (
-                      <a href={msg.file_url} target="_blank" rel="noreferrer" className="flex items-center gap-2 p-2 bg-black/20 rounded-lg"><FileText size={16} /> Download File</a>
-                    )}
-                  </div>
-                )}
-
-                {/* Reactions Display */}
-                {reactions && reactions.length > 0 && (
-                  <div className={`absolute -bottom-3 ${isMe ? 'right-0' : 'left-0'} flex gap-1`}>
-                    {reactions.map(([emoji, count]) => (
-                      <div key={emoji} className="bg-white dark:bg-slate-800 shadow-md border border-gray-200 dark:border-slate-700 px-1.5 rounded-full text-[9px] flex items-center gap-0.5">
-                        <span>{emoji}</span>
-                        {count > 1 && <span className="font-black text-slate-500">{count}</span>}
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
-
-              {/* 🛠 ACTIONS MENU (Hover - Now positioned BELOW) */}
-              <div className={`flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-all absolute -bottom-9 ${isMe ? 'right-0' : 'left-0'} z-10 p-1 rounded-lg bg-white/90 dark:bg-slate-800/90 backdrop-blur-md shadow-sm border ${theme.border}`}>
+              {/* Bubble & Menu Wrapper */}
+              <div className="relative max-w-[85%]">
                 
-                {/* Reaction Picker Trigger */}
-                <div className="relative">
-                  <button onClick={() => setActiveReactionId(showPicker ? null : msg.id)} className="p-1.5 hover:bg-black/5 rounded-full text-slate-400 hover:text-blue-500 transition-colors">
-                    <Smile size={14} />
-                  </button>
-                  
-                  {/* 😍 EMOJI PICKER POPUP (Positioned above menu) */}
-                  {showPicker && (
-                    <div className="absolute bottom-full mb-1 left-0 bg-white dark:bg-slate-800 shadow-xl border dark:border-slate-700 rounded-full p-1.5 flex gap-1 z-50 animate-in zoom-in-95 duration-200 whitespace-nowrap">
-                      {REACTION_EMOJIS.map(emoji => (
-                        <button 
-                          key={emoji} 
-                          onClick={() => addReaction(msg, emoji)}
-                          className={`p-1.5 rounded-full hover:bg-black/5 hover:scale-125 transition-transform text-lg leading-none ${msg.reactions?.[user.username] === emoji ? 'bg-blue-100 dark:bg-blue-900/30' : ''}`}
-                        >
-                          {emoji}
-                        </button>
+                {/* Message Bubble */}
+                <div className={`px-4 py-2 rounded-2xl text-xs font-bold shadow-sm leading-relaxed ${isMe ? `${theme.msgUser} rounded-tr-none` : `${theme.msgOther} rounded-tl-none`}`}>
+                  {msg.message}
+                  {msg.file_url && (
+                    <div className="mt-2">
+                      {msg.file_type === 'image' ? (
+                        <a href={msg.file_url} target="_blank" rel="noreferrer"><img src={msg.file_url} alt="Shared" className="rounded-lg max-h-32 border border-white/20" /></a>
+                      ) : (
+                        <a href={msg.file_url} target="_blank" rel="noreferrer" className="flex items-center gap-2 p-2 bg-black/20 rounded-lg"><FileText size={16} /> Download File</a>
+                      )}
+                    </div>
+                  )}
+
+                  {/* Reactions Badge */}
+                  {reactions && reactions.length > 0 && (
+                    <div className={`absolute -bottom-3 ${isMe ? 'right-0' : 'left-0'} flex gap-1 z-10`}>
+                      {reactions.map(([emoji, count]) => (
+                        <div key={emoji} className="bg-white dark:bg-slate-800 shadow-md border border-gray-200 dark:border-slate-700 px-1.5 rounded-full text-[9px] flex items-center gap-0.5">
+                          <span>{emoji}</span>
+                          {count > 1 && <span className="font-black text-slate-500">{count}</span>}
+                        </div>
                       ))}
                     </div>
                   )}
                 </div>
 
-                {/* Pin Button */}
-                <button onClick={() => togglePin(msg)} className={`p-1.5 hover:bg-black/5 rounded-full transition-colors ${msg.is_pinned ? 'text-yellow-500 fill-yellow-500' : 'text-slate-400 hover:text-yellow-500'}`}>
-                  <Pin size={14} />
-                </button>
+                {/* 🛠 ACTIONS MENU (Fixed Position: Underneath) */}
+                <div className={`
+                  opacity-0 group-hover:opacity-100 transition-all 
+                  absolute top-full mt-2 z-30
+                  ${isMe ? 'right-0' : 'left-0'} 
+                  flex items-center gap-1 p-1.5 rounded-xl 
+                  bg-white/95 dark:bg-slate-800/95 backdrop-blur-md 
+                  shadow-lg border ${theme.border}
+                `}>
+                  
+                  {/* Reaction Trigger */}
+                  <div className="relative">
+                    <button onClick={() => setActiveReactionId(showPicker ? null : msg.id)} className="p-1.5 hover:bg-black/5 rounded-full text-slate-400 hover:text-blue-500 transition-colors">
+                      <Smile size={14} />
+                    </button>
+                    
+                    {/* 😍 Picker Popup (Above Menu) */}
+                    {showPicker && (
+                      <div className={`absolute bottom-full mb-2 ${isMe ? 'right-0' : 'left-0'} bg-white dark:bg-slate-800 shadow-xl border dark:border-slate-700 rounded-full p-1.5 flex gap-1 z-50 animate-in zoom-in-95 duration-200 whitespace-nowrap`}>
+                        {REACTION_EMOJIS.map(emoji => (
+                          <button 
+                            key={emoji} 
+                            onClick={() => addReaction(msg, emoji)}
+                            className={`p-2 rounded-full hover:bg-black/5 hover:scale-125 transition-transform text-lg leading-none ${msg.reactions?.[user.username] === emoji ? 'bg-blue-100 dark:bg-blue-900/30' : ''}`}
+                          >
+                            {emoji}
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
 
-                {/* Delete (Only for me) */}
-                {isMe && (
-                  <button onClick={() => deleteMessage(msg.id)} className="p-1.5 hover:bg-black/5 rounded-full text-slate-400 hover:text-red-500 transition-colors">
-                    <Trash2 size={14} />
+                  <button onClick={() => togglePin(msg)} className={`p-1.5 hover:bg-black/5 rounded-full transition-colors ${msg.is_pinned ? 'text-yellow-500 fill-yellow-500' : 'text-slate-400 hover:text-yellow-500'}`}>
+                    <Pin size={14} />
                   </button>
-                )}
-              </div>
 
+                  {isMe && (
+                    <button onClick={() => deleteMessage(msg.id)} className="p-1.5 hover:bg-black/5 rounded-full text-slate-400 hover:text-red-500 transition-colors">
+                      <Trash2 size={14} />
+                    </button>
+                  )}
+                </div>
+
+              </div>
             </div>
           );
         })}
