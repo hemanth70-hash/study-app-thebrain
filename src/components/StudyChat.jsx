@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { supabase } from '../supabaseClient';
 import { 
   Send, MessageSquare, Trash2, Paperclip, 
-  X, Flame, Image as ImageIcon, FileText, Pin, Smile
+  X, Flame, Image as ImageIcon, FileText, Pin, Smile, Clock
 } from 'lucide-react';
 
 const REACTION_EMOJIS = ['👍', '❤️', '😂', '😮', '😢', '🙏','😡','😁'];
@@ -17,10 +17,12 @@ export default function StudyChat({ user, isDarkMode }) {
   const [uploading, setUploading] = useState(false);
   const [activeReactionId, setActiveReactionId] = useState(null);
   
+  // 🔥 NEW: State for Reaction Details Modal
+  const [viewingReaction, setViewingReaction] = useState(null); // { emoji: '❤️', details: [...] }
+
   const scrollRef = useRef();
   const fileInputRef = useRef();
   
-  // Derived State
   const pinnedMessage = messages.find(m => m.is_pinned);
 
   // --- 1. REAL-TIME ENGINE ---
@@ -58,12 +60,10 @@ export default function StudyChat({ user, isDarkMode }) {
     return () => supabase.removeChannel(channel);
   }, [user.username]);
 
-  // --- 2. AUTO-SCROLL ---
   useEffect(() => {
     scrollRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages, typingUsers]);
 
-  // --- 3. FETCH HISTORY ---
   const fetchMessages = async () => {
     const { data } = await supabase
       .from('study_chat')
@@ -73,7 +73,7 @@ export default function StudyChat({ user, isDarkMode }) {
     setMessages(data || []);
   };
 
-  // --- 4. ACTIONS ---
+  // --- 2. ACTIONS ---
   const sendMessage = async (e) => {
     e.preventDefault();
     if ((!newMessage.trim() && !file) || uploading) return;
@@ -107,7 +107,6 @@ export default function StudyChat({ user, isDarkMode }) {
     await supabase.from('study_chat').delete().eq('id', id);
   };
 
-  // 🔥 PINNING LOGIC
   const togglePin = async (msg) => {
     if (!msg.is_pinned) {
       await supabase.from('study_chat').update({ is_pinned: false }).neq('id', 0);
@@ -115,25 +114,43 @@ export default function StudyChat({ user, isDarkMode }) {
     await supabase.from('study_chat').update({ is_pinned: !msg.is_pinned }).eq('id', msg.id);
   };
 
-  // 🔥 REACTION LOGIC
+  // 🔥 UPDATED REACTION LOGIC (Stores Timestamp)
   const addReaction = async (msg, emoji) => {
     const currentReactions = msg.reactions || {};
-    if (currentReactions[user.username] === emoji) {
+    const myReaction = currentReactions[user.username];
+
+    // Check if user already reacted (handle both old string format and new object format)
+    const currentEmoji = typeof myReaction === 'string' ? myReaction : myReaction?.emoji;
+
+    // Toggle: If clicking same emoji -> Delete. If different -> Update.
+    if (currentEmoji === emoji) {
       delete currentReactions[user.username];
     } else {
-      currentReactions[user.username] = emoji;
+      currentReactions[user.username] = {
+        emoji: emoji,
+        timestamp: new Date().toISOString()
+      };
     }
+
     await supabase.from('study_chat').update({ reactions: currentReactions }).eq('id', msg.id);
     setActiveReactionId(null);
   };
 
-  const getReactionSummary = (reactions) => {
-    if (!reactions) return null;
-    const counts = {};
-    Object.values(reactions).forEach(emoji => {
-      counts[emoji] = (counts[emoji] || 0) + 1;
+  // 🔥 HELPER: Process reactions for display
+  const getReactionGroups = (reactions) => {
+    if (!reactions) return [];
+    
+    const groups = {};
+    Object.entries(reactions).forEach(([username, data]) => {
+      // Handle legacy string data vs new object data
+      const emoji = typeof data === 'string' ? data : data.emoji;
+      const time = typeof data === 'string' ? null : data.timestamp;
+      
+      if (!groups[emoji]) groups[emoji] = [];
+      groups[emoji].push({ username, time });
     });
-    return Object.entries(counts);
+
+    return Object.entries(groups); // [['❤️', [{user, time}, ...]], ...]
   };
 
   // --- STYLES ---
@@ -168,7 +185,7 @@ export default function StudyChat({ user, isDarkMode }) {
         </div>
       </div>
 
-      {/* PINNED MESSAGE BAR */}
+      {/* PINNED MESSAGE */}
       {pinnedMessage && (
         <div className="bg-yellow-500/10 border-b border-yellow-500/20 p-2 flex items-center gap-2 cursor-pointer transition-colors hover:bg-yellow-500/20 z-10" onClick={() => document.getElementById(`msg-${pinnedMessage.id}`)?.scrollIntoView({ behavior: 'smooth' })}>
           <Pin size={12} className="text-yellow-600 fill-yellow-600 rotate-45" />
@@ -180,18 +197,17 @@ export default function StudyChat({ user, isDarkMode }) {
         </div>
       )}
 
-      {/* MESSAGES AREA */}
-      {/* 🔥 FIX 1: Added pb-20 so last message isn't hidden by input or menu */}
-      <div className={`flex-1 overflow-y-auto p-4 space-y-4 pb-20 custom-scrollbar ${isDarkMode ? 'bg-slate-950' : 'bg-slate-50'}`}>
+      {/* MESSAGES */}
+      <div className={`flex-1 overflow-y-auto p-4 space-y-8 pb-20 custom-scrollbar ${isDarkMode ? 'bg-slate-950' : 'bg-slate-50'}`}>
         {messages.map((msg, i) => {
           const isMe = msg.user_name === user.username;
-          const reactions = getReactionSummary(msg.reactions);
+          const reactionGroups = getReactionGroups(msg.reactions);
           const showPicker = activeReactionId === msg.id;
 
           return (
-            <div id={`msg-${msg.id}`} key={i} className={`flex flex-col ${isMe ? 'items-end' : 'items-start'} group relative`}>
+            <div id={`msg-${msg.id}`} key={i} className={`flex flex-col ${isMe ? 'items-end' : 'items-start'} group relative mb-2`}>
               
-              {/* User Info */}
+              {/* User Meta */}
               <div className="flex items-center gap-1 mb-1 px-1">
                 <span className="text-[10px] font-black opacity-50 uppercase">{msg.user_name}</span>
                 {msg.streak_count > 0 && (
@@ -201,79 +217,77 @@ export default function StudyChat({ user, isDarkMode }) {
                 )}
               </div>
 
-              {/* Bubble & Menu Wrapper */}
-              <div className="relative max-w-[85%]">
-                
-                {/* Message Bubble */}
-                <div className={`px-4 py-2 rounded-2xl text-xs font-bold shadow-sm leading-relaxed ${isMe ? `${theme.msgUser} rounded-tr-none` : `${theme.msgOther} rounded-tl-none`}`}>
-                  {msg.message}
-                  {msg.file_url && (
-                    <div className="mt-2">
-                      {msg.file_type === 'image' ? (
-                        <a href={msg.file_url} target="_blank" rel="noreferrer"><img src={msg.file_url} alt="Shared" className="rounded-lg max-h-32 border border-white/20" /></a>
-                      ) : (
-                        <a href={msg.file_url} target="_blank" rel="noreferrer" className="flex items-center gap-2 p-2 bg-black/20 rounded-lg"><FileText size={16} /> Download File</a>
-                      )}
-                    </div>
-                  )}
+              {/* Message Bubble */}
+              <div className={`relative px-4 py-2 rounded-2xl max-w-[85%] text-xs font-bold shadow-sm leading-relaxed ${isMe ? `${theme.msgUser} rounded-tr-none` : `${theme.msgOther} rounded-tl-none`}`}>
+                {msg.message}
+                {msg.file_url && (
+                  <div className="mt-2">
+                    {msg.file_type === 'image' ? (
+                      <a href={msg.file_url} target="_blank" rel="noreferrer"><img src={msg.file_url} alt="Shared" className="rounded-lg max-h-32 border border-white/20" /></a>
+                    ) : (
+                      <a href={msg.file_url} target="_blank" rel="noreferrer" className="flex items-center gap-2 p-2 bg-black/20 rounded-lg"><FileText size={16} /> Download File</a>
+                    )}
+                  </div>
+                )}
 
-                  {/* Reactions Badge */}
-                  {reactions && reactions.length > 0 && (
-                    <div className={`absolute -bottom-3 ${isMe ? 'right-0' : 'left-0'} flex gap-1 z-10`}>
-                      {reactions.map(([emoji, count]) => (
-                        <div key={emoji} className="bg-white dark:bg-slate-800 shadow-md border border-gray-200 dark:border-slate-700 px-1.5 rounded-full text-[9px] flex items-center gap-0.5">
-                          <span>{emoji}</span>
-                          {count > 1 && <span className="font-black text-slate-500">{count}</span>}
-                        </div>
+                {/* Reaction Pills */}
+                {reactionGroups.length > 0 && (
+                  <div className={`absolute -bottom-3 ${isMe ? 'right-0' : 'left-0'} flex gap-1 z-10`}>
+                    {reactionGroups.map(([emoji, details]) => (
+                      <button 
+                        key={emoji} 
+                        onClick={() => setViewingReaction({ emoji, details })} // Open Details Modal
+                        className="bg-white dark:bg-slate-800 shadow-md border border-gray-200 dark:border-slate-700 px-1.5 rounded-full text-[9px] flex items-center gap-0.5 hover:scale-110 transition-transform"
+                      >
+                        <span>{emoji}</span>
+                        {details.length > 1 && <span className="font-black text-slate-500">{details.length}</span>}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              {/* ACTIONS MENU (Fixed Position: Underneath) */}
+              <div className={`
+                opacity-0 group-hover:opacity-100 transition-all 
+                absolute top-full mt-2 z-20
+                ${isMe ? 'right-0' : 'left-0'} 
+                flex items-center gap-1 p-1.5 rounded-xl 
+                bg-white/95 dark:bg-slate-800/95 backdrop-blur-md 
+                shadow-lg border ${theme.border}
+              `}>
+                <div className="relative">
+                  <button onClick={() => setActiveReactionId(showPicker ? null : msg.id)} className="p-1.5 hover:bg-black/5 rounded-full text-slate-400 hover:text-blue-500 transition-colors">
+                    <Smile size={14} />
+                  </button>
+                  
+                  {/* Emoji Picker (Above Menu) */}
+                  {showPicker && (
+                    <div className={`absolute bottom-full mb-2 ${isMe ? 'right-0' : 'left-0'} bg-white dark:bg-slate-800 shadow-xl border dark:border-slate-700 rounded-full p-1.5 flex gap-1 z-50 animate-in zoom-in-95 duration-200 whitespace-nowrap`}>
+                      {REACTION_EMOJIS.map(emoji => (
+                        <button 
+                          key={emoji} 
+                          onClick={() => addReaction(msg, emoji)}
+                          className={`p-2 rounded-full hover:bg-black/5 hover:scale-125 transition-transform text-lg leading-none ${msg.reactions?.[user.username]?.emoji === emoji ? 'bg-blue-100 dark:bg-blue-900/30' : ''}`}
+                        >
+                          {emoji}
+                        </button>
                       ))}
                     </div>
                   )}
                 </div>
 
-                {/* 🛠 ACTIONS MENU (Fixed Position: Underneath) */}
-                <div className={`
-                  opacity-0 group-hover:opacity-100 transition-all 
-                  absolute top-full mt-2 z-30
-                  ${isMe ? 'right-0' : 'left-0'} 
-                  flex items-center gap-1 p-1.5 rounded-xl 
-                  bg-white/95 dark:bg-slate-800/95 backdrop-blur-md 
-                  shadow-lg border ${theme.border}
-                `}>
-                  
-                  {/* Reaction Trigger */}
-                  <div className="relative">
-                    <button onClick={() => setActiveReactionId(showPicker ? null : msg.id)} className="p-1.5 hover:bg-black/5 rounded-full text-slate-400 hover:text-blue-500 transition-colors">
-                      <Smile size={14} />
-                    </button>
-                    
-                    {/* 😍 Picker Popup (Above Menu) */}
-                    {showPicker && (
-                      <div className={`absolute bottom-full mb-2 ${isMe ? 'right-0' : 'left-0'} bg-white dark:bg-slate-800 shadow-xl border dark:border-slate-700 rounded-full p-1.5 flex gap-1 z-50 animate-in zoom-in-95 duration-200 whitespace-nowrap`}>
-                        {REACTION_EMOJIS.map(emoji => (
-                          <button 
-                            key={emoji} 
-                            onClick={() => addReaction(msg, emoji)}
-                            className={`p-2 rounded-full hover:bg-black/5 hover:scale-125 transition-transform text-lg leading-none ${msg.reactions?.[user.username] === emoji ? 'bg-blue-100 dark:bg-blue-900/30' : ''}`}
-                          >
-                            {emoji}
-                          </button>
-                        ))}
-                      </div>
-                    )}
-                  </div>
+                <button onClick={() => togglePin(msg)} className={`p-1.5 hover:bg-black/5 rounded-full transition-colors ${msg.is_pinned ? 'text-yellow-500 fill-yellow-500' : 'text-slate-400 hover:text-yellow-500'}`}>
+                  <Pin size={14} />
+                </button>
 
-                  <button onClick={() => togglePin(msg)} className={`p-1.5 hover:bg-black/5 rounded-full transition-colors ${msg.is_pinned ? 'text-yellow-500 fill-yellow-500' : 'text-slate-400 hover:text-yellow-500'}`}>
-                    <Pin size={14} />
+                {isMe && (
+                  <button onClick={() => deleteMessage(msg.id)} className="p-1.5 hover:bg-black/5 rounded-full text-slate-400 hover:text-red-500 transition-colors">
+                    <Trash2 size={14} />
                   </button>
-
-                  {isMe && (
-                    <button onClick={() => deleteMessage(msg.id)} className="p-1.5 hover:bg-black/5 rounded-full text-slate-400 hover:text-red-500 transition-colors">
-                      <Trash2 size={14} />
-                    </button>
-                  )}
-                </div>
-
+                )}
               </div>
+
             </div>
           );
         })}
@@ -287,7 +301,7 @@ export default function StudyChat({ user, isDarkMode }) {
       </div>
 
       {/* INPUT AREA */}
-      <form onSubmit={sendMessage} className={`p-3 border-t flex flex-col gap-2 shrink-0 ${theme.bg} ${theme.border}`}>
+      <form onSubmit={sendMessage} className={`p-3 border-t flex flex-col gap-2 shrink-0 ${theme.bg} ${theme.border} z-30`}>
         {file && (
           <div className="flex items-center justify-between bg-blue-50 dark:bg-blue-900/20 p-2 rounded-lg text-xs">
             <span className="truncate max-w-[200px] flex items-center gap-2 text-blue-600">
@@ -314,12 +328,37 @@ export default function StudyChat({ user, isDarkMode }) {
               supabase.channel('public:study_chat').send({ type: 'broadcast', event: 'typing', payload: { user: user.username } });
             }}
           />
-          
           <button type="submit" disabled={uploading || (!newMessage.trim() && !file)} className={`p-2.5 rounded-xl text-white transition-all active:scale-95 shadow-lg ${uploading ? 'bg-gray-400' : 'bg-blue-600 hover:bg-blue-700 shadow-blue-500/20'}`}>
             <Send size={16} />
           </button>
         </div>
       </form>
+
+      {/* 🔥 REACTION DETAILS MODAL */}
+      {viewingReaction && (
+        <div className="absolute inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-in fade-in duration-200" onClick={() => setViewingReaction(null)}>
+          <div className={`w-full max-w-xs rounded-2xl shadow-2xl overflow-hidden border ${isDarkMode ? 'bg-slate-900 border-slate-700' : 'bg-white border-gray-200'}`} onClick={e => e.stopPropagation()}>
+            <div className={`p-3 border-b flex justify-between items-center ${isDarkMode ? 'bg-slate-800 border-slate-700' : 'bg-gray-50 border-gray-200'}`}>
+              <div className="flex items-center gap-2">
+                <span className="text-2xl">{viewingReaction.emoji}</span>
+                <span className="text-xs font-black uppercase tracking-widest opacity-60">Reactions</span>
+              </div>
+              <button onClick={() => setViewingReaction(null)}><X size={16} /></button>
+            </div>
+            <div className="max-h-60 overflow-y-auto p-2 custom-scrollbar">
+              {viewingReaction.details.map((r, i) => (
+                <div key={i} className={`flex items-center justify-between p-2 rounded-lg mb-1 ${isDarkMode ? 'hover:bg-slate-800' : 'hover:bg-gray-50'}`}>
+                  <span className={`text-xs font-bold ${isDarkMode ? 'text-white' : 'text-slate-900'}`}>{r.username}</span>
+                  <span className="text-[9px] text-slate-400 flex items-center gap-1">
+                    {r.time ? new Date(r.time).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}) : 'Just now'}
+                  </span>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
+
     </div>
   );
 }
