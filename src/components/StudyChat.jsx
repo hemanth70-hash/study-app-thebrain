@@ -5,7 +5,7 @@ import {
   X, Flame, Image as ImageIcon, FileText, Pin, Smile
 } from 'lucide-react';
 
-const REACTION_EMOJIS = ['👍', '❤️', '😂', '😮', '😢', '🙏'];
+const REACTION_EMOJIS = ['👍', '❤️', '😂', '😮', '😢', '🙏','😡','😁'];
 
 export default function StudyChat({ user, isDarkMode }) {
   // --- STATE ---
