@@ -24,7 +24,7 @@ export default function Sidebar({ user, activeTab, setActiveTab, setIsDarkMode, 
     
     // 🔥 NEW MODULES
     { id: 'typing', icon: <Keyboard />, label: 'Neural Typer' },
-    { id: 'tools', icon: <Layers />, label: 'Neural Tools' }, // <--- ADDED HERE
+    { id: 'tools', icon: <Layers />, label: 'Neural Tools' }, // <--- THIS IS THE NEW ITEM
 
     { id: 'mocks', icon: <Timer />, label: 'Mock Tests' },
     { id: 'ranking', icon: <Trophy />, label: 'Leaderboard' },
