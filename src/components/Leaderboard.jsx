@@ -197,7 +197,7 @@ export default function Leaderboard({ isDarkMode }) {
                             {/* Health Badges */}
                             {health.status === 'warning' && (
                               <span className="bg-yellow-100 text-yellow-600 border border-yellow-200 px-2 py-0.5 rounded text-[8px] font-black uppercase flex items-center gap-1">
-                                <AlertTriangle size={8} /> Idle
+                                <AlertTriangle size={8} /> INACTIVE
                               </span>
                             )}
                             {health.status === 'danger' && (
