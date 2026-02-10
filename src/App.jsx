@@ -17,9 +17,7 @@ import WelcomeHeader from './components/WelcomeHeader';
 import GoalTracker from './components/GoalTracker';
 import StudyChat from './components/StudyChat';
 
-import { 
-  ShieldAlert, Megaphone
-} from 'lucide-react';
+import { ShieldAlert, Megaphone } from 'lucide-react';
 
 // --- MAIN DASHBOARD COMPONENT ---
 function DashboardLayout({ user, isDarkMode, setIsDarkMode, activeTab, setActiveTab, setUser, refreshUser }) {
