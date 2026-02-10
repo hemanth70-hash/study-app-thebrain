@@ -108,6 +108,7 @@ function DashboardLayout({ user, isDarkMode, setIsDarkMode, activeTab, setActive
           {activeTab === 'study' && <StudyHub user={user} isDarkMode={isDarkMode} />}
           {activeTab === 'subjects' && <SubjectNotes user={user} isDarkMode={isDarkMode} />}
           {activeTab === 'typing' && <TypingMaster user={user} isDarkMode={isDarkMode} />}
+          {activeTab === 'tools' && <NeuralTools isDarkMode={isDarkMode} />}
           
           {activeTab === 'mocks' && (
             <MockEngine 

@@ -3,7 +3,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { 
   LayoutDashboard, BookOpen, Timer, Trophy, 
   User, Moon, Sun, ChevronLeft, ChevronRight, 
-  Database, Flame, Youtube, ShieldCheck, Keyboard 
+  Database, Flame, Youtube, ShieldCheck, Keyboard, Layers 
 } from 'lucide-react';
 
 export default function Sidebar({ user, activeTab, setActiveTab, setIsDarkMode, isDarkMode, isOpen, setIsOpen }) {
@@ -22,8 +22,9 @@ export default function Sidebar({ user, activeTab, setActiveTab, setIsDarkMode, 
     { id: 'study', icon: <Youtube />, label: 'Study Hub' }, 
     { id: 'subjects', icon: <BookOpen />, label: 'Resources' },
     
-    // 🔥 NEW MODULE
+    // 🔥 NEW MODULES
     { id: 'typing', icon: <Keyboard />, label: 'Neural Typer' },
+    { id: 'tools', icon: <Layers />, label: 'Neural Tools' }, // <--- ADDED HERE
 
     { id: 'mocks', icon: <Timer />, label: 'Mock Tests' },
     { id: 'ranking', icon: <Trophy />, label: 'Leaderboard' },
