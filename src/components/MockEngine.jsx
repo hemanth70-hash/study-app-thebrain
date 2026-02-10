@@ -23,11 +23,10 @@ export default function MockEngine({ user, onFinish, setIsExamLocked, setIsDarkM
   const [warnings, setWarnings] = useState(0); 
   const [timeUntilMidnight, setTimeUntilMidnight] = useState(""); 
 
-  // --- 1. NEURAL TIMER & PROCTORING (STRICT LOCKDOWN + AUTO-SUBMIT) ---
+  // --- 1. NEURAL TIMER & PROCTORING ---
   useEffect(() => {
     let interval = null;
     
-    // 🔥 AUTO-SUBMIT WATCHDOG: Triggers exactly when time hits 0
     if (selectedMock && !isFinished && timeLeft === 0) {
       console.warn("Time Limit Exhausted. Auto-Submitting...");
       handleSubmit(false); 
@@ -35,35 +34,29 @@ export default function MockEngine({ user, onFinish, setIsExamLocked, setIsDarkM
     }
 
     if (selectedMock && !isFinished && timeLeft > 0) {
-      // Engage UI Locks
       if (setIsExamLocked) setIsExamLocked(true);
       if (setIsDarkMode) setIsDarkMode(true);
 
-      // Smooth Timer Interval (Decoupled to prevent jumping)
       interval = setInterval(() => {
         setTimeLeft((prev) => (prev <= 1 ? 0 : prev - 1));
       }, 1000);
 
-      // Strict Mode Surveillance
       if (selectedMock.is_strict) {
         const handleVisibility = () => {
           if (document.hidden) {
             setWarnings(prev => {
               const next = prev + 1;
               if (next >= 2) {
-                // Strike 2: Immediate Disqualification
                 alert("CRITICAL SECURITY BREACH: Simulation Terminated. Results Disqualified.");
                 handleSubmit(true); 
                 return next;
               }
-              // Strike 1: Warning
               alert(`STRICT MODE WARNING: Strike ${next}/2. Exit attempt recorded.`);
               return next;
             });
           }
         };
 
-        // Navigation Trap
         window.history.pushState(null, null, window.location.href);
         const blockNavigation = () => window.history.pushState(null, null, window.location.href);
 
@@ -83,7 +76,7 @@ export default function MockEngine({ user, onFinish, setIsExamLocked, setIsDarkM
     };
   }, [selectedMock?.id, isFinished, timeLeft === 0]); 
 
-  // --- 2. MIDNIGHT COUNTDOWN (For Daily Mocks) ---
+  // --- 2. MIDNIGHT COUNTDOWN ---
   useEffect(() => {
     const updateCountdown = () => {
       const now = new Date();
@@ -100,23 +93,41 @@ export default function MockEngine({ user, onFinish, setIsExamLocked, setIsDarkM
     return () => clearInterval(timer);
   }, []);
 
-  // --- 3. ATOMIC DATA LOAD ---
+  // --- 3. ATOMIC DATA LOAD (🔥 FIXED: FETCHES BOTH TABLES) ---
   const loadMockData = useCallback(async () => {
     setLoading(true);
     try {
       const today = new Date().toISOString().split('T')[0];
-      const { data: mockData } = await supabase.from('daily_mocks').select('*');
-      const { data: completionData } = await supabase.from('completed_daily_mocks').select('mock_id').eq('user_id', user.id);
 
-      if (completionData) setCompletedMockIds(completionData.map(c => c.mock_id));
+      // 🔥 FIX: Fetch BOTH 'daily_mocks' AND 'mocks' tables
+      const [dailyRes, normalRes, completionRes] = await Promise.all([
+        supabase.from('daily_mocks').select('*'),
+        supabase.from('mocks').select('*'), // <-- Use 'mocks' table for normal tests
+        supabase.from('completed_daily_mocks').select('mock_id').eq('user_id', user.id)
+      ]);
+
+      if (completionRes.data) setCompletedMockIds(completionRes.data.map(c => c.mock_id));
       
-      if (mockData) {
-        const activeMocks = mockData.filter(mock => {
-          if (!mock.is_daily) return true;
-          return mock.mock_date === today; 
-        });
-        setAvailableMocks(activeMocks.sort((a, b) => (b.is_daily ? 1 : -1)));
+      let allMocks = [];
+
+      // Process Daily Mocks (Filter for Today)
+      if (dailyRes.data) {
+        const activeDaily = dailyRes.data.filter(m => m.mock_date === today);
+        allMocks = [...allMocks, ...activeDaily];
       }
+
+      // Process Normal Mocks (Add all)
+      if (normalRes.data) {
+        allMocks = [...allMocks, ...normalRes.data];
+      }
+
+      // Sort: Daily first, then by date
+      setAvailableMocks(allMocks.sort((a, b) => {
+        if (a.is_daily && !b.is_daily) return -1;
+        if (!a.is_daily && b.is_daily) return 1;
+        return new Date(b.created_at) - new Date(a.created_at);
+      }));
+
     } catch (err) {
       console.error("Neural Sync Error:", err);
     } finally {
@@ -134,13 +145,17 @@ export default function MockEngine({ user, onFinish, setIsExamLocked, setIsDarkM
       alert("Daily mock already secured.");
       return;
     }
-    const { data } = await supabase.from('daily_mocks').select('*').eq('id', mock.id).single();
+    
+    // 🔥 FIX: Fetch from correct table based on type
+    const tableName = mock.is_daily ? 'daily_mocks' : 'mocks';
+    const { data } = await supabase.from(tableName).select('*').eq('id', mock.id).single();
+
     if (data && data.questions) {
       const raw = data.questions;
-      // Handle Subject Tabs
+      // Handle Subject Tabs Logic
       if (raw[0]?.subject) {
         setSubjects(raw);
-        setQuestions(raw.flatMap(s => s.questions));
+        setQuestions(raw.flatMap(s => s.questions)); 
         setActiveSubject(raw[0].subject);
       } else {
         setSubjects([{ subject: "General", questions: raw }]);
@@ -149,7 +164,7 @@ export default function MockEngine({ user, onFinish, setIsExamLocked, setIsDarkM
       }
       setSelectedMock(data);
       setWarnings(0);
-      // Ensure integer parsing to prevent NaN errors
+      setCurrentIdx(0); 
       const limitInMinutes = parseInt(data.time_limit) || 10;
       setTimeLeft(limitInMinutes * 60); 
     }
@@ -164,14 +179,13 @@ export default function MockEngine({ user, onFinish, setIsExamLocked, setIsDarkM
     return offset + qIdx;
   };
 
-  // --- 5. SUBMISSION & DETAILED REPORT GENERATION ---
+  // --- 5. SUBMISSION ---
   const handleSubmit = async (isPenalty = false) => {
     if (isFinished) return;
     if (setIsExamLocked) setIsExamLocked(false); 
 
     let scoreCount = 0;
     
-    // 🔥 GENERATE DETAILED BREAKDOWN (The Data Packet for Profile/Admin)
     const breakdown = questions.map((q, idx) => {
       const selected = selectedOptions[idx];
       const isCorrect = selected === q.correct_option;
@@ -189,15 +203,12 @@ export default function MockEngine({ user, onFinish, setIsExamLocked, setIsDarkM
     const percentage = isPenalty ? 0 : Math.round((scoreCount / questions.length) * 100);
 
     try {
-      // 1. Permanent History Log
       await supabase.from('scores').insert([{
         user_id: user.id, mock_id: selectedMock.id, score: scoreCount, 
         percentage: percentage, mock_title: selectedMock.mock_title,
         status: isPenalty ? 'DISQUALIFIED' : 'COMPLETED'
       }]);
 
-      // 2. Overwrite Profile Slot (For "Last Attempt" Report)
-      // Only regular mocks overwrite this slot to save memory
       const updatePayload = { 
         total_exams_completed: (user.total_exams_completed || 0) + 1,
         total_percentage_points: (user.total_percentage_points || 0) + percentage
@@ -210,13 +221,12 @@ export default function MockEngine({ user, onFinish, setIsExamLocked, setIsDarkM
           total: questions.length,
           percentage: percentage,
           timestamp: new Date().toISOString(),
-          breakdown: breakdown // <--- Saving the full 300-line JSON object here
+          breakdown: breakdown 
         };
       }
 
       await supabase.from('profiles').update(updatePayload).eq('id', user.id);
 
-      // 3. Daily Streak Logic
       if (selectedMock.is_daily) {
         await supabase.from('completed_daily_mocks').insert([{ user_id: user.id, mock_id: selectedMock.id }]);
         if (!isPenalty) {
@@ -242,7 +252,7 @@ export default function MockEngine({ user, onFinish, setIsExamLocked, setIsDarkM
 
   if (loading) return <div className="p-20 text-center font-black animate-pulse text-blue-600 uppercase tracking-widest">Connecting Grid...</div>;
 
-  // --- VIEW: LIBRARY (SELECTION SCREEN) ---
+  // --- VIEW: LIBRARY ---
   if (!selectedMock) {
     const dailyExists = availableMocks.some(m => m.is_daily);
     return (
@@ -294,11 +304,10 @@ export default function MockEngine({ user, onFinish, setIsExamLocked, setIsDarkM
     );
   }
 
-  // --- VIEW: RESULTS & REVIEW (FULL EXPANSION) ---
+  // --- VIEW: RESULTS ---
   if (isFinished) {
     const finalScore = Math.round((questions.filter((q, i) => selectedOptions[i] === q.correct_option).length / questions.length) * 100);
     
-    // Detailed Review Screen
     if (showReview) {
       return (
         <div className="space-y-6 max-w-3xl mx-auto pb-20 animate-in slide-in-from-bottom-4 duration-500">
@@ -335,7 +344,6 @@ export default function MockEngine({ user, onFinish, setIsExamLocked, setIsDarkM
       );
     }
 
-    // Score Summary Screen
     return (
       <div className={`max-w-md mx-auto text-center p-12 rounded-[40px] shadow-2xl border-t-8 border-green-500 relative overflow-hidden ${isDarkMode ? 'bg-slate-800' : 'bg-white'}`}>
         {showStreakAnim && (
@@ -360,7 +368,9 @@ export default function MockEngine({ user, onFinish, setIsExamLocked, setIsDarkM
 
   // --- VIEW: CBT INTERFACE ---
   const activeSubData = subjects.find(s => s.subject === activeSubject);
-  const isFinalMinute = timeLeft <= 60; // 🔥 Warning Trigger
+  const isFinalMinute = timeLeft <= 60; 
+
+  if (!activeSubData || !activeSubData.questions) return <div className="p-20 text-center">Loading Module...</div>;
 
   return (
     <div className="max-w-6xl mx-auto space-y-6">
@@ -372,7 +382,6 @@ export default function MockEngine({ user, onFinish, setIsExamLocked, setIsDarkM
           ))}
         </div>
         
-        {/* 🔥 TIMER UI WITH PULSING ALARM */}
         <div className={`flex items-center gap-3 font-mono text-xl font-bold px-6 py-2 rounded-xl transition-all duration-300 ${isFinalMinute ? 'bg-red-600 text-white animate-pulse' : 'bg-black text-white'}`}>
           <Timer size={18} className={isFinalMinute ? 'animate-spin' : ''} /> 
           {Math.max(0, Math.floor(timeLeft / 60))}:{String(Math.max(0, timeLeft % 60)).padStart(2, '0')}

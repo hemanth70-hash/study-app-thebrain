@@ -35,7 +35,6 @@ export default function AdminPanel({ user, isDarkMode }) {
   const [bookUrl, setBookUrl] = useState('');
   const [bookCategory, setBookCategory] = useState('Computer Science'); 
 
-  // 🔥 Categories List (Same as StudyHub)
   const librarySubjects = [
     "Computer Science", "Reasoning", "Aptitude", 
     "General Awareness", "Maths", "Physics", 
@@ -52,7 +51,6 @@ export default function AdminPanel({ user, isDarkMode }) {
   const fetchAdminData = useCallback(async () => {
     setLoading(true);
     try {
-      // 🔥 REMOVED .order() to fix the 400 Bad Request error
       const [reg, dai, profs] = await Promise.all([
         supabase.from('mocks').select('*'),
         supabase.from('daily_mocks').select('*'),
@@ -62,7 +60,6 @@ export default function AdminPanel({ user, isDarkMode }) {
       setRegularMocks(reg.data || []);
       setDailyMocks(dai.data || []);
       
-      // Filter out 'TheBrain' (Keep existing logic)
       const civilianNodes = (profs.data || []).filter(u => u.username?.toLowerCase() !== 'thebrain');
       setAllUsers(civilianNodes);
 
@@ -95,7 +92,6 @@ export default function AdminPanel({ user, isDarkMode }) {
   const handlePublish = async () => {
     if (isPublishing || !mockTitle || !bulkData) return;
     
-    // 🔥 PERMISSION LOCK: Daily Mocks
     if (isDailyQuickMock && !canUploadDaily) {
         alert("ACCESS DENIED: Daily Streak upload requires Elite Clearance.");
         return;
@@ -114,6 +110,8 @@ export default function AdminPanel({ user, isDarkMode }) {
         questions: parsedQuestions,
         is_strict: isStrict,
         time_limit: parseInt(timeLimit) || 10,
+        // 🔥 CRITICAL FIX: Save the owner's ID
+        created_by: user.id,
         ...(isDailyQuickMock && { is_daily: true, mock_date: today })
       };
 
@@ -131,14 +129,22 @@ export default function AdminPanel({ user, isDarkMode }) {
   };
 
   const deleteMock = async (id, table) => {
-    if (!window.confirm("Confirm deletion?")) return;
+    if (!window.confirm("Confirm deletion? This will also remove associated student scores.")) return;
     try {
+      // 1. Delete Scores first
       await supabase.from('scores').delete().eq('mock_id', id);
+      
+      if (table === 'daily_mocks') {
+        await supabase.from('completed_daily_mocks').delete().eq('mock_id', id);
+      }
+
+      // 2. Delete the Mock
       const { error } = await supabase.from(table).delete().eq('id', id);
+      
       if (error) throw error;
-      fetchAdminData();
+      fetchAdminData(); 
     } catch (err) {
-      alert(`Purge Error: ${err.message}`);
+      alert(`Purge Error: ${err.message}. You can only delete mocks YOU created.`);
     }
   };
 
@@ -162,14 +168,13 @@ export default function AdminPanel({ user, isDarkMode }) {
     fetchAdminData();
   };
 
-  // 🔥 UPDATED: Upload Resource with Category
   const uploadResource = async () => {
     if (!bookTitle || !bookUrl) return alert("Data missing.");
     const { error } = await supabase.from('study_materials').insert([
       { 
         title: bookTitle, 
         file_url: bookUrl, 
-        category: bookCategory // <--- Now sending category
+        category: bookCategory 
       }
     ]);
     if (error) alert(`Upload Error: ${error.message}`);
@@ -179,16 +184,12 @@ export default function AdminPanel({ user, isDarkMode }) {
     }
   };
 
-  // 🔥 EXTENDED PERMISSION SYSTEM (3 TIERS)
   const setPermission = async (userId, level) => {
     if (!isRoot) return;
-    
-    // 0: Student | 1: Mod | 2: Elite
     const updates = { 
       is_moderator: level >= 1, 
       is_elite_mod: level === 2 
     };
-
     const { error } = await supabase.from('profiles').update(updates).eq('id', userId);
     if (!error) fetchAdminData();
   };
@@ -216,7 +217,6 @@ export default function AdminPanel({ user, isDarkMode }) {
     input: isDarkMode ? 'bg-slate-800 text-white' : 'bg-slate-50 text-slate-900'
   };
 
-  // Helper for date matching
   const todayStr = new Date().toISOString().split('T')[0];
 
   return (
@@ -251,7 +251,6 @@ export default function AdminPanel({ user, isDarkMode }) {
                   <Clock size={16} className="absolute right-4 top-5 text-slate-400" />
                 </div>
                 
-                {/* 🔥 LOCKED DAILY TOGGLE */}
                 <button 
                   onClick={() => canUploadDaily && setIsDailyQuickMock(!isDailyQuickMock)} 
                   className={`p-4 rounded-2xl font-black uppercase text-[10px] flex items-center gap-2 transition-all ${
@@ -281,7 +280,10 @@ export default function AdminPanel({ user, isDarkMode }) {
                     {regularMocks.map(m => (
                       <div key={m.id} className={`p-3 rounded-xl flex justify-between items-center group transition-all border ${isDarkMode ? 'bg-slate-800 border-slate-700' : 'bg-slate-50 border-transparent hover:border-blue-500/30'}`}>
                         <div><p className={`font-bold text-[10px] uppercase truncate w-24 ${theme.text}`}>{m.mock_title}</p><p className="text-[8px] font-bold text-slate-400 uppercase">{m.time_limit}m</p></div>
-                        <button onClick={() => deleteMock(m.id, 'mocks')} className="p-1.5 text-slate-400 hover:text-red-500"><Trash2 size={14}/></button>
+                        {/* 🔥 CHECK OWNERSHIP BEFORE SHOWING DELETE */}
+                        {(isRoot || m.created_by === user.id) && (
+                          <button onClick={() => deleteMock(m.id, 'mocks')} className="p-1.5 text-slate-400 hover:text-red-500"><Trash2 size={14}/></button>
+                        )}
                       </div>
                     ))}
                   </div>
@@ -289,14 +291,15 @@ export default function AdminPanel({ user, isDarkMode }) {
                 <div className="space-y-2">
                   <p className="text-[10px] font-black uppercase text-orange-400 mb-2 flex items-center gap-2"><Zap size={14}/> Ongoing Daily Mock</p>
                   <div className="max-h-32 overflow-y-auto custom-scrollbar space-y-1">
-                    {/* 🔥 FILTERED: Only shows TODAY's mock here */}
                     {dailyMocks.filter(m => m.mock_date === todayStr).map(m => (
                       <div key={m.id} className={`p-3 rounded-xl flex justify-between items-center group transition-all border ${isDarkMode ? 'bg-slate-800 border-slate-700' : 'bg-orange-50 border-transparent hover:border-red-500/30'}`}>
                         <div><p className={`font-bold text-[10px] uppercase truncate w-24 ${theme.text}`}>{m.mock_title}</p><p className="text-[8px] font-bold text-slate-400 uppercase">{m.time_limit}m</p></div>
-                        {canUploadDaily && <button onClick={() => deleteMock(m.id, 'daily_mocks')} className="p-1.5 text-slate-400 hover:text-red-500"><Trash2 size={14}/></button>}
+                        {/* 🔥 CHECK OWNERSHIP BEFORE SHOWING DELETE */}
+                        {(isRoot || m.created_by === user.id) && (
+                           <button onClick={() => deleteMock(m.id, 'daily_mocks')} className="p-1.5 text-slate-400 hover:text-red-500"><Trash2 size={14}/></button>
+                        )}
                       </div>
                     ))}
-                    {dailyMocks.filter(m => m.mock_date === todayStr).length === 0 && <p className="text-[9px] text-slate-400 italic p-2">No active mock for today.</p>}
                   </div>
                 </div>
             </div>
@@ -305,6 +308,7 @@ export default function AdminPanel({ user, isDarkMode }) {
 
         {/* RIGHT: TOOLS */}
         <div className="space-y-8 h-full">
+          {/* ... (Keep existing Invite Generator & Library Code exactly as is) ... */}
           <div className={`p-8 rounded-[32px] shadow-xl border transition-colors ${theme.bg} ${theme.border}`}>
             <div className="flex items-center gap-3 mb-6 text-indigo-600"><Key size={32} /><h2 className={`text-2xl font-black uppercase ${theme.text}`}>Invite Generator</h2></div>
             <div className="mb-6 space-y-4">
@@ -325,18 +329,9 @@ export default function AdminPanel({ user, isDarkMode }) {
             <div className="flex items-center gap-3 mb-6 text-orange-500"><BookOpen size={32} /><h2 className={`text-2xl font-black uppercase ${theme.text}`}>Library</h2></div>
             <div className="space-y-4">
               <input className={`w-full p-4 rounded-2xl border outline-none transition-colors ${theme.input} ${theme.border}`} placeholder="Resource Title" value={bookTitle} onChange={e => setBookTitle(e.target.value)} />
-              
-              {/* 🔥 NEW: SUBJECT DROPDOWN */}
-              <select 
-                className={`w-full p-4 rounded-2xl border outline-none transition-colors cursor-pointer ${theme.input} ${theme.border}`} 
-                value={bookCategory} 
-                onChange={e => setBookCategory(e.target.value)}
-              >
-                {librarySubjects.map(sub => (
-                  <option key={sub} value={sub}>{sub}</option>
-                ))}
+              <select className={`w-full p-4 rounded-2xl border outline-none transition-colors cursor-pointer ${theme.input} ${theme.border}`} value={bookCategory} onChange={e => setBookCategory(e.target.value)}>
+                {librarySubjects.map(sub => <option key={sub} value={sub}>{sub}</option>)}
               </select>
-
               <input className={`w-full p-4 rounded-2xl border outline-none transition-colors ${theme.input} ${theme.border}`} placeholder="PDF URL" value={bookUrl} onChange={e => setBookUrl(e.target.value)} />
               <button onClick={uploadResource} className="w-full bg-orange-500 text-white py-4 rounded-2xl font-black uppercase shadow-lg transition-all active:scale-95 hover:bg-orange-600">Upload Resource</button>
             </div>
@@ -344,37 +339,24 @@ export default function AdminPanel({ user, isDarkMode }) {
         </div>
       </div>
 
-      {/* --- RESTRICTED ZONE (ROOT ONLY) --- */}
+      {/* --- RESTRICTED ZONE --- */}
       {isRoot && (
         <div className="space-y-10">
           <div className={`border-t-4 border-dashed my-10 relative ${isDarkMode ? 'border-slate-800' : 'border-slate-200'}`}>
             <span className={`absolute top-[-14px] left-1/2 -translate-x-1/2 px-4 text-[10px] font-black uppercase text-slate-400 ${isDarkMode ? 'bg-slate-950' : 'bg-white'}`}>Root Command</span>
           </div>
 
-          {/* 🔥 3-TIER PERMISSION MANAGER (REPLACED ROSTER) */}
           <div className={`p-8 rounded-[32px] shadow-xl border-l-8 border-l-purple-600 transition-colors ${theme.bg} ${theme.border}`}>
             <div className="flex items-center gap-3 mb-6 text-purple-600"><ShieldCheck size={32} /><h2 className={`text-2xl font-black uppercase ${theme.text}`}>Clearance Levels</h2></div>
-            
-            {loading ? (
-              <div className="text-center py-10 text-slate-400 font-bold animate-pulse">Scanning Grid...</div>
-            ) : allUsers.length === 0 ? (
-              <div className="text-center py-10 border-2 border-dashed border-slate-300 dark:border-slate-700 rounded-2xl">
-                <Users size={40} className="mx-auto text-slate-300 mb-2" />
-                <p className="text-slate-400 font-black uppercase text-sm">No Other Nodes Detected</p>
-                <p className="text-slate-500 text-xs mt-1">Check database or generate invites.</p>
-              </div>
-            ) : (
-              <div className="grid grid-cols-1 gap-4 max-h-[400px] overflow-y-auto pr-2 custom-scrollbar">
+            {loading ? <div className="text-center py-10 text-slate-400 font-bold animate-pulse">Scanning Grid...</div> : 
+             allUsers.length === 0 ? <div className="text-center py-10 border-2 border-dashed border-slate-300 dark:border-slate-700 rounded-2xl"><p className="text-slate-400 font-black uppercase text-sm">No Other Nodes Detected</p></div> : 
+             <div className="grid grid-cols-1 gap-4 max-h-[400px] overflow-y-auto pr-2 custom-scrollbar">
                 {allUsers.map(u => (
                   <div key={u.id} className={`p-4 rounded-2xl border-2 flex flex-col md:flex-row items-center justify-between transition-all ${u.is_elite_mod ? 'border-purple-500 bg-purple-50 dark:bg-purple-900/20' : u.is_moderator ? 'border-blue-500 bg-blue-50 dark:bg-blue-900/20' : theme.border}`}>
                     <div className="mb-3 md:mb-0 text-center md:text-left">
                       <p className={`font-black uppercase text-xs ${theme.text}`}>{u.username}</p>
-                      <p className={`text-[9px] font-bold ${u.is_elite_mod ? 'text-purple-600' : u.is_moderator ? 'text-blue-500' : 'text-slate-400'}`}>
-                        {u.is_elite_mod ? 'ELITE MODERATOR' : u.is_moderator ? 'MODERATOR' : 'STUDENT'}
-                      </p>
+                      <p className={`text-[9px] font-bold ${u.is_elite_mod ? 'text-purple-600' : u.is_moderator ? 'text-blue-500' : 'text-slate-400'}`}>{u.is_elite_mod ? 'ELITE MODERATOR' : u.is_moderator ? 'MODERATOR' : 'STUDENT'}</p>
                     </div>
-                    
-                    {/* 🔥 3 TOGGLES (Extended System) */}
                     <div className={`flex p-1 rounded-xl gap-1 ${isDarkMode ? 'bg-slate-800' : 'bg-slate-100'}`}>
                       <button onClick={() => setPermission(u.id, 0)} className={`px-4 py-2 rounded-lg text-[9px] font-black uppercase transition-all ${!u.is_moderator ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-400 hover:text-slate-600'}`}>Student</button>
                       <button onClick={() => setPermission(u.id, 1)} className={`px-4 py-2 rounded-lg text-[9px] font-black uppercase transition-all ${u.is_moderator && !u.is_elite_mod ? 'bg-blue-600 text-white shadow-sm' : 'text-slate-400 hover:text-blue-500'}`}>Mod</button>
@@ -382,8 +364,8 @@ export default function AdminPanel({ user, isDarkMode }) {
                     </div>
                   </div>
                 ))}
-              </div>
-            )}
+             </div>
+            }
           </div>
 
           <div className="bg-gradient-to-br from-blue-600 to-indigo-700 p-8 rounded-[32px] shadow-2xl text-white">
@@ -391,23 +373,6 @@ export default function AdminPanel({ user, isDarkMode }) {
             <div className="flex flex-col md:flex-row gap-4">
               <input className="flex-1 p-4 rounded-2xl text-slate-900 font-bold border-none outline-none" placeholder="Transmission..." value={announcement} onChange={(e) => setAnnouncement(e.target.value)} />
               <button onClick={postAnnouncement} className="bg-white text-blue-600 px-10 py-4 rounded-2xl font-black uppercase tracking-widest hover:bg-blue-50 transition-all">Broadcast</button>
-            </div>
-          </div>
-
-          <div className={`p-8 rounded-[32px] shadow-xl border transition-colors ${theme.bg} ${theme.border}`}>
-            <div className="flex items-center gap-3 mb-6 text-orange-500"><MessageSquare size={28} /><h2 className={`text-xl font-black uppercase tracking-tight ${theme.text}`}>Requests</h2></div>
-            <div className="space-y-4 max-h-[300px] overflow-y-auto pr-4 custom-scrollbar">
-              {userRequests.map(req => (
-                <div key={req.id} className={`p-4 rounded-2xl border transition-all ${theme.border}`}>
-                  <div className="flex justify-between items-start mb-2"><span className="bg-orange-100 dark:bg-orange-500/20 text-orange-600 dark:text-orange-400 px-2 py-0.5 rounded text-[8px] font-black uppercase tracking-widest">{req.request_type}</span></div>
-                  <p className={`text-xs font-black uppercase ${theme.text}`}>{req.user_name}</p>
-                  <p className="text-[10px] text-slate-500 italic mt-1 mb-4">"{req.message}"</p>
-                  <div className="flex gap-2">
-                    <button onClick={() => { supabase.from('admin_requests').delete().eq('id', req.id); fetchAdminData(); }} className="flex-1 bg-green-100 dark:bg-green-600/20 text-green-600 dark:text-green-400 py-2 rounded-xl font-black text-[10px]">RESOLVE</button>
-                    <button onClick={() => { supabase.from('admin_requests').delete().eq('id', req.id); fetchAdminData(); }} className="p-2 bg-red-100 dark:bg-red-600/20 text-red-600 dark:text-red-400 rounded-xl"><X size={14} /></button>
-                  </div>
-                </div>
-              ))}
             </div>
           </div>
 
