@@ -202,7 +202,7 @@ export default function Leaderboard({ isDarkMode }) {
                             )}
                             {health.status === 'danger' && (
                               <span className="bg-red-100 text-red-600 border border-red-200 px-2 py-0.5 rounded text-[8px] font-black uppercase flex items-center gap-1 animate-pulse">
-                                <Skull size={8} /> Purge Soon
+                                <Skull size={8} /> Deleted Soon
                               </span>
                             )}
                           </div>
