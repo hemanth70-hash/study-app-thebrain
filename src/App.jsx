@@ -8,6 +8,7 @@ import Profile from './components/Profile';
 import SubjectNotes from './components/SubjectNotes';
 import StudyHub from './components/StudyHub'; 
 import TypingMaster from './components/TypingMaster'; 
+import NeuralTools from './components/NeuralTools';
 
 // 🔥 WIDGETS
 import CalendarWidget from './components/CalendarWidget'; 
@@ -20,6 +21,15 @@ import {
   Layout, Zap, Award, Database, ListFilter, Skull 
 } from 'lucide-react';
 
+<Route 
+  path="/tools" 
+  element={
+    <div className={`min-h-screen ${isDarkMode ? 'bg-slate-950' : 'bg-slate-50'}`}>
+      <NeuralTools isDarkMode={isDarkMode} />
+    </div>
+  } 
+  
+/>
 export default function App() {
   const [user, setUser] = useState(null);
   const [username, setUsername] = useState('');

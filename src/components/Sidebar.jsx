@@ -12,7 +12,7 @@ export default function Sidebar({ user, activeTab, setActiveTab, setIsDarkMode, 
   const getAvatarUrl = (seed, gender) => {
     const style = gender === 'neutral' ? 'bottts' : 'avataaars';
     const params = gender === 'female' ? '&topProbability=100&facialHairProbability=0' : '';
-    const finalSeed = seed || user.username;
+    const finalSeed = seed || user?.username || 'user';
     return `https://api.dicebear.com/7.x/${style}/svg?seed=${finalSeed}${params}`;
   };
 
@@ -31,7 +31,7 @@ export default function Sidebar({ user, activeTab, setActiveTab, setIsDarkMode, 
   ];
 
   // 🔥 ADMIN LOGIC
-  const isAdmin = user.username?.toLowerCase() === 'thebrain' || user?.is_moderator;
+  const isAdmin = user?.username?.toLowerCase() === 'thebrain' || user?.is_moderator;
 
   if (isAdmin) {
     const adminExists = menuItems.find(item => item.id === 'admin');
@@ -84,7 +84,7 @@ export default function Sidebar({ user, activeTab, setActiveTab, setIsDarkMode, 
           >
              <div className="absolute inset-0 bg-blue-500/10 group-hover:bg-blue-500/20 transition-colors animate-pulse" />
              <img 
-               src={getAvatarUrl(user.avatar_seed, user.gender)} 
+               src={getAvatarUrl(user?.avatar_seed, user?.gender)} 
                alt="Identity" 
                className="w-20 h-20 object-contain relative z-10 transition-transform duration-500 group-hover:scale-110" 
              />
@@ -92,31 +92,31 @@ export default function Sidebar({ user, activeTab, setActiveTab, setIsDarkMode, 
           
           <div className="text-center">
             <h3 className={`font-black uppercase tracking-tighter text-sm flex items-center justify-center gap-1 ${theme.textMain}`}>
-              {user.username}
-              {user.total_exams_completed > 15 && (
+              {user?.username || 'Guest'}
+              {user?.total_exams_completed > 15 && (
                 <motion.span initial={{ scale: 0 }} animate={{ scale: 1 }}>
                   <ShieldCheck size={14} className="text-blue-500 fill-blue-500/10" />
                 </motion.span>
               )}
             </h3>
             <p className="text-[8px] font-black text-blue-600 dark:text-blue-400 uppercase tracking-[0.2em] mt-1">
-              {user.education || 'Neural Aspirant'}
+              {user?.education || 'Neural Aspirant'}
             </p>
           </div>
           
           {/* Dynamic Streak Badge */}
           <motion.div 
-            animate={user.streak_count > 0 ? { scale: [1, 1.05, 1], boxShadow: ["0 0 0px rgba(249,115,22,0)", "0 0 15px rgba(249,115,22,0.2)", "0 0 0px rgba(249,115,22,0)"] } : {}}
+            animate={(user?.streak_count || 0) > 0 ? { scale: [1, 1.05, 1], boxShadow: ["0 0 0px rgba(249,115,22,0)", "0 0 15px rgba(249,115,22,0.2)", "0 0 0px rgba(249,115,22,0)"] } : {}}
             transition={{ repeat: Infinity, duration: 2 }}
             className={`mt-3 flex items-center gap-2 px-4 py-1.5 rounded-full border-2 transition-all duration-500 ${
-              user.streak_count > 0 
+              (user?.streak_count || 0) > 0 
               ? 'bg-orange-50 border-orange-200 dark:bg-orange-900/20 dark:border-orange-800' 
               : `border-transparent ${theme.switcherBg}`
             }`}
           >
-            <Flame size={14} className={`${user.streak_count > 0 ? 'text-orange-500 fill-orange-500' : 'text-gray-300'}`} />
-            <span className={`text-[9px] font-black tracking-widest ${user.streak_count > 0 ? 'text-orange-600 dark:text-orange-400' : 'text-gray-400'}`}>
-              {user.streak_count || 0} DAY STREAK
+            <Flame size={14} className={`${(user?.streak_count || 0) > 0 ? 'text-orange-500 fill-orange-500' : 'text-gray-300'}`} />
+            <span className={`text-[9px] font-black tracking-widest ${(user?.streak_count || 0) > 0 ? 'text-orange-600 dark:text-orange-400' : 'text-gray-400'}`}>
+              {user?.streak_count || 0} DAY STREAK
             </span>
           </motion.div>
         </div>
