@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
+import { BrowserRouter as Router, Routes, Route, useLocation } from 'react-router-dom';
 import Sidebar from './components/Sidebar';
 import MockEngine from './components/MockEngine';
 import Leaderboard from './components/Leaderboard';
@@ -17,30 +18,138 @@ import GoalTracker from './components/GoalTracker';
 import StudyChat from './components/StudyChat';
 
 import { 
-  Lock, Megaphone, ShieldAlert, Key, Youtube, 
-  Layout, Zap, Award, Database, ListFilter, Skull 
+  ShieldAlert, Megaphone
 } from 'lucide-react';
 
-<Route 
-  path="/tools" 
-  element={
-    <div className={`min-h-screen ${isDarkMode ? 'bg-slate-950' : 'bg-slate-50'}`}>
-      <NeuralTools isDarkMode={isDarkMode} />
+// --- MAIN DASHBOARD COMPONENT ---
+function DashboardLayout({ user, isDarkMode, setIsDarkMode, activeTab, setActiveTab, setUser, refreshUser }) {
+  const [isSidebarOpen, setIsSidebarOpen] = useState(true);
+  const [globalMsg, setGlobalMsg] = useState(null);
+  const [isExamLocked, setIsExamLocked] = useState(false); 
+
+  // --- GLOBAL ANNOUNCEMENT ENGINE ---
+  useEffect(() => {
+    const fetchAnnouncement = async () => {
+      const { data } = await supabase
+        .from('announcements')
+        .select('message')
+        .eq('active', true)
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .maybeSingle(); 
+      if (data) setGlobalMsg(data.message);
+    };
+    if (user) fetchAnnouncement();
+  }, [user?.id]);
+
+  const sendAdminRequest = async () => {
+    const msg = window.prompt("Transmission to The Brain:");
+    if (!msg) return;
+    await supabase.from('admin_requests').insert([{
+      user_id: user.id, user_name: user.username, message: msg, request_type: 'USER_REQUEST'
+    }]);
+    alert("Signal transmitted.");
+  };
+
+  const isAdmin = user.username?.toLowerCase() === 'thebrain' || user.is_moderator;
+
+  return (
+    <div className={`flex min-h-screen transition-colors duration-300 ${isDarkMode ? 'bg-slate-950 text-slate-100' : 'bg-blue-50 text-gray-800'}`}>
+      
+      {/* SIDEBAR */}
+      <div className={`${isExamLocked ? 'pointer-events-none opacity-40 blur-[3px] grayscale select-none' : ''} transition-all duration-700 z-40`}>
+        <Sidebar 
+          user={user} 
+          activeTab={activeTab} 
+          setActiveTab={setActiveTab} 
+          setIsDarkMode={setIsDarkMode} 
+          isDarkMode={isDarkMode} 
+          isOpen={isSidebarOpen} 
+          setIsOpen={setIsSidebarOpen} 
+        />
+      </div>
+      
+      {/* MAIN CONTENT AREA */}
+      <main className={`flex-1 p-6 md:p-10 transition-all duration-300 ${isSidebarOpen ? 'ml-64' : 'ml-20'}`}>
+        
+        {/* HEADER */}
+        <header className={`mb-10 flex flex-wrap items-center gap-6 transition-all duration-700 ${isExamLocked ? 'opacity-20 pointer-events-none select-none -translate-y-4' : ''}`}>
+          <h2 className={`text-4xl font-black capitalize transition-colors ${isDarkMode ? 'text-blue-400' : 'text-blue-600'}`}>
+            {activeTab === 'ranking' ? 'Leaderboard' : activeTab === 'study' ? 'Study Hub' : activeTab === 'typing' ? 'Neural Typer' : activeTab}
+          </h2>
+          
+          <div className="flex-1 min-w-[300px]">
+            {globalMsg && (
+              <div className="bg-gradient-to-r from-blue-600 to-indigo-700 text-white px-6 py-3 rounded-3xl shadow-lg flex items-center border border-white/20 relative overflow-hidden">
+                <div className="flex-1 overflow-hidden"><marquee className="font-bold text-sm whitespace-nowrap">{globalMsg}</marquee></div>
+                <button onClick={() => setGlobalMsg(null)} className="ml-4 hover:text-white/70 transition-colors shrink-0 z-10">✕</button>
+              </div>
+            )}
+          </div>
+
+          <div className={`flex items-center gap-3 px-6 py-2 rounded-2xl shadow-sm border-2 transition-colors ${isDarkMode ? 'bg-slate-800 border-slate-700' : 'bg-white border-orange-100'}`}>
+            <span className="text-2xl animate-pulse">🔥</span>
+            <span className="font-black text-xl text-orange-500">{user.streak_count || 0}</span>
+          </div>
+        </header>
+
+        {/* CONTENT SWITCHER */}
+        <div className="max-w-7xl mx-auto space-y-8">
+          
+          {activeTab === 'dashboard' && (
+            <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-700">
+              <WelcomeHeader isDarkMode={isDarkMode} />
+              <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
+                <div className="h-full lg:col-span-1"><CalendarWidget isDarkMode={isDarkMode} /></div>
+                <div className="h-full lg:col-span-2"><StudyChat user={user} isDarkMode={isDarkMode} /></div>
+                <div className="h-full lg:col-span-1"><GoalTracker user={user} isDarkMode={isDarkMode} /></div>
+              </div>
+            </div>
+          )}
+          
+          {activeTab === 'study' && <StudyHub user={user} isDarkMode={isDarkMode} />}
+          {activeTab === 'subjects' && <SubjectNotes user={user} isDarkMode={isDarkMode} />}
+          {activeTab === 'typing' && <TypingMaster user={user} isDarkMode={isDarkMode} />}
+          
+          {activeTab === 'mocks' && (
+            <MockEngine 
+              user={user} 
+              setIsExamLocked={setIsExamLocked} 
+              setIsDarkMode={setIsDarkMode} 
+              isDarkMode={isDarkMode}
+              onFinish={() => { 
+                setActiveTab('dashboard'); 
+                setIsExamLocked(false); 
+                refreshUser(user.id); 
+              }} 
+            />
+          )}
+
+          {activeTab === 'ranking' && <Leaderboard isDarkMode={isDarkMode} />}
+          {activeTab === 'admin' && <AdminPanel user={user} isDarkMode={isDarkMode} />}
+          {activeTab === 'profile' && <Profile user={user} isDarkMode={isDarkMode} />}
+        </div>
+
+        {/* ADMIN REQUEST BUTTON */}
+        {!isExamLocked && !isAdmin && (
+          <button onClick={sendAdminRequest} className="fixed bottom-8 right-8 bg-blue-600 text-white p-5 rounded-full shadow-[0_0_30px_rgba(37,99,235,0.4)] hover:scale-110 active:scale-95 transition-all z-50 group">
+            <Megaphone size={26} className="group-hover:animate-bounce" />
+          </button>
+        )}
+      </main>
     </div>
-  } 
-  
-/>
+  );
+}
+
+// --- ROOT APP COMPONENT ---
 export default function App() {
   const [user, setUser] = useState(null);
   const [username, setUsername] = useState('');
   const [activeTab, setActiveTab] = useState('dashboard');
   const [isDarkMode, setIsDarkMode] = useState(false);
-  const [isSidebarOpen, setIsSidebarOpen] = useState(true);
-  const [globalMsg, setGlobalMsg] = useState(null);
-  const [isExamLocked, setIsExamLocked] = useState(false); 
   const [loginError, setLoginError] = useState('');
 
-  // --- 1. THE REAPER (AUTO-DELETE LOGIC) ---
+  // --- THE REAPER (AUTO-DELETE LOGIC) ---
   const runTheReaper = async () => {
     const today = new Date();
     const sixtyDaysAgo = new Date(today);
@@ -65,69 +174,38 @@ export default function App() {
 
   const refreshUser = useCallback(async (userId) => {
     if (!userId) return;
-    const { data, error } = await supabase
-      .from('profiles')
-      .select('*')
-      .eq('id', userId)
-      .single();
+    const { data, error } = await supabase.from('profiles').select('*').eq('id', userId).single();
     if (data && !error) setUser(data);
   }, []);
 
-  // --- 2. GLOBAL ANNOUNCEMENT ENGINE ---
-  useEffect(() => {
-    const fetchAnnouncement = async () => {
-      const { data } = await supabase
-        .from('announcements')
-        .select('message')
-        .eq('active', true)
-        .order('created_at', { ascending: false })
-        .limit(1)
-        .maybeSingle(); 
-      if (data) setGlobalMsg(data.message);
-    };
-    if (user) fetchAnnouncement();
-  }, [user?.id]);
-
-  // --- 3. REFINED STREAK LOGIC ---
+  // --- STREAK LOGIC ---
   const handleStreakCheck = async (profile) => {
     if (!profile?.last_mock_date) return;
-    
     const today = new Date();
     today.setHours(0, 0, 0, 0);
     const todayStr = today.toISOString().split('T')[0];
-
     if (profile.last_mock_date === todayStr) return;
 
     const lastDate = new Date(profile.last_mock_date);
     lastDate.setHours(0, 0, 0, 0);
-    
     const yesterday = new Date(today);
     yesterday.setDate(yesterday.getDate() - 1);
 
     if (lastDate.getTime() < yesterday.getTime()) {
-      if (profile.streak_points > 0) {
-        await supabase.from('profiles').update({ 
-          streak_points: profile.streak_points - 1,
-          last_mock_date: yesterday.toISOString().split('T')[0] 
-        }).eq('id', profile.id);
-        alert("🔥 STREAK PROTECTED: 1 Streak Point consumed.");
-        refreshUser(profile.id);
-      } else {
-        await supabase.from('profiles').update({ streak_count: 0 }).eq('id', profile.id);
-        refreshUser(profile.id);
-      }
+      await supabase.from('profiles').update({ streak_count: 0 }).eq('id', profile.id);
+      refreshUser(profile.id);
     }
   };
 
-  // --- 4. LOGIN SYSTEM ---
+  // --- LOGIN LOGIC ---
   const handleLogin = async () => {
     if (!username.trim()) return;
     setLoginError('');
 
     try {
       const inputName = username.trim();
-
-      // A. CHECK IF USER EXISTS
+      
+      // 1. Check Existing User
       const { data: existingUser } = await supabase
         .from('profiles')
         .select('*')
@@ -137,13 +215,11 @@ export default function App() {
       if (existingUser) {
         setUser(existingUser);
         handleStreakCheck(existingUser);
-        if (existingUser.username.toLowerCase() === 'thebrain') {
-          runTheReaper();
-        }
+        if (existingUser.username.toLowerCase() === 'thebrain') runTheReaper();
         return;
       }
 
-      // B. CHECK INVITE CODES
+      // 2. Check Invite Code
       const { data: invite } = await supabase
         .from('invite_codes')
         .select('*')
@@ -171,142 +247,70 @@ export default function App() {
       } else {
         setLoginError("❌ Access Denied.");
       }
-
     } catch (err) { 
       console.error("Login Error", err); 
       setLoginError("System Failure.");
     }
   };
 
-  const sendAdminRequest = async () => {
-    const msg = window.prompt("Transmission to The Brain:");
-    if (!msg) return;
-    await supabase.from('admin_requests').insert([{
-      user_id: user.id, user_name: user.username, message: msg, request_type: 'USER_REQUEST'
-    }]);
-    alert("Signal transmitted.");
-  };
-
-  // --- VIEW: LOGIN ---
-  if (!user) {
-    return (
-      <div className={`flex items-center justify-center min-h-screen transition-colors duration-500 ${isDarkMode ? 'bg-slate-950' : 'bg-blue-50'}`}>
-        <div className={`p-10 rounded-[3rem] shadow-2xl border-2 w-full max-w-md text-center animate-in fade-in zoom-in duration-500 ${
-          isDarkMode ? 'bg-slate-900 border-blue-500/20 text-white' : 'bg-white border-white text-gray-900'
-        }`}>
-          <div className="w-20 h-20 bg-blue-600 rounded-3xl flex items-center justify-center mx-auto mb-6 shadow-xl rotate-3">
-             <ShieldAlert className="text-white" size={40} />
-          </div>
-          <h1 className="text-4xl font-black mb-2 text-blue-600 italic tracking-tighter uppercase">Neural Portal</h1>
-          <p className="text-gray-400 font-bold text-xs uppercase tracking-widest mb-8">Identify Node / Enter Code</p>
-          <input 
-            className={`w-full p-5 rounded-2xl border-2 mb-4 font-black outline-none focus:border-blue-500 transition-all text-center ${
-              isDarkMode ? 'bg-slate-800 border-slate-700 text-white' : 'bg-gray-50 border-gray-100 text-gray-900'
-            }`} 
-            placeholder="USERNAME OR INVITE CODE" 
-            value={username} 
-            onChange={(e) => setUsername(e.target.value)} 
-          />
-          <button onClick={handleLogin} className="w-full bg-blue-600 text-white p-5 rounded-2xl font-black uppercase tracking-widest hover:bg-blue-700 shadow-xl transition-all">Initialize Connection</button>
-          {loginError && <p className="text-red-500 font-black text-[10px] uppercase tracking-widest mt-4 animate-pulse">{loginError}</p>}
-        </div>
-      </div>
-    );
-  }
-
-  const isAdmin = user.username.toLowerCase() === 'thebrain' || user.is_moderator;
-
-  // --- DASHBOARD WRAPPER ---
   return (
-    <div className={isDarkMode ? 'dark' : ''}>
-      <div className={`flex min-h-screen transition-colors duration-300 ${isDarkMode ? 'bg-slate-950 text-slate-100' : 'bg-blue-50 text-gray-800'}`}>
-        
-        <div className={`${isExamLocked ? 'pointer-events-none opacity-40 blur-[3px] grayscale select-none' : ''} transition-all duration-700 z-40`}>
-          <Sidebar user={user} activeTab={activeTab} setActiveTab={setActiveTab} setIsDarkMode={setIsDarkMode} isDarkMode={isDarkMode} isOpen={isSidebarOpen} setIsOpen={setIsSidebarOpen} />
-        </div>
-        
-        <main className={`flex-1 p-6 md:p-10 transition-all duration-300 ${isSidebarOpen ? 'ml-64' : 'ml-20'}`}>
+    <Router>
+      <div className={isDarkMode ? 'dark' : ''}>
+        <Routes>
           
-          {/* HEADER */}
-          <header className={`mb-10 flex flex-wrap items-center gap-6 transition-all duration-700 ${isExamLocked ? 'opacity-20 pointer-events-none select-none -translate-y-4' : ''}`}>
-            <h2 className={`text-4xl font-black capitalize transition-colors ${isDarkMode ? 'text-blue-400' : 'text-blue-600'}`}>
-              {activeTab === 'ranking' ? 'Leaderboard' : activeTab === 'study' ? 'Study Hub' : activeTab === 'typing' ? 'Neural Typer' : activeTab}
-            </h2>
-            <div className="flex-1 min-w-[300px]">
-              {globalMsg && (
-                <div className="bg-gradient-to-r from-blue-600 to-indigo-700 text-white px-6 py-3 rounded-3xl shadow-lg flex items-center border border-white/20 relative overflow-hidden">
-                  <div className="flex-1 overflow-hidden"><marquee className="font-bold text-sm whitespace-nowrap">{globalMsg}</marquee></div>
-                  <button onClick={() => setGlobalMsg(null)} className="ml-4 hover:text-white/70 transition-colors shrink-0 z-10">✕</button>
-                </div>
-              )}
-            </div>
-            <div className={`flex items-center gap-3 px-6 py-2 rounded-2xl shadow-sm border-2 transition-colors ${isDarkMode ? 'bg-slate-800 border-slate-700' : 'bg-white border-orange-100'}`}>
-              <span className="text-2xl animate-pulse">🔥</span>
-              <span className="font-black text-xl text-orange-500">{user.streak_count || 0}</span>
-            </div>
-          </header>
-
-          <div className="max-w-7xl mx-auto space-y-8">
-            {activeTab === 'dashboard' && (
-              <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-700">
-                
-                {/* 1. INTEL SEARCH BAR */}
-                <WelcomeHeader isDarkMode={isDarkMode} />
-
-                {/* 2. THREE-COLUMN GRID: Calendar | Chat (WIDE) | Timer */}
-                {/* 🔥 GRID COLS = 4. Chat takes 2 spans (50% width) */}
-                <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
-                  
-                  {/* LEFT: Calendar (25%) */}
-                  <div className="h-full lg:col-span-1">
-                     <CalendarWidget isDarkMode={isDarkMode} />
-                  </div>
-                  
-                  {/* CENTER: CHAT (50% - FILLS THE GAP) */}
-                  <div className="h-full lg:col-span-2">
-                     <StudyChat user={user} isDarkMode={isDarkMode} />
-                  </div>
-
-                  {/* RIGHT: GOALS (25%) */}
-                  <div className="h-full lg:col-span-1">
-                     <GoalTracker user={user} isDarkMode={isDarkMode} />
-                  </div>
-
-                </div>
-
+          {/* 🔥 ROUTE 1: THE NEURAL TOOLS POPUP (NO SIDEBAR) */}
+          <Route 
+            path="/tools" 
+            element={
+              <div className={`min-h-screen ${isDarkMode ? 'bg-slate-950' : 'bg-slate-50'}`}>
+                <NeuralTools isDarkMode={isDarkMode} />
               </div>
-            )}
-            
-            {activeTab === 'study' && <StudyHub user={user} isDarkMode={isDarkMode} />}
-            {activeTab === 'subjects' && <SubjectNotes user={user} isDarkMode={isDarkMode} />}
-            {activeTab === 'typing' && <TypingMaster user={user} isDarkMode={isDarkMode} />}
-            
-            {activeTab === 'mocks' && (
-              <MockEngine 
-                user={user} 
-                setIsExamLocked={setIsExamLocked} 
-                setIsDarkMode={setIsDarkMode} 
-                isDarkMode={isDarkMode}
-                onFinish={() => { 
-                  setActiveTab('dashboard'); 
-                  setIsExamLocked(false); 
-                  refreshUser(user.id); 
-                }} 
-              />
-            )}
+            } 
+          />
 
-            {activeTab === 'ranking' && <Leaderboard isDarkMode={isDarkMode} />}
-            {activeTab === 'admin' && <AdminPanel user={user} isDarkMode={isDarkMode} />}
-            {activeTab === 'profile' && <Profile user={user} isDarkMode={isDarkMode} />}
-          </div>
-
-          {!isExamLocked && !isAdmin && (
-            <button onClick={sendAdminRequest} className="fixed bottom-8 right-8 bg-blue-600 text-white p-5 rounded-full shadow-[0_0_30px_rgba(37,99,235,0.4)] hover:scale-110 active:scale-95 transition-all z-50 group">
-              <Megaphone size={26} className="group-hover:animate-bounce" />
-            </button>
-          )}
-        </main>
+          {/* 🔥 ROUTE 2: MAIN APP (DASHBOARD) */}
+          <Route 
+            path="/" 
+            element={
+              !user ? (
+                // --- LOGIN SCREEN ---
+                <div className={`flex items-center justify-center min-h-screen transition-colors duration-500 ${isDarkMode ? 'bg-slate-950' : 'bg-blue-50'}`}>
+                  <div className={`p-10 rounded-[3rem] shadow-2xl border-2 w-full max-w-md text-center animate-in fade-in zoom-in duration-500 ${
+                    isDarkMode ? 'bg-slate-900 border-blue-500/20 text-white' : 'bg-white border-white text-gray-900'
+                  }`}>
+                    <div className="w-20 h-20 bg-blue-600 rounded-3xl flex items-center justify-center mx-auto mb-6 shadow-xl rotate-3">
+                       <ShieldAlert className="text-white" size={40} />
+                    </div>
+                    <h1 className="text-4xl font-black mb-2 text-blue-600 italic tracking-tighter uppercase">Neural Portal</h1>
+                    <p className="text-gray-400 font-bold text-xs uppercase tracking-widest mb-8">Identify Node / Enter Code</p>
+                    <input 
+                      className={`w-full p-5 rounded-2xl border-2 mb-4 font-black outline-none focus:border-blue-500 transition-all text-center ${
+                        isDarkMode ? 'bg-slate-800 border-slate-700 text-white' : 'bg-gray-50 border-gray-100 text-gray-900'
+                      }`} 
+                      placeholder="USERNAME OR INVITE CODE" 
+                      value={username} 
+                      onChange={(e) => setUsername(e.target.value)} 
+                    />
+                    <button onClick={handleLogin} className="w-full bg-blue-600 text-white p-5 rounded-2xl font-black uppercase tracking-widest hover:bg-blue-700 shadow-xl transition-all">Initialize Connection</button>
+                    {loginError && <p className="text-red-500 font-black text-[10px] uppercase tracking-widest mt-4 animate-pulse">{loginError}</p>}
+                  </div>
+                </div>
+              ) : (
+                // --- DASHBOARD LAYOUT ---
+                <DashboardLayout 
+                  user={user} 
+                  isDarkMode={isDarkMode} 
+                  setIsDarkMode={setIsDarkMode} 
+                  activeTab={activeTab} 
+                  setActiveTab={setActiveTab} 
+                  setUser={setUser} 
+                  refreshUser={refreshUser}
+                />
+              )
+            } 
+          />
+        </Routes>
       </div>
-    </div>
+    </Router>
   );
 }
