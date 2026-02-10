@@ -165,7 +165,7 @@ export default function AdminPanel({ user, isDarkMode }) {
   // 🔥 UPDATED: Upload Resource with Category
   const uploadResource = async () => {
     if (!bookTitle || !bookUrl) return alert("Data missing.");
-    const { error } = await supabase.from('study_resources').insert([
+    const { error } = await supabase.from('study_materials').insert([
       { 
         title: bookTitle, 
         file_url: bookUrl, 
