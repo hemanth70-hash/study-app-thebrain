@@ -246,7 +246,7 @@ export default function GoalTracker({ isDarkMode }) {
       {showCelebration && (
         <div className="absolute inset-0 z-50 flex flex-col items-center justify-center bg-black/80 backdrop-blur-sm animate-in zoom-in duration-300">
            <div className="text-6xl mb-4 animate-bounce">🎉</div>
-           <h2 className="text-3xl font-black text-white uppercase tracking-tighter text-center">Focus Complete!</h2>
+           <h2 className="text-3xl font-black text-white uppercase tracking-tighter text-center">Study Complete!</h2>
            <p className="text-green-400 font-bold uppercase tracking-widest text-xs mt-2">Neural Focus Updated</p>
            <button 
              onClick={() => setShowCelebration(false)}
