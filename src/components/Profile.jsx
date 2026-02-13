@@ -5,7 +5,7 @@ import autoTable from 'jspdf-autotable';
 import { 
   Award, BookOpen, Clock, Zap, Trash2, ShieldAlert, 
   Loader2, TrendingUp, Save, RefreshCw, Dice5, 
-  ChevronDown, ChevronUp, GraduationCap, Target, Edit3, Activity, ShieldCheck, FileText, Download, Megaphone, ArrowRight
+  ChevronDown, ChevronUp, GraduationCap, Target, Edit3, Activity, ShieldCheck, FileText, Download, Megaphone, ArrowRight, FileDown
 } from 'lucide-react';
 
 export default function Profile({ user, isDarkMode }) {
@@ -48,35 +48,60 @@ export default function Profile({ user, isDarkMode }) {
     setCurrentSeed(newSeed);
   };
 
-  // --- 3. PDF GENERATION LOGIC ---
-  const downloadPDF = () => {
-    if (!user.last_regular_result) return;
+  // --- 3. PDF GENERATION LOGIC (FIXED) ---
+  const downloadPDF = (examData) => {
+    // Fallback: If no specific data passed, try using the last_regular_result
+    const result = examData || user.last_regular_result;
+
+    if (!result) {
+      alert("No detailed report data available for this exam.");
+      return;
+    }
+
     const doc = new jsPDF();
-    const result = user.last_regular_result;
 
     // Header
     doc.setFontSize(18);
+    doc.setTextColor(41, 128, 185);
     doc.text(`NEURAL PORTAL REPORT: ${user.username.toUpperCase()}`, 14, 20);
+    
     doc.setFontSize(10);
-    doc.text(`Mock: ${result.title} | Score: ${result.score}/${result.total} | ${new Date(result.timestamp).toLocaleDateString()}`, 14, 28);
+    doc.setTextColor(100);
+    doc.text(`Exam Title: ${result.title || result.mock_title || 'Unknown Mock'}`, 14, 28);
+    doc.text(`Score: ${result.score}/${result.total || '?'}  |  Accuracy: ${result.percentage}%`, 14, 34);
+    doc.text(`Date: ${new Date(result.timestamp || result.created_at || Date.now()).toLocaleString()}`, 14, 40);
 
-    // Data Table
-    const tableData = result.breakdown.map((item, index) => [
-      index + 1,
-      item.question.substring(0, 50) + "...",
-      item.selected,
-      item.actual,
-      item.status
-    ]);
+    // Table Data
+    if (result.breakdown && Array.isArray(result.breakdown)) {
+        const tableData = result.breakdown.map((item, index) => {
+            // 🔥 CRITICAL FIX: Check ALL possible variable names
+            // "selected_option" is new, "selected" is old.
+            // "correct_answer" is new, "actual" is old.
+            const questionText = item.question ? (item.question.substring(0, 50) + "...") : "Question Data Missing";
+            const userAns = item.selected_option || item.selected || item.selectedAnswer || "Not Attempted";
+            const correctAns = item.correct_answer || item.actual || item.correctAnswer || "N/A";
+            const status = item.status || "UNKNOWN";
 
-    autoTable(doc, {
-      startY: 35,
-      head: [['#', 'Question', 'Your Answer', 'Correct Answer', 'Status']],
-      body: tableData,
-      theme: 'grid',
-      headStyles: { fillColor: [41, 128, 185], fontStyle: 'bold' },
-      styles: { fontSize: 8 },
-    });
+            return [
+                index + 1,
+                questionText,
+                userAns,
+                correctAns, 
+                status
+            ];
+        });
+
+        autoTable(doc, {
+            startY: 45,
+            head: [['#', 'Question', 'Your Answer', 'Correct Answer', 'Status']],
+            body: tableData,
+            theme: 'grid',
+            headStyles: { fillColor: [41, 128, 185], fontStyle: 'bold' },
+            styles: { fontSize: 8 },
+        });
+    } else {
+        doc.text("Detailed question breakdown is not available for this legacy record.", 14, 50);
+    }
 
     doc.save(`Neural_Report_${user.username}_${Date.now()}.pdf`);
   };
@@ -260,8 +285,8 @@ export default function Profile({ user, isDarkMode }) {
         </div>
       </div>
 
-      {/* --- LATEST MOCK ANALYSIS --- */}
-      {user.last_regular_result && (
+      {/* --- LATEST MOCK ANALYSIS (Dynamic Check) --- */}
+      {(user.last_regular_result || stats.history.length > 0) && (
         <div className="bg-gradient-to-br from-indigo-900 to-blue-900 p-8 rounded-[32px] shadow-2xl text-white relative overflow-hidden animate-in slide-in-from-bottom-8">
           <div className="absolute top-0 right-0 p-32 bg-blue-500/20 rounded-full blur-3xl -translate-y-10 translate-x-10"></div>
           
@@ -272,13 +297,18 @@ export default function Profile({ user, isDarkMode }) {
               </div>
               <div>
                 <p className="text-[10px] font-black uppercase text-blue-300 tracking-widest">Latest Regular Mock</p>
-                <h3 className="text-2xl font-black uppercase tracking-tight">{user.last_regular_result.title}</h3>
-                <p className="text-[10px] font-bold opacity-60">{new Date(user.last_regular_result.timestamp).toLocaleString()}</p>
+                {/* Fallback to first history item if last_regular_result is null */}
+                <h3 className="text-2xl font-black uppercase tracking-tight">
+                    {user.last_regular_result?.title || stats.history[0]?.mock_title || "No Recent Mock"}
+                </h3>
+                <p className="text-[10px] font-bold opacity-60">
+                    {new Date(user.last_regular_result?.timestamp || stats.history[0]?.created_at).toLocaleString()}
+                </p>
               </div>
             </div>
             
             <button 
-              onClick={downloadPDF}
+              onClick={() => downloadPDF(null)}
               className="flex items-center gap-2 bg-white text-blue-900 px-6 py-3 rounded-2xl font-black uppercase text-xs hover:scale-105 transition-all shadow-xl"
             >
               <Download size={16} /> Save PDF Report
@@ -288,11 +318,16 @@ export default function Profile({ user, isDarkMode }) {
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4 relative z-10">
             <div className="p-6 bg-black/20 rounded-3xl border border-white/5 backdrop-blur-sm">
               <p className="text-[10px] font-black uppercase text-blue-300 mb-2">Final Score</p>
-              <p className="text-4xl font-black">{user.last_regular_result.score} <span className="text-lg opacity-50">/ {user.last_regular_result.total}</span></p>
+              <p className="text-4xl font-black">
+                {user.last_regular_result?.score ?? stats.history[0]?.score} 
+                <span className="text-lg opacity-50">/ {user.last_regular_result?.total || '?'}</span>
+              </p>
             </div>
             <div className="p-6 bg-black/20 rounded-3xl border border-white/5 backdrop-blur-sm">
               <p className="text-[10px] font-black uppercase text-green-300 mb-2">Accuracy Rate</p>
-              <p className="text-4xl font-black text-green-400">{user.last_regular_result.percentage}%</p>
+              <p className="text-4xl font-black text-green-400">
+                  {user.last_regular_result?.percentage ?? stats.history[0]?.percentage}%
+              </p>
             </div>
             <div className="p-6 bg-black/20 rounded-3xl border border-white/5 backdrop-blur-sm">
               <p className="text-[10px] font-black uppercase text-orange-300 mb-2">Status</p>
@@ -382,6 +417,7 @@ export default function Profile({ user, isDarkMode }) {
                   <th className="pb-6 px-4">Date</th>
                   <th className="pb-6 px-4">Score</th>
                   <th className="pb-6 px-4 text-right">Status</th>
+                  <th className="pb-6 px-4 text-right">Action</th>
                 </tr>
               </thead>
               <tbody className={`divide-y ${isDarkMode ? 'divide-gray-700' : 'divide-gray-50'}`}>
@@ -406,6 +442,16 @@ export default function Profile({ user, isDarkMode }) {
                       }`}>
                         {item.percentage >= 50 ? 'Validated' : 'Retake'}
                       </span>
+                    </td>
+                    {/* DOWNLOAD BUTTON */}
+                    <td className="py-6 px-4 text-right">
+                        <button 
+                            onClick={() => downloadPDF(item)}
+                            className="p-2 text-blue-500 hover:bg-blue-100 rounded-lg transition-colors"
+                            title="Download Report"
+                        >
+                            <FileDown size={18} />
+                        </button>
                     </td>
                   </tr>
                 ))}
