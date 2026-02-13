@@ -108,24 +108,20 @@ export default function MockEngine({ user, onFinish, setIsExamLocked, setIsDarkM
       ]);
 
       if (completionRes.data) {
-        // Ensure IDs are consistent types (integers usually)
         setCompletedMockIds(completionRes.data.map(c => c.mock_id));
       }
       
       let allMocks = [];
 
-      // Process Daily Mocks (Filter for Today)
       if (dailyRes.data) {
         const activeDaily = dailyRes.data.filter(m => m.mock_date === today);
         allMocks = [...allMocks, ...activeDaily];
       }
 
-      // Process Normal Mocks (Add all)
       if (normalRes.data) {
         allMocks = [...allMocks, ...normalRes.data];
       }
 
-      // Sort: Daily first, then by date
       const sorted = allMocks.sort((a, b) => {
         if (a.is_daily && !b.is_daily) return -1;
         if (!a.is_daily && b.is_daily) return 1;
@@ -161,8 +157,10 @@ export default function MockEngine({ user, onFinish, setIsExamLocked, setIsDarkM
 
   // --- 4. ENGINE STARTUP ---
   const startMock = async (mock) => {
-    // Double check lock status before starting
-    if (mock.is_daily && completedMockIds.includes(mock.id)) {
+    // 🔥 Strict String Comparison for Locking Check
+    const isLocked = mock.is_daily && completedMockIds.some(id => String(id) === String(mock.id));
+
+    if (isLocked) {
       alert("Daily mock already secured. Please wait for the next cycle.");
       return;
     }
@@ -174,7 +172,6 @@ export default function MockEngine({ user, onFinish, setIsExamLocked, setIsDarkM
 
     if (data && data.questions) {
       const raw = data.questions;
-      // Handle Subject Tabs Logic
       if (raw[0]?.subject) {
         setSubjects(raw);
         setQuestions(raw.flatMap(s => s.questions)); 
@@ -187,7 +184,6 @@ export default function MockEngine({ user, onFinish, setIsExamLocked, setIsDarkM
       setSelectedMock(data);
       setWarnings(0);
       setCurrentIdx(0); 
-      // Reset options
       setSelectedOptions({});
       const limitInMinutes = parseInt(data.time_limit) || 10;
       setTimeLeft(limitInMinutes * 60); 
@@ -227,7 +223,7 @@ export default function MockEngine({ user, onFinish, setIsExamLocked, setIsDarkM
     const percentage = isPenalty ? 0 : Math.round((scoreCount / questions.length) * 100);
 
     try {
-      // 1. Record Score
+      // 1. Record Regular Score
       await supabase.from('scores').insert([{
         user_id: user.id, mock_id: selectedMock.id, score: scoreCount, 
         percentage: percentage, mock_title: selectedMock.mock_title,
@@ -254,9 +250,15 @@ export default function MockEngine({ user, onFinish, setIsExamLocked, setIsDarkM
 
       // 2. Handle Daily Mock Locking
       if (selectedMock.is_daily) {
-        await supabase.from('completed_daily_mocks').insert([{ user_id: user.id, mock_id: selectedMock.id }]);
+        // 🔥 REMOVED 'mock_date' to prevent crash since column is missing in DB
+        const { error } = await supabase.from('completed_daily_mocks').insert([{ 
+            user_id: user.id, 
+            mock_id: selectedMock.id
+        }]);
+
+        if (error) throw error;
         
-        // 🔥 CRITICAL FIX: Update Local State Immediately
+        // 🔥 INSTANTLY LOCK THE BUTTON (Optimistic UI)
         setCompletedMockIds(prev => [...prev, selectedMock.id]);
 
         if (!isPenalty) {
@@ -269,9 +271,9 @@ export default function MockEngine({ user, onFinish, setIsExamLocked, setIsDarkM
       }
       
       setIsFinished(true);
-      loadMockData(); // Background refresh
     } catch (err) { 
       console.error("Neural Error", err); 
+      alert("Submission Error: " + err.message);
     }
   };
 
@@ -285,7 +287,7 @@ export default function MockEngine({ user, onFinish, setIsExamLocked, setIsDarkM
 
   if (loading && !selectedMock) return <div className="p-20 text-center font-black animate-pulse text-blue-600 uppercase tracking-widest">Connecting Grid...</div>;
 
-  // --- VIEW: LIBRARY (WITH SEARCH) ---
+  // --- VIEW: LIBRARY ---
   if (!selectedMock) {
     const dailyExists = availableMocks.some(m => m.is_daily);
     
@@ -297,7 +299,6 @@ export default function MockEngine({ user, onFinish, setIsExamLocked, setIsDarkM
             <h3 className={`text-2xl font-black uppercase tracking-tighter ${isDarkMode ? 'text-white' : 'text-gray-900'}`}>Exam Library</h3>
           </div>
 
-          {/* 🔥 SEARCH BAR */}
           <div className="relative w-full md:w-96 group">
             <Search className="absolute left-4 top-3.5 text-slate-400 transition-colors group-focus-within:text-blue-500" size={18} />
             <input 
@@ -333,12 +334,14 @@ export default function MockEngine({ user, onFinish, setIsExamLocked, setIsDarkM
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6 animate-in fade-in duration-500">
             {filteredMocks.map((mock) => {
-              const isDone = completedMockIds.includes(mock.id);
+              // Strict type matching for locking UI
+              const isDone = completedMockIds.some(id => String(id) === String(mock.id));
+              
               return (
                 <button key={mock.id} disabled={mock.is_daily && isDone} onClick={() => startMock(mock)} 
                   className={`p-8 rounded-[32px] text-left transition-all shadow-xl border-b-8 relative group hover:scale-[1.02] active:scale-95 ${
                     mock.is_daily 
-                      ? (isDone ? 'bg-gray-100 opacity-60' : 'bg-gradient-to-br from-orange-500 to-red-600 text-white border-orange-700') 
+                      ? (isDone ? 'bg-gray-100 opacity-60 cursor-not-allowed' : 'bg-gradient-to-br from-orange-500 to-red-600 text-white border-orange-700') 
                       : `${isDarkMode ? 'bg-slate-800 text-white border-blue-600 hover:border-blue-500' : 'bg-white text-gray-900 border-blue-500 hover:border-blue-400'}`
                   }`}>
                   
