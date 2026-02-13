@@ -8,8 +8,8 @@ import {
 export default function MockEngine({ user, onFinish, setIsExamLocked, setIsDarkMode, isDarkMode }) {
   // --- STATE MANAGEMENT ---
   const [availableMocks, setAvailableMocks] = useState([]);
-  const [filteredMocks, setFilteredMocks] = useState([]); // 🔥 NEW: For Search
-  const [searchQuery, setSearchQuery] = useState(""); // 🔥 NEW: Search Text
+  const [filteredMocks, setFilteredMocks] = useState([]); 
+  const [searchQuery, setSearchQuery] = useState(""); 
   const [selectedMock, setSelectedMock] = useState(null);
   const [questions, setQuestions] = useState([]); 
   const [subjects, setSubjects] = useState([]); 
@@ -95,20 +95,22 @@ export default function MockEngine({ user, onFinish, setIsExamLocked, setIsDarkM
     return () => clearInterval(timer);
   }, []);
 
-  // --- 3. ATOMIC DATA LOAD (🔥 FETCHES BOTH TABLES) ---
+  // --- 3. ATOMIC DATA LOAD ---
   const loadMockData = useCallback(async () => {
     setLoading(true);
     try {
       const today = new Date().toISOString().split('T')[0];
 
-      // 🔥 FIX: Fetch BOTH 'daily_mocks' AND 'mocks' tables
       const [dailyRes, normalRes, completionRes] = await Promise.all([
         supabase.from('daily_mocks').select('*'),
-        supabase.from('mocks').select('*'), // <-- Use 'mocks' table for normal tests
+        supabase.from('mocks').select('*'),
         supabase.from('completed_daily_mocks').select('mock_id').eq('user_id', user.id)
       ]);
 
-      if (completionRes.data) setCompletedMockIds(completionRes.data.map(c => c.mock_id));
+      if (completionRes.data) {
+        // Ensure IDs are consistent types (integers usually)
+        setCompletedMockIds(completionRes.data.map(c => c.mock_id));
+      }
       
       let allMocks = [];
 
@@ -131,7 +133,7 @@ export default function MockEngine({ user, onFinish, setIsExamLocked, setIsDarkM
       });
 
       setAvailableMocks(sorted);
-      setFilteredMocks(sorted); // Initialize filter
+      setFilteredMocks(sorted);
 
     } catch (err) {
       console.error("Neural Sync Error:", err);
@@ -159,14 +161,16 @@ export default function MockEngine({ user, onFinish, setIsExamLocked, setIsDarkM
 
   // --- 4. ENGINE STARTUP ---
   const startMock = async (mock) => {
+    // Double check lock status before starting
     if (mock.is_daily && completedMockIds.includes(mock.id)) {
-      alert("Daily mock already secured.");
+      alert("Daily mock already secured. Please wait for the next cycle.");
       return;
     }
     
-    // 🔥 FIX: Fetch from correct table based on type
+    setLoading(true);
     const tableName = mock.is_daily ? 'daily_mocks' : 'mocks';
     const { data } = await supabase.from(tableName).select('*').eq('id', mock.id).single();
+    setLoading(false);
 
     if (data && data.questions) {
       const raw = data.questions;
@@ -183,6 +187,8 @@ export default function MockEngine({ user, onFinish, setIsExamLocked, setIsDarkM
       setSelectedMock(data);
       setWarnings(0);
       setCurrentIdx(0); 
+      // Reset options
+      setSelectedOptions({});
       const limitInMinutes = parseInt(data.time_limit) || 10;
       setTimeLeft(limitInMinutes * 60); 
     }
@@ -221,6 +227,7 @@ export default function MockEngine({ user, onFinish, setIsExamLocked, setIsDarkM
     const percentage = isPenalty ? 0 : Math.round((scoreCount / questions.length) * 100);
 
     try {
+      // 1. Record Score
       await supabase.from('scores').insert([{
         user_id: user.id, mock_id: selectedMock.id, score: scoreCount, 
         percentage: percentage, mock_title: selectedMock.mock_title,
@@ -245,8 +252,13 @@ export default function MockEngine({ user, onFinish, setIsExamLocked, setIsDarkM
 
       await supabase.from('profiles').update(updatePayload).eq('id', user.id);
 
+      // 2. Handle Daily Mock Locking
       if (selectedMock.is_daily) {
         await supabase.from('completed_daily_mocks').insert([{ user_id: user.id, mock_id: selectedMock.id }]);
+        
+        // 🔥 CRITICAL FIX: Update Local State Immediately
+        setCompletedMockIds(prev => [...prev, selectedMock.id]);
+
         if (!isPenalty) {
           const today = new Date().toISOString().split('T')[0];
           await supabase.from('profiles').update({ 
@@ -255,9 +267,12 @@ export default function MockEngine({ user, onFinish, setIsExamLocked, setIsDarkM
           setShowStreakAnim(true);
         }
       }
+      
       setIsFinished(true);
-      loadMockData(); 
-    } catch (err) { console.error("Neural Error", err); }
+      loadMockData(); // Background refresh
+    } catch (err) { 
+      console.error("Neural Error", err); 
+    }
   };
 
   const handleReturn = () => {
@@ -268,7 +283,7 @@ export default function MockEngine({ user, onFinish, setIsExamLocked, setIsDarkM
     onFinish(); 
   };
 
-  if (loading) return <div className="p-20 text-center font-black animate-pulse text-blue-600 uppercase tracking-widest">Connecting Grid...</div>;
+  if (loading && !selectedMock) return <div className="p-20 text-center font-black animate-pulse text-blue-600 uppercase tracking-widest">Connecting Grid...</div>;
 
   // --- VIEW: LIBRARY (WITH SEARCH) ---
   if (!selectedMock) {

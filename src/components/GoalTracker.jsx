@@ -1,33 +1,66 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Zap, Volume2, VolumeX, Coffee, X, Play, Pause, RotateCcw, Trash2 } from 'lucide-react';
 
-// 🔥 FIX: Audio objects created OUTSIDE the component.
-// This prevents them from being re-created on every render/drag event.
+// --- 🔊 AUDIO CONFIGURATION ---
+// Keeping your existing sounds as requested
 const AUDIO_TICK = new Audio('https://assets.mixkit.co/active_storage/sfx/2568/2568-preview.mp3');
 const AUDIO_ALARM = new Audio('https://assets.mixkit.co/active_storage/sfx/1435/1435-preview.mp3');
 const AUDIO_BELL = new Audio('https://assets.mixkit.co/active_storage/sfx/2869/2869-preview.mp3');
 
+// 🔥 YOUR LOCAL RESET SOUND
+// Since it's in "public/sounds/reset sound.mp3", we reference it from the root "/"
+const AUDIO_RESET = new Audio('/sounds/reset%20sound.mp3'); 
+
 export default function GoalTracker({ isDarkMode }) {
-  // --- CORE STATE ---
-  const [timeLeft, setTimeLeft] = useState(0); 
-  const [isActive, setIsActive] = useState(false);
-  const [mode, setMode] = useState('FOCUS'); // 'FOCUS' or 'BREAK'
+  // Max Scale: 24 Hours
+  const MAX_SCALE_SECONDS = 24 * 3600; 
+
+  // --- 🧠 1. SMART INITIALIZATION (PERSISTENCE) ---
+  // This logic checks LocalStorage before setting the default "0"
+  const getInitialTime = () => {
+    const savedTime = parseInt(localStorage.getItem('gt_timeLeft') || '0');
+    const wasActive = JSON.parse(localStorage.getItem('gt_isActive') || 'false');
+    const lastTick = parseInt(localStorage.getItem('gt_lastTick') || Date.now().toString());
+
+    // If timer was running, subtract the time passed while you were away
+    if (wasActive && savedTime > 0) {
+      const now = Date.now();
+      const secondsPassed = Math.floor((now - lastTick) / 1000);
+      return Math.max(0, savedTime - secondsPassed);
+    }
+    return savedTime;
+  };
+
+  // --- STATE ---
+  const [timeLeft, setTimeLeft] = useState(getInitialTime); 
+  const [isActive, setIsActive] = useState(() => JSON.parse(localStorage.getItem('gt_isActive') || 'false'));
+  const [mode, setMode] = useState(() => localStorage.getItem('gt_mode') || 'FOCUS'); 
+  const [showCelebration, setShowCelebration] = useState(false); // 🎉 CHEERING STATE
 
   // --- BREAK SYSTEM ---
-  const [breaks, setBreaks] = useState([]); 
+  const [breaks, setBreaks] = useState(() => JSON.parse(localStorage.getItem('gt_breaks') || '[]'));
   const [showBreakForm, setShowBreakForm] = useState(false);
   const [breakConfig, setBreakConfig] = useState({ afterMins: 30, durationMins: 5 });
-  const [activeBreak, setActiveBreak] = useState(null);
-  const [breakTimeLeft, setBreakTimeLeft] = useState(0);
+  const [activeBreak, setActiveBreak] = useState(() => JSON.parse(localStorage.getItem('gt_activeBreak') || 'null'));
+  const [breakTimeLeft, setBreakTimeLeft] = useState(() => parseInt(localStorage.getItem('gt_breakTimeLeft') || '0'));
 
   // --- AUDIO ENGINE ---
   const [soundEnabled, setSoundEnabled] = useState(true);
   const lastSoundTime = useRef(0); 
 
-  // Max Scale: 24 Hours
-  const MAX_SCALE_SECONDS = 24 * 3600; 
+  // --- 💾 2. SAVE STATE EVERY SECOND ---
+  // This fixes the "timer resets when moving sections" bug
+  useEffect(() => {
+    localStorage.setItem('gt_timeLeft', timeLeft);
+    localStorage.setItem('gt_isActive', isActive);
+    localStorage.setItem('gt_mode', mode);
+    localStorage.setItem('gt_breaks', JSON.stringify(breaks));
+    localStorage.setItem('gt_activeBreak', JSON.stringify(activeBreak));
+    localStorage.setItem('gt_breakTimeLeft', breakTimeLeft);
+    localStorage.setItem('gt_lastTick', Date.now().toString());
+  }, [timeLeft, isActive, mode, breaks, activeBreak, breakTimeLeft]);
 
-  // --- 1. MAIN TIMER ENGINE ---
+  // --- 3. MAIN TIMER ENGINE ---
   useEffect(() => {
     let interval = null;
 
@@ -45,7 +78,7 @@ export default function GoalTracker({ isDarkMode }) {
             setActiveBreak(hitBreak);
             setBreakTimeLeft(hitBreak.duration);
             
-            // 🔊 BREAK START: "TING TING"
+            // 🔊 BREAK START
             if (soundEnabled) {
               AUDIO_BELL.currentTime = 0;
               AUDIO_BELL.play().catch(() => {});
@@ -56,7 +89,7 @@ export default function GoalTracker({ isDarkMode }) {
             }
           }
 
-          // 🔊 NORMAL TICK (Last 60s of Focus)
+          // 🔊 NORMAL TICK
           if (soundEnabled && next <= 60 && next > 0) {
             AUDIO_TICK.currentTime = 0;
             AUDIO_TICK.play().catch(() => {});
@@ -66,15 +99,23 @@ export default function GoalTracker({ isDarkMode }) {
         });
       }, 1000);
 
-    } else if (timeLeft === 0 && isActive && mode === 'FOCUS') {
+    } else if (timeLeft <= 0 && isActive && mode === 'FOCUS') {
+      // 🏁 TIMER FINISHED
       setIsActive(false); 
+      setTimeLeft(0);
+      
+      // 🎉 TRIGGER CHEERING
+      setShowCelebration(true); 
       if (soundEnabled) AUDIO_ALARM.play().catch(() => {});
+      
+      // Hide cheering after 5 seconds
+      setTimeout(() => setShowCelebration(false), 5000);
     }
 
     return () => clearInterval(interval);
   }, [isActive, timeLeft, mode, breaks, soundEnabled]);
 
-  // --- 2. BREAK TIMER ENGINE (Silent until last 10s) ---
+  // --- 4. BREAK TIMER ENGINE ---
   useEffect(() => {
     let breakInterval = null;
 
@@ -82,13 +123,11 @@ export default function GoalTracker({ isDarkMode }) {
       breakInterval = setInterval(() => {
         setBreakTimeLeft((prev) => {
           const next = prev - 1;
-
-          // 🔊 WARNING: LAST 10 SECONDS "TING... TING..."
+          // 🔊 WARNING
           if (soundEnabled && next <= 10 && next > 0) {
              AUDIO_BELL.currentTime = 0;
              AUDIO_BELL.play().catch(() => {});
           }
-          
           return next;
         });
       }, 1000);
@@ -100,7 +139,6 @@ export default function GoalTracker({ isDarkMode }) {
         setBreaks(prev => prev.map(b => b.id === activeBreak.id ? { ...b, completed: true } : b));
       }
       setActiveBreak(null);
-      // Resume sound
       if (soundEnabled) AUDIO_ALARM.play().catch(() => {});
     }
 
@@ -108,8 +146,30 @@ export default function GoalTracker({ isDarkMode }) {
   }, [mode, breakTimeLeft, activeBreak, soundEnabled]);
 
   // --- ACTIONS ---
+  
+  // 🔥 UPDATED RESET HANDLER
+  const handleReset = () => {
+    setTimeLeft(0);
+    setIsActive(false);
+    setMode('FOCUS');
+    setActiveBreak(null);
+    setBreakTimeLeft(0);
+    
+    // Clear storage so it stays at 0
+    localStorage.setItem('gt_timeLeft', '0');
+    localStorage.setItem('gt_isActive', 'false');
+
+    // 🔊 PLAY YOUR RESET SOUND
+    if (soundEnabled) {
+        AUDIO_RESET.currentTime = 0;
+        AUDIO_RESET.play().catch(e => console.log("Reset sound error:", e));
+    }
+  };
+
   const handleEditTime = (field, value) => {
-    const val = parseInt(value) || 0;
+    let val = parseInt(value);
+    if (isNaN(val)) val = 0;
+
     const current = formatTime(timeLeft);
     let newSeconds = 0;
 
@@ -125,11 +185,8 @@ export default function GoalTracker({ isDarkMode }) {
     const rect = e.currentTarget.getBoundingClientRect();
     const x = Math.max(0, Math.min(e.clientX - rect.left, rect.width));
     const percent = x / rect.width;
-    
-    // Scale: 24 Hours
     const newSeconds = Math.round(percent * MAX_SCALE_SECONDS);
 
-    // 🔊 RAPID TICK SOUND (Zipper Effect)
     if (soundEnabled && Math.abs(newSeconds - timeLeft) > 60) {
       const now = Date.now();
       if (now - lastSoundTime.current > 40) { 
@@ -138,12 +195,11 @@ export default function GoalTracker({ isDarkMode }) {
         lastSoundTime.current = now;
       }
     }
-
     setTimeLeft(newSeconds);
   };
 
   const addBreak = () => {
-    const startAfterSeconds = breakConfig.afterMins * 60;
+    const startAfterSeconds = (parseInt(breakConfig.afterMins) || 0) * 60;
     const triggerAt = timeLeft - startAfterSeconds;
 
     if (triggerAt <= 0) {
@@ -154,7 +210,7 @@ export default function GoalTracker({ isDarkMode }) {
     const newBreak = {
       id: Date.now(),
       triggerAt: triggerAt, 
-      duration: breakConfig.durationMins * 60,
+      duration: (parseInt(breakConfig.durationMins) || 5) * 60,
       completed: false
     };
 
@@ -167,6 +223,7 @@ export default function GoalTracker({ isDarkMode }) {
   };
 
   const formatTime = (s) => {
+    if (isNaN(s)) return { h: 0, m: 0, s: 0 };
     const h = Math.floor(s / 3600);
     const m = Math.floor((s % 3600) / 60);
     const sec = s % 60;
@@ -176,7 +233,6 @@ export default function GoalTracker({ isDarkMode }) {
   const t = formatTime(timeLeft);
   const bt = formatTime(breakTimeLeft);
 
-  // --- STYLES ---
   const theme = {
     bg: isDarkMode ? 'bg-slate-950 text-white' : 'bg-white text-slate-900',
     scaleBg: isDarkMode ? 'bg-slate-900 border-slate-800' : 'bg-slate-100 border-slate-200',
@@ -186,6 +242,21 @@ export default function GoalTracker({ isDarkMode }) {
   return (
     <div className={`p-6 rounded-[2rem] shadow-xl border-b-4 border-blue-600 h-full flex flex-col relative overflow-hidden transition-all duration-500 ${theme.bg}`}>
       
+      {/* 🎉 CELEBRATION POPUP */}
+      {showCelebration && (
+        <div className="absolute inset-0 z-50 flex flex-col items-center justify-center bg-black/80 backdrop-blur-sm animate-in zoom-in duration-300">
+           <div className="text-6xl mb-4 animate-bounce">🎉</div>
+           <h2 className="text-3xl font-black text-white uppercase tracking-tighter text-center">Focus Complete!</h2>
+           <p className="text-green-400 font-bold uppercase tracking-widest text-xs mt-2">Neural Focus Updated</p>
+           <button 
+             onClick={() => setShowCelebration(false)}
+             className="mt-8 bg-white text-black px-8 py-3 rounded-xl font-black uppercase text-xs hover:scale-105 transition-transform"
+           >
+             Continue
+           </button>
+        </div>
+      )}
+
       {/* 🔥 FULL SCREEN REST OVERLAY */}
       {mode === 'BREAK' && (
         <div className="fixed inset-0 z-[9999] bg-black/80 backdrop-blur-xl flex flex-col items-center justify-center animate-in fade-in duration-500">
@@ -268,31 +339,31 @@ export default function GoalTracker({ isDarkMode }) {
         >
           {/* Ticks */}
           <div className="absolute inset-0 flex justify-between px-1 pointer-events-none z-0">
-             {[...Array(24)].map((_, i) => <div key={i} className="w-[1px] h-full bg-slate-400/20" />)}
+              {[...Array(24)].map((_, i) => <div key={i} className="w-[1px] h-full bg-slate-400/20" />)}
           </div>
 
           {/* Liquid Fill */}
           <div 
             className="h-full bg-gradient-to-r from-blue-700 to-cyan-500 transition-all duration-75 ease-out"
-            style={{ width: `${(timeLeft / MAX_SCALE_SECONDS) * 100}%` }}
+            style={{ width: `${MAX_SCALE_SECONDS > 0 ? (timeLeft / MAX_SCALE_SECONDS) * 100 : 0}%` }}
           />
 
           {/* 🟠 ORANGE BREAK MARKERS */}
           {breaks.map(b => {
-             const pos = (b.triggerAt / MAX_SCALE_SECONDS) * 100;
-             return (
-               <div 
-                 key={b.id}
-                 className={`absolute top-0 bottom-0 w-1.5 ${b.completed ? 'bg-green-500' : 'bg-orange-500'} z-20 shadow-[0_0_10px_orange]`}
-                 style={{ left: `${pos}%` }}
-               />
-             );
+              const pos = (b.triggerAt / MAX_SCALE_SECONDS) * 100;
+              return (
+                <div 
+                  key={b.id}
+                  className={`absolute top-0 bottom-0 w-1.5 ${b.completed ? 'bg-green-500' : 'bg-orange-500'} z-20 shadow-[0_0_10px_orange]`}
+                  style={{ left: `${pos}%` }}
+                />
+              );
           })}
 
           {/* Handle */}
           <div 
-             className="absolute top-0 bottom-0 w-1 bg-white border-x border-slate-300 z-30 shadow-[0_0_10px_white]"
-             style={{ left: `${(timeLeft / MAX_SCALE_SECONDS) * 100}%` }}
+              className="absolute top-0 bottom-0 w-1 bg-white border-x border-slate-300 z-30 shadow-[0_0_10px_white]"
+              style={{ left: `${MAX_SCALE_SECONDS > 0 ? (timeLeft / MAX_SCALE_SECONDS) * 100 : 0}%` }}
           />
         </div>
       </div>
@@ -310,15 +381,15 @@ export default function GoalTracker({ isDarkMode }) {
           </button>
           
           <button 
-             onClick={() => setShowBreakForm(!showBreakForm)}
-             className={`px-4 rounded-xl border-2 font-bold transition-colors ${showBreakForm ? 'bg-orange-500 border-orange-500 text-white' : 'border-slate-200 text-slate-400 hover:border-orange-400 hover:text-orange-500'}`}
+              onClick={() => setShowBreakForm(!showBreakForm)}
+              className={`px-4 rounded-xl border-2 font-bold transition-colors ${showBreakForm ? 'bg-orange-500 border-orange-500 text-white' : 'border-slate-200 text-slate-400 hover:border-orange-400 hover:text-orange-500'}`}
           >
             <Coffee size={20} />
           </button>
           
           <button 
-             onClick={() => { setTimeLeft(0); setIsActive(false); }}
-             className="px-4 rounded-xl border-2 border-slate-200 text-slate-400 hover:bg-slate-100 hover:text-red-500 transition-colors"
+              onClick={handleReset}
+              className="px-4 rounded-xl border-2 border-slate-200 text-slate-400 hover:bg-slate-100 hover:text-red-500 transition-colors"
           >
             <RotateCcw size={20} />
           </button>
@@ -338,7 +409,7 @@ export default function GoalTracker({ isDarkMode }) {
                  <input 
                    type="number" 
                    value={breakConfig.afterMins}
-                   onChange={e => setBreakConfig({...breakConfig, afterMins: parseInt(e.target.value)})}
+                   onChange={e => setBreakConfig({...breakConfig, afterMins: parseInt(e.target.value) || 0})}
                    className={`w-full p-2 rounded-lg text-xs font-bold outline-none border ${theme.input}`}
                  />
                </div>
@@ -347,7 +418,7 @@ export default function GoalTracker({ isDarkMode }) {
                  <input 
                    type="number" 
                    value={breakConfig.durationMins}
-                   onChange={e => setBreakConfig({...breakConfig, durationMins: parseInt(e.target.value)})}
+                   onChange={e => setBreakConfig({...breakConfig, durationMins: parseInt(e.target.value) || 0})}
                    className={`w-full p-2 rounded-lg text-xs font-bold outline-none border ${theme.input}`}
                  />
                </div>
@@ -364,22 +435,22 @@ export default function GoalTracker({ isDarkMode }) {
 
         {/* 🗑️ BREAK LIST */}
         {breaks.length > 0 && (
-           <div className="flex flex-wrap gap-2 mt-1 max-h-16 overflow-y-auto custom-scrollbar">
-             {breaks.map(b => (
-               <div key={b.id} className="bg-slate-100 dark:bg-slate-800 text-[9px] font-black uppercase px-2 py-1 rounded border border-slate-300 dark:border-slate-700 flex items-center gap-1 group">
-                 <span className={b.completed ? "text-green-500 line-through opacity-50" : "text-orange-500"}>
-                   {b.duration / 60}m Break
-                 </span>
-                 <button 
-                  onClick={() => deleteBreak(b.id)} 
-                  className="ml-1 text-slate-400 hover:text-red-500 transition-colors"
-                  title="Delete Break"
-                 >
-                   <Trash2 size={10} />
-                 </button>
-               </div>
-             ))}
-           </div>
+            <div className="flex flex-wrap gap-2 mt-1 max-h-16 overflow-y-auto custom-scrollbar">
+              {breaks.map(b => (
+                <div key={b.id} className="bg-slate-100 dark:bg-slate-800 text-[9px] font-black uppercase px-2 py-1 rounded border border-slate-300 dark:border-slate-700 flex items-center gap-1 group">
+                  <span className={b.completed ? "text-green-500 line-through opacity-50" : "text-orange-500"}>
+                    {b.duration / 60}m Break
+                  </span>
+                  <button 
+                   onClick={() => deleteBreak(b.id)} 
+                   className="ml-1 text-slate-400 hover:text-red-500 transition-colors"
+                   title="Delete Break"
+                  >
+                    <Trash2 size={10} />
+                  </button>
+                </div>
+              ))}
+            </div>
         )}
       </div>
 
