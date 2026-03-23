@@ -3,7 +3,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { 
   LayoutDashboard, BookOpen, Timer, Trophy, 
   User, Moon, Sun, ChevronLeft, ChevronRight, 
-  Database, Flame, Youtube, ShieldCheck, Keyboard, Layers 
+  Database, Flame, Youtube, ShieldCheck, Keyboard, Layers, Target
 } from 'lucide-react';
 
 export default function Sidebar({ user, activeTab, setActiveTab, setIsDarkMode, isDarkMode, isOpen, setIsOpen }) {
@@ -19,6 +19,7 @@ export default function Sidebar({ user, activeTab, setActiveTab, setIsDarkMode, 
   // --- 2. DYNAMIC MENU CONFIGURATION ---
   const menuItems = [
     { id: 'dashboard', icon: <LayoutDashboard />, label: 'Dashboard' },
+    { id: 'tracker', icon: <Target />, label: 'Prep Hub' },
     { id: 'study', icon: <Youtube />, label: 'Study Hub' }, 
     { id: 'subjects', icon: <BookOpen />, label: 'Resources' },
     

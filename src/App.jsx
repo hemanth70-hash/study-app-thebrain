@@ -10,6 +10,7 @@ import SubjectNotes from './components/SubjectNotes';
 import StudyHub from './components/StudyHub'; 
 import TypingMaster from './components/TypingMaster'; 
 import NeuralTools from './components/NeuralTools';
+import NTPCTracker from './components/NTPCTracker';
 
 // 🔥 WIDGETS
 import CalendarWidget from './components/CalendarWidget'; 
@@ -109,6 +110,7 @@ function DashboardLayout({ user, isDarkMode, setIsDarkMode, activeTab, setActive
           {activeTab === 'subjects' && <SubjectNotes user={user} isDarkMode={isDarkMode} />}
           {activeTab === 'typing' && <TypingMaster user={user} isDarkMode={isDarkMode} />}
           {activeTab === 'tools' && <NeuralTools isDarkMode={isDarkMode} />}
+          {activeTab === 'tracker' && <NTPCTracker user={user} isDarkMode={isDarkMode} />}
           
           {activeTab === 'mocks' && (
             <MockEngine 
