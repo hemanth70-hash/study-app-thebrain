@@ -11,17 +11,17 @@ import StudyHub from './components/StudyHub';
 import TypingMaster from './components/TypingMaster'; 
 import NeuralTools from './components/NeuralTools';
 import NTPCTracker from './components/NTPCTracker';
-
+import Auth from './components/Auth'; // 🔥 IMPORTED AUTH
 // 🔥 WIDGETS
 import CalendarWidget from './components/CalendarWidget'; 
 import WelcomeHeader from './components/WelcomeHeader'; 
 import GoalTracker from './components/GoalTracker';
 import StudyChat from './components/StudyChat';
 
-import { ShieldAlert, Megaphone } from 'lucide-react';
+import { ShieldAlert, Megaphone, Loader2 } from 'lucide-react';
 
 // --- MAIN DASHBOARD COMPONENT ---
-function DashboardLayout({ user, isDarkMode, setIsDarkMode, activeTab, setActiveTab, setUser, refreshUser }) {
+function DashboardLayout({ user, isDarkMode, setIsDarkMode, activeTab, setActiveTab, setUser, refreshUser, onLogout }) {
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
   const [globalMsg, setGlobalMsg] = useState(null);
   const [isExamLocked, setIsExamLocked] = useState(false); 
@@ -77,7 +77,7 @@ function DashboardLayout({ user, isDarkMode, setIsDarkMode, activeTab, setActive
             {activeTab === 'ranking' ? 'Leaderboard' : activeTab === 'study' ? 'Study Hub' : activeTab === 'typing' ? 'Neural Typer' : activeTab}
           </h2>
           
-          <div className="flex-1 min-w-[300px]">
+          <div className="flex-1 min-w-[200px]">
             {globalMsg && (
               <div className="bg-gradient-to-r from-blue-600 to-indigo-700 text-white px-6 py-3 rounded-3xl shadow-lg flex items-center border border-white/20 relative overflow-hidden">
                 <div className="flex-1 overflow-hidden"><marquee className="font-bold text-sm whitespace-nowrap">{globalMsg}</marquee></div>
@@ -86,9 +86,18 @@ function DashboardLayout({ user, isDarkMode, setIsDarkMode, activeTab, setActive
             )}
           </div>
 
-          <div className={`flex items-center gap-3 px-6 py-2 rounded-2xl shadow-sm border-2 transition-colors ${isDarkMode ? 'bg-slate-800 border-slate-700' : 'bg-white border-orange-100'}`}>
-            <span className="text-2xl animate-pulse">🔥</span>
-            <span className="font-black text-xl text-orange-500">{user.streak_count || 0}</span>
+          <div className="flex items-center gap-4">
+            <div className={`flex items-center gap-3 px-6 py-2 rounded-2xl shadow-sm border-2 transition-colors ${isDarkMode ? 'bg-slate-800 border-slate-700' : 'bg-white border-orange-100'}`}>
+              <span className="text-2xl animate-pulse">🔥</span>
+              <span className="font-black text-xl text-orange-500">{user.streak_count || 0}</span>
+            </div>
+            {/* 🔥 NEW DISCONNECT (LOGOUT) BUTTON */}
+            <button 
+              onClick={onLogout} 
+              className="px-6 py-2.5 rounded-2xl bg-red-600/10 text-red-500 hover:bg-red-600 hover:text-white font-black uppercase tracking-widest text-[10px] transition-all border border-red-500/20 active:scale-95"
+            >
+              Disconnect
+            </button>
           </div>
         </header>
 
@@ -144,11 +153,17 @@ function DashboardLayout({ user, isDarkMode, setIsDarkMode, activeTab, setActive
 
 // --- ROOT APP COMPONENT ---
 export default function App() {
-  const [user, setUser] = useState(null);
-  const [username, setUsername] = useState('');
+  const [session, setSession] = useState(null); // 🔥 NEW: Auth Session
+  const [user, setUser] = useState(null);       // Profile Data
   const [activeTab, setActiveTab] = useState('dashboard');
   const [isDarkMode, setIsDarkMode] = useState(false);
-  const [loginError, setLoginError] = useState('');
+  const [isLoadingProfile, setIsLoadingProfile] = useState(true);
+
+  // 🔥 LEGACY USER STATE
+  const [legacyUser, setLegacyUser] = useState(() => {
+    const saved = localStorage.getItem('legacy_neural_user');
+    return saved ? JSON.parse(saved) : null;
+  });
 
   // --- THE REAPER (AUTO-DELETE LOGIC) ---
   const runTheReaper = async () => {
@@ -173,19 +188,13 @@ export default function App() {
     }
   };
 
-  const refreshUser = useCallback(async (userId) => {
-    if (!userId) return;
-    const { data, error } = await supabase.from('profiles').select('*').eq('id', userId).single();
-    if (data && !error) setUser(data);
-  }, []);
-
   // --- STREAK LOGIC ---
   const handleStreakCheck = async (profile) => {
-    if (!profile?.last_mock_date) return;
+    if (!profile?.last_mock_date) return profile;
     const today = new Date();
     today.setHours(0, 0, 0, 0);
     const todayStr = today.toISOString().split('T')[0];
-    if (profile.last_mock_date === todayStr) return;
+    if (profile.last_mock_date === todayStr) return profile;
 
     const lastDate = new Date(profile.last_mock_date);
     lastDate.setHours(0, 0, 0, 0);
@@ -194,65 +203,87 @@ export default function App() {
 
     if (lastDate.getTime() < yesterday.getTime()) {
       await supabase.from('profiles').update({ streak_count: 0 }).eq('id', profile.id);
-      refreshUser(profile.id);
+      return { ...profile, streak_count: 0 };
     }
+    return profile;
   };
 
-  // --- LOGIN LOGIC ---
-  const handleLogin = async () => {
-    if (!username.trim()) return;
-    setLoginError('');
+  // --- REFRESH USER LOGIC ---
+  const refreshUser = useCallback(async (userId) => {
+    if (!userId) return;
+    const { data, error } = await supabase.from('profiles').select('*').eq('id', userId).single();
+    
+    if (data && !error) {
+      // Check streak status before saving to state
+      const updatedProfile = await handleStreakCheck(data);
+      setUser(updatedProfile);
 
-    try {
-      const inputName = username.trim();
+      // 🔥 Update local storage if it's a legacy user
+      if (legacyUser && legacyUser.id === userId) {
+         setLegacyUser(updatedProfile);
+         localStorage.setItem('legacy_neural_user', JSON.stringify(updatedProfile));
+      }
       
-      // 1. Check Existing User
-      const { data: existingUser } = await supabase
-        .from('profiles')
-        .select('*')
-        .ilike('username', inputName)
-        .maybeSingle();
-
-      if (existingUser) {
-        setUser(existingUser);
-        handleStreakCheck(existingUser);
-        if (existingUser.username.toLowerCase() === 'thebrain') runTheReaper();
-        return;
+      // Trigger Reaper if Admin
+      if (updatedProfile.username?.toLowerCase() === 'thebrain') {
+        runTheReaper();
       }
-
-      // 2. Check Invite Code
-      const { data: invite } = await supabase
-        .from('invite_codes')
-        .select('*')
-        .eq('code', inputName)
-        .eq('is_used', false)
-        .maybeSingle();
-
-      if (invite) {
-        const { data: newUser, error: createError } = await supabase
-          .from('profiles')
-          .insert([{ 
-            username: inputName, 
-            is_verified: true, 
-            last_mock_date: new Date().toISOString().split('T')[0] 
-          }])
-          .select()
-          .single();
-
-        if (newUser && !createError) {
-          await supabase.from('invite_codes').update({ is_used: true }).eq('id', invite.id);
-          setUser(newUser);
-        } else {
-          setLoginError("Error initializing node.");
-        }
-      } else {
-        setLoginError("❌ Access Denied.");
-      }
-    } catch (err) { 
-      console.error("Login Error", err); 
-      setLoginError("System Failure.");
     }
+    setIsLoadingProfile(false);
+  }, [legacyUser]);
+
+  // --- GLOBAL AUTHENTICATION EFFECT ---
+  useEffect(() => {
+    // 🔥 Skip Supabase Auth check if they are a local legacy user
+    if (legacyUser) {
+      setIsLoadingProfile(false);
+      return;
+    }
+
+    // 1. Check Session on Load
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      setSession(session);
+      if (session?.user?.id) {
+        refreshUser(session.user.id);
+      } else {
+        setIsLoadingProfile(false);
+      }
+    });
+
+    // 2. Listen for Auth Changes (Login / Logout / Sign Up)
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      setSession(session);
+      if (session?.user?.id) {
+        setIsLoadingProfile(true);
+        refreshUser(session.user.id);
+      } else {
+        setUser(null);
+        setIsLoadingProfile(false);
+      }
+    });
+
+    return () => subscription.unsubscribe();
+  }, [refreshUser, legacyUser]);
+
+  // 🔥 LEGACY LOGIN HANDLER
+  const handleLegacyLogin = (profile) => {
+    setLegacyUser(profile);
+    localStorage.setItem('legacy_neural_user', JSON.stringify(profile));
   };
+
+  // 🔥 GLOBAL LOGOUT HANDLER
+  const handleLogout = async () => {
+    if (legacyUser) {
+      setLegacyUser(null);
+      localStorage.removeItem('legacy_neural_user');
+    } else {
+      await supabase.auth.signOut();
+    }
+    setActiveTab('dashboard'); 
+  };
+
+  // Combine standard user or legacy user
+  const activeUser = legacyUser || user;
 
   return (
     <Router>
@@ -269,43 +300,30 @@ export default function App() {
             } 
           />
 
-          {/* 🔥 ROUTE 2: MAIN APP (DASHBOARD) */}
+          {/* 🔥 ROUTE 2: MAIN APP (AUTH & DASHBOARD) */}
           <Route 
             path="/" 
             element={
-              !user ? (
-                // --- LOGIN SCREEN ---
-                <div className={`flex items-center justify-center min-h-screen transition-colors duration-500 ${isDarkMode ? 'bg-slate-950' : 'bg-blue-50'}`}>
-                  <div className={`p-10 rounded-[3rem] shadow-2xl border-2 w-full max-w-md text-center animate-in fade-in zoom-in duration-500 ${
-                    isDarkMode ? 'bg-slate-900 border-blue-500/20 text-white' : 'bg-white border-white text-gray-900'
-                  }`}>
-                    <div className="w-20 h-20 bg-blue-600 rounded-3xl flex items-center justify-center mx-auto mb-6 shadow-xl rotate-3">
-                       <ShieldAlert className="text-white" size={40} />
-                    </div>
-                    <h1 className="text-4xl font-black mb-2 text-blue-600 italic tracking-tighter uppercase">Neural Portal</h1>
-                    <p className="text-gray-400 font-bold text-xs uppercase tracking-widest mb-8">Identify Node / Enter Code</p>
-                    <input 
-                      className={`w-full p-5 rounded-2xl border-2 mb-4 font-black outline-none focus:border-blue-500 transition-all text-center ${
-                        isDarkMode ? 'bg-slate-800 border-slate-700 text-white' : 'bg-gray-50 border-gray-100 text-gray-900'
-                      }`} 
-                      placeholder="USERNAME OR INVITE CODE" 
-                      value={username} 
-                      onChange={(e) => setUsername(e.target.value)} 
-                    />
-                    <button onClick={handleLogin} className="w-full bg-blue-600 text-white p-5 rounded-2xl font-black uppercase tracking-widest hover:bg-blue-700 shadow-xl transition-all">Initialize Connection</button>
-                    {loginError && <p className="text-red-500 font-black text-[10px] uppercase tracking-widest mt-4 animate-pulse">{loginError}</p>}
-                  </div>
+              !activeUser ? (
+                // --- 1. NEW SECURE AUTH COMPONENT ---
+                <Auth isDarkMode={isDarkMode} onLegacyLogin={handleLegacyLogin} />
+              ) : isLoadingProfile ? (
+                // --- 2. LOADING STATE (Fetching Profile Data) ---
+                <div className={`flex flex-col items-center justify-center min-h-screen transition-colors duration-500 ${isDarkMode ? 'bg-slate-950 text-blue-500' : 'bg-blue-50 text-blue-600'}`}>
+                   <Loader2 size={48} className="animate-spin mb-4" />
+                   <p className="font-black text-xs uppercase tracking-widest animate-pulse">Initializing Neural Link...</p>
                 </div>
               ) : (
-                // --- DASHBOARD LAYOUT ---
+                // --- 3. MAIN DASHBOARD ---
                 <DashboardLayout 
-                  user={user} 
+                  user={activeUser} 
                   isDarkMode={isDarkMode} 
                   setIsDarkMode={setIsDarkMode} 
                   activeTab={activeTab} 
                   setActiveTab={setActiveTab} 
                   setUser={setUser} 
                   refreshUser={refreshUser}
+                  onLogout={handleLogout} // 🔥 Passing logout down
                 />
               )
             } 
