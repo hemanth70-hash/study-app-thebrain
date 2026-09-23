@@ -303,7 +303,7 @@ export default function TypingMaster({ user, isDarkMode }) {
           </div>
           <div>
             <h2 className="text-4xl font-black uppercase tracking-tighter text-transparent bg-clip-text bg-gradient-to-r from-cyan-500 to-blue-600">
-              Neural Typer 2.0
+               Typer
             </h2>
             <p className={`text-[10px] font-bold uppercase tracking-[0.3em] ${theme.subText}`}>
               Level {currentLevel} • {perfectStreak}/5 Perfect Streak

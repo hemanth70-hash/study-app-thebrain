@@ -100,7 +100,7 @@ export default function SubjectNotes({ user, isDarkMode }) {
     doc.setFont("helvetica", "bold");
     doc.setTextColor(37, 99, 235);
     doc.setFontSize(22);
-    doc.text(`${selectedSubject} // Neural Transcript`, 20, 20);
+    doc.text(`${selectedSubject} // Transcript`, 20, 20);
     doc.setFontSize(10);
     doc.setFont("helvetica", "normal");
     doc.setTextColor(150);
@@ -225,7 +225,7 @@ export default function SubjectNotes({ user, isDarkMode }) {
                   <div className={`absolute top-0 right-0 p-10 opacity-5 pointer-events-none ${theme.text}`}><Edit3 size={120} /></div>
                   <textarea 
                     className={`w-full h-full p-6 bg-transparent border-none focus:ring-0 text-lg font-medium leading-loose outline-none resize-none custom-scrollbar ${theme.text} placeholder-slate-500`}
-                    placeholder={`Initialize neural stream for ${selectedSubject}...`}
+                    placeholder={`Initialize stream for ${selectedSubject}...`}
                     value={personalNote}
                     onChange={(e) => setPersonalNote(e.target.value)}
                   />

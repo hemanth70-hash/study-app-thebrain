@@ -38,7 +38,7 @@ export default function NeuralTools({ isDarkMode }) {
           <Layers size={32} />
         </div>
         <div>
-          <h1 className="text-4xl font-black uppercase tracking-tighter">External Neural Grid</h1>
+          <h1 className="text-4xl font-black uppercase tracking-tighter">External Data</h1>
           <p className="text-xs font-bold text-slate-400 uppercase tracking-widest">Connect to Personal AI Workspaces</p>
         </div>
       </div>

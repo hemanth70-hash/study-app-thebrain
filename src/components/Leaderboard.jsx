@@ -100,7 +100,7 @@ export default function Leaderboard({ isDarkMode }) {
   if (loading) return (
     <div className="flex flex-col items-center justify-center py-32 text-blue-600 animate-pulse">
       <Loader2 className="animate-spin mb-4" size={48} />
-      <p className="font-black uppercase tracking-widest text-[10px]">Calibrating Neural Hierarchies...</p>
+      <p className="font-black uppercase tracking-widest text-[10px]">Calibrating All Hierarchies...</p>
     </div>
   );
 
@@ -138,7 +138,7 @@ export default function Leaderboard({ isDarkMode }) {
                 <th className="px-6 pb-2 text-center">Rank</th>
                 <th className="px-6 pb-2">User Identity</th>
                 <th className="px-6 pb-2">Goal Profile</th>
-                <th className="px-6 pb-2 text-center">Neural GPA</th>
+                <th className="px-6 pb-2 text-center">Final GPA</th>
                 <th className="px-6 pb-2 text-right">Streak Status</th>
               </tr>
             </thead>

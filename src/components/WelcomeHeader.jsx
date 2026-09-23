@@ -8,7 +8,7 @@ export default function WelcomeHeader({ isDarkMode }) {
   
   // LIVE DATA STATES
   const [newsFeed, setNewsFeed] = useState([
-    { source: "SYSTEM", title: "Initializing Neural Uplink to Govt Servers...", link: "#" }
+    { source: "SYSTEM", title: "Initializing Uplink to Govt Servers...", link: "#" }
   ]);
   const [loading, setLoading] = useState(true);
 

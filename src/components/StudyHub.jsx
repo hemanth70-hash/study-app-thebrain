@@ -54,12 +54,12 @@ export default function StudyHub({ user, isDarkMode }) {
     if (!note) return alert("Note is empty.");
     const doc = new jsPDF();
     doc.setFont("helvetica", "bold");
-    doc.text(`Neural Study Notes - Video ID: ${videoId}`, 10, 10);
+    doc.text(`Study Notes - Video ID: ${videoId}`, 10, 10);
     doc.setFont("helvetica", "normal");
     doc.setFontSize(11);
     const splitText = doc.splitTextToSize(note, 180);
     doc.text(splitText, 10, 20);
-    doc.save(`Neural_Notes_${videoId}.pdf`);
+    doc.save(`Study_Notes_${videoId}.pdf`);
   };
 
   // --- 4. DELETE NOTES ---
@@ -112,7 +112,7 @@ export default function StudyHub({ user, isDarkMode }) {
           {/* VIDEO PLAYER */}
           <div className={`lg:col-span-3 bg-black rounded-[3rem] overflow-hidden shadow-2xl border-4 relative ${theme.border}`}>
             {videoId ? (
-              <iframe width="100%" height="100%" src={`https://www.youtube.com/embed/${videoId}`} title="Neural Player" frameBorder="0" allowFullScreen></iframe>
+              <iframe width="100%" height="100%" src={`https://www.youtube.com/embed/${videoId}`} title="Player" frameBorder="0" allowFullScreen></iframe>
             ) : (
               <div className="h-full flex flex-col items-center justify-center text-gray-500 gap-4">
                  <PlayCircle size={80} className="opacity-10 animate-pulse" />
@@ -126,7 +126,7 @@ export default function StudyHub({ user, isDarkMode }) {
              <div className={`p-6 border-b flex justify-between items-center ${theme.border} ${isDarkMode ? 'bg-slate-900/50' : 'bg-gray-50/50'}`}>
                 <div className="flex items-center gap-2 text-blue-600">
                   <PenTool size={20} />
-                  <h3 className="font-black uppercase text-xs tracking-widest">Neural Notepad</h3>
+                  <h3 className="font-black uppercase text-xs tracking-widest">Notepad</h3>
                 </div>
                 <div className="flex gap-2">
                   <button onClick={exportPDF} title="Export PDF" className={`p-2 transition-colors hover:text-blue-600 ${theme.subText}`}><FileDown size={20}/></button>

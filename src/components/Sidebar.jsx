@@ -24,8 +24,8 @@ export default function Sidebar({ user, activeTab, setActiveTab, setIsDarkMode, 
     { id: 'subjects', icon: <BookOpen />, label: 'Resources' },
     
     // 🔥 NEW MODULES
-    { id: 'typing', icon: <Keyboard />, label: 'Neural Typer' },
-    { id: 'tools', icon: <Layers />, label: 'Neural Tools' }, // <--- THIS IS THE NEW ITEM
+    { id: 'typing', icon: <Keyboard />, label: ' Typer' },
+    { id: 'tools', icon: <Layers />, label: 'Additional Tools' }, // <--- THIS IS THE NEW ITEM
 
     { id: 'mocks', icon: <Timer />, label: 'Mock Tests' },
     { id: 'ranking', icon: <Trophy />, label: 'Leaderboard' },
@@ -102,7 +102,7 @@ export default function Sidebar({ user, activeTab, setActiveTab, setIsDarkMode, 
               )}
             </h3>
             <p className="text-[8px] font-black text-blue-600 dark:text-blue-400 uppercase tracking-[0.2em] mt-1">
-              {user?.education || 'Neural Aspirant'}
+              {user?.education || 'Aspirant'}
             </p>
           </div>
           

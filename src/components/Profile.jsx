@@ -63,7 +63,7 @@ export default function Profile({ user, isDarkMode }) {
     if (error) {
       setSecurityMsg({ type: 'error', text: error.message });
     } else {
-      setSecurityMsg({ type: 'success', text: 'Neural Key Updated.' });
+      setSecurityMsg({ type: 'success', text: ' Key Updated.' });
       setNewPassword('');
     }
     setIsSaving(false);
@@ -93,7 +93,7 @@ export default function Profile({ user, isDarkMode }) {
     const doc = new jsPDF();
     doc.setFontSize(18);
     doc.setTextColor(41, 128, 185);
-    doc.text(`NEURAL PORTAL REPORT: ${user.username.toUpperCase()}`, 14, 20);
+    doc.text(` PORTAL REPORT: ${user.username.toUpperCase()}`, 14, 20);
     doc.setFontSize(10);
     doc.setTextColor(100);
     doc.text(`Exam Title: ${result.title || result.mock_title || 'Unknown Mock'}`, 14, 28);
@@ -120,7 +120,7 @@ export default function Profile({ user, isDarkMode }) {
     } else {
         doc.text("Detailed question breakdown is not available for this legacy record.", 14, 50);
     }
-    doc.save(`Neural_Report_${user.username}_${Date.now()}.pdf`);
+    doc.save(`Test_Report_${user.username}_${Date.now()}.pdf`);
   };
 
   // --- 5. DATA SYNC ---
@@ -137,7 +137,7 @@ export default function Profile({ user, isDarkMode }) {
       if (error) throw error;
       if (data) setStats({ history: data });
     } catch (err) {
-      console.error("Neural Sync Error:", err.message);
+      console.error("Sync Error:", err.message);
     } finally {
       setLoading(false);
     }
@@ -161,7 +161,7 @@ export default function Profile({ user, isDarkMode }) {
         .eq('id', user.id);
 
       if (error) throw error;
-      alert("Neural Identity Refined. Data synchronized.");
+      alert(" Identity Refined. Data synchronized.");
       setShowTools(false);
     } catch (err) {
       alert(`Sync Error: ${err.message}`);
@@ -185,7 +185,7 @@ export default function Profile({ user, isDarkMode }) {
   };
 
   const clearHistory = async () => {
-    if (window.confirm("Wipe all neural records permanently? This cannot be undone.")) {
+    if (window.confirm("Wipe all records permanently? This cannot be undone.")) {
       const { error } = await supabase.from('scores').delete().eq('user_id', user.id);
       await supabase.from('profiles').update({ last_regular_result: null }).eq('id', user.id);
       if (!error) { fetchUserStats(); alert("Grid Purged."); }
@@ -344,7 +344,7 @@ export default function Profile({ user, isDarkMode }) {
         <div className="bg-gradient-to-br from-green-500 to-emerald-600 p-8 rounded-[2.5rem] shadow-xl text-white border-b-8 border-green-700 flex items-center gap-6 transition-all hover:scale-105">
           <div className="p-4 bg-white/20 rounded-2xl"><TrendingUp size={32} /></div>
           <div>
-            <p className="text-[10px] font-black uppercase text-white/70 tracking-widest">Neural GPA</p>
+            <p className="text-[10px] font-black uppercase text-white/70 tracking-widest">Final GPA</p>
             <h4 className="text-3xl font-black tracking-tighter">{lifetimeGPA}%</h4>
           </div>
         </div>
@@ -369,7 +369,7 @@ export default function Profile({ user, isDarkMode }) {
         <div className={`p-8 border-b flex justify-between items-center transition-colors ${isDarkMode ? 'bg-gray-900/50 border-gray-700' : 'bg-gray-50/50 border-gray-100'}`}>
           <div className="flex items-center gap-3">
             <Clock size={24} className="text-blue-600" />
-            <h3 className="text-2xl font-black uppercase tracking-tighter">Neural Transcript</h3>
+            <h3 className="text-2xl font-black uppercase tracking-tighter">Transcript</h3>
           </div>
           <span className={`text-[10px] font-black uppercase tracking-widest px-4 py-2 rounded-xl ${isDarkMode ? 'bg-blue-900/40 text-blue-400' : 'bg-blue-50 text-blue-600'}`}>Permanent Storage Enabled</span>
         </div>
@@ -435,7 +435,7 @@ export default function Profile({ user, isDarkMode }) {
         <div className="relative z-10 flex flex-col md:flex-row items-center justify-between gap-6">
           <div>
             <h3 className="text-2xl font-black uppercase tracking-tight mb-2 flex items-center gap-2">
-              <Megaphone size={24} className="text-yellow-400" /> Neural Uplink
+              <Megaphone size={24} className="text-yellow-400" /> Connection to Admin
             </h3>
             <p className="text-xs text-gray-400 font-bold leading-relaxed max-w-lg">Establish a direct line to Admin. Use this uplink for feature requests, bug reports, or urgent access issues.</p>
           </div>

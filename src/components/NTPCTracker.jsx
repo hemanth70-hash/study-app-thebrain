@@ -596,7 +596,7 @@ export default function NTPCTracker({ user, isDarkMode }) {
         {/* ================= REPORTS ================= */}
         {activeTab === 'reports' && (
           <div className={`p-8 rounded-3xl shadow-xl border text-center ${theme.card}`}>
-            <h2 className="text-2xl font-black uppercase tracking-tight mb-8">Export Neural Data</h2>
+            <h2 className="text-2xl font-black uppercase tracking-tight mb-8">Export Data</h2>
             <FileText size={64} className="mx-auto text-blue-500 mb-6 opacity-80" />
             <p className="text-sm font-bold opacity-70 max-w-md mx-auto mb-8">Generate a comprehensive PDF report containing your lifetime study hours, mock scores, and session logs for offline review.</p>
             
