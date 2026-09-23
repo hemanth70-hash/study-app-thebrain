@@ -25,6 +25,13 @@ export default function MockEngine({ user, onFinish, setIsExamLocked, setIsDarkM
   const [warnings, setWarnings] = useState(0); 
   const [timeUntilMidnight, setTimeUntilMidnight] = useState(""); 
 
+  // --- HELPER: Handles both new JSON ("correct_answer") and old JSON ("correct_option") ---
+  const getCorrectIdx = (q) => {
+    if (q.correct_option !== undefined) return q.correct_option;
+    if (q.correct_answer !== undefined) return q.options.indexOf(q.correct_answer);
+    return -1;
+  };
+
   // --- 1. NEURAL TIMER & PROCTORING ---
   useEffect(() => {
     let interval = null;
@@ -157,7 +164,6 @@ export default function MockEngine({ user, onFinish, setIsExamLocked, setIsDarkM
 
   // --- 4. ENGINE STARTUP ---
   const startMock = async (mock) => {
-    // 🔥 Strict String Comparison for Locking Check
     const isLocked = mock.is_daily && completedMockIds.some(id => String(id) === String(mock.id));
 
     if (isLocked) {
@@ -171,7 +177,12 @@ export default function MockEngine({ user, onFinish, setIsExamLocked, setIsDarkM
     setLoading(false);
 
     if (data && data.questions) {
-      const raw = data.questions;
+      // 🔥 CRITICAL FIX: Safely extract the array if the JSON is wrapped in an object
+      let raw = data.questions;
+      if (!Array.isArray(raw) && raw.questions) {
+          raw = raw.questions;
+      }
+
       if (raw[0]?.subject) {
         setSubjects(raw);
         setQuestions(raw.flatMap(s => s.questions)); 
@@ -207,23 +218,25 @@ export default function MockEngine({ user, onFinish, setIsExamLocked, setIsDarkM
     let scoreCount = 0;
     
     const breakdown = questions.map((q, idx) => {
-      const selected = selectedOptions[idx];
-      const isCorrect = selected === q.correct_option;
+      const selectedIdx = selectedOptions[idx];
+      const correctIdx = getCorrectIdx(q);
+      const isCorrect = selectedIdx === correctIdx;
+      
       if (isCorrect && !isPenalty) scoreCount++;
       
       return {
         question: q.question,
-        selected_option: selected !== undefined ? q.options[selected] : "Not Attempted",
-        correct_answer: q.options[q.correct_option],
+        selected_option: selectedIdx !== undefined ? q.options[selectedIdx] : "Not Attempted",
+        correct_answer: correctIdx !== -1 ? q.options[correctIdx] : "Unknown",
         status: isPenalty ? "DISQUALIFIED" : (isCorrect ? "CORRECT" : "WRONG"),
-        options: q.options
+        options: q.options,
+        explanation: q.explanation 
       };
     });
 
     const percentage = isPenalty ? 0 : Math.round((scoreCount / questions.length) * 100);
 
     try {
-      // 1. Record Regular Score
       await supabase.from('scores').insert([{
         user_id: user.id, mock_id: selectedMock.id, score: scoreCount, 
         percentage: percentage, mock_title: selectedMock.mock_title,
@@ -248,9 +261,7 @@ export default function MockEngine({ user, onFinish, setIsExamLocked, setIsDarkM
 
       await supabase.from('profiles').update(updatePayload).eq('id', user.id);
 
-      // 2. Handle Daily Mock Locking
       if (selectedMock.is_daily) {
-        // 🔥 REMOVED 'mock_date' to prevent crash since column is missing in DB
         const { error } = await supabase.from('completed_daily_mocks').insert([{ 
             user_id: user.id, 
             mock_id: selectedMock.id
@@ -258,7 +269,6 @@ export default function MockEngine({ user, onFinish, setIsExamLocked, setIsDarkM
 
         if (error) throw error;
         
-        // 🔥 INSTANTLY LOCK THE BUTTON (Optimistic UI)
         setCompletedMockIds(prev => [...prev, selectedMock.id]);
 
         if (!isPenalty) {
@@ -334,7 +344,6 @@ export default function MockEngine({ user, onFinish, setIsExamLocked, setIsDarkM
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6 animate-in fade-in duration-500">
             {filteredMocks.map((mock) => {
-              // Strict type matching for locking UI
               const isDone = completedMockIds.some(id => String(id) === String(mock.id));
               
               return (
@@ -371,8 +380,8 @@ export default function MockEngine({ user, onFinish, setIsExamLocked, setIsDarkM
 
   // --- VIEW: RESULTS ---
   if (isFinished) {
-    const finalScore = Math.round((questions.filter((q, i) => selectedOptions[i] === q.correct_option).length / questions.length) * 100);
-    const correctCount = questions.filter((q, i) => selectedOptions[i] === q.correct_option).length;
+    const finalScore = Math.round((questions.filter((q, i) => selectedOptions[i] === getCorrectIdx(q)).length / questions.length) * 100);
+    const correctCount = questions.filter((q, i) => selectedOptions[i] === getCorrectIdx(q)).length;
     
     if (showReview) {
       return (
@@ -382,33 +391,76 @@ export default function MockEngine({ user, onFinish, setIsExamLocked, setIsDarkM
             <div className={`px-4 py-2 rounded-xl font-black uppercase text-[10px] ${isDarkMode ? 'bg-slate-800 text-slate-400' : 'bg-gray-100 text-gray-500'}`}>Review Mode</div>
           </div>
           
-          {questions.map((q, idx) => (
-            <div key={idx} className={`p-8 rounded-[2.5rem] border-l-8 shadow-xl transition-all hover:shadow-2xl ${isDarkMode ? 'bg-slate-800' : 'bg-white'} ${selectedOptions[idx] === q.correct_option ? 'border-green-500' : 'border-red-500'}`}>
-              <div className="flex justify-between items-start mb-4">
-                 <span className="text-[10px] font-black uppercase text-gray-400 tracking-widest">Question {idx + 1}</span>
-                 {selectedOptions[idx] === q.correct_option ? 
-                   <div className="flex items-center gap-1 text-green-500 font-black text-[10px] uppercase"><CheckCircle size={16} /> Correct</div> : 
-                   <div className="flex items-center gap-1 text-red-500 font-black text-[10px] uppercase"><ShieldAlert size={16} /> Incorrect</div>
-                 }
-              </div>
-              
-              <p className={`font-bold text-lg mb-6 leading-tight ${isDarkMode ? 'text-white' : 'text-gray-900'}`}>{q.question}</p>
-              
-              <div className="grid grid-cols-1 gap-3">
-                {q.options.map((opt, i) => (
-                  <div key={i} className={`p-4 rounded-2xl text-sm font-bold flex justify-between items-center transition-all ${
-                    i === q.correct_option ? 'bg-green-100 text-green-700 dark:bg-green-900/20 dark:text-green-400 ring-2 ring-green-500/20' : 
-                    i === selectedOptions[idx] ? 'bg-red-100 text-red-700 dark:bg-red-900/20 dark:text-red-400' : 
-                    isDarkMode ? 'bg-slate-900 text-slate-500 opacity-60' : 'bg-gray-50 text-gray-400 opacity-60'
+          {questions.map((q, idx) => {
+            const correctIdx = getCorrectIdx(q);
+            return (
+              <div key={idx} className={`p-8 rounded-[2.5rem] border-l-8 shadow-xl transition-all hover:shadow-2xl ${isDarkMode ? 'bg-slate-800' : 'bg-white'} ${selectedOptions[idx] === correctIdx ? 'border-green-500' : 'border-red-500'}`}>
+                <div className="flex justify-between items-start mb-4">
+                   <span className="text-[10px] font-black uppercase text-gray-400 tracking-widest">Question {idx + 1}</span>
+                   {selectedOptions[idx] === correctIdx ? 
+                     <div className="flex items-center gap-1 text-green-500 font-black text-[10px] uppercase"><CheckCircle size={16} /> Correct</div> : 
+                     <div className="flex items-center gap-1 text-red-500 font-black text-[10px] uppercase"><ShieldAlert size={16} /> Incorrect</div>
+                   }
+                </div>
+                
+                <p className={`font-bold text-lg mb-6 leading-tight ${isDarkMode ? 'text-white' : 'text-gray-900'}`}>{q.question}</p>
+                
+                <div className="grid grid-cols-1 gap-3">
+                  {q.options.map((opt, i) => (
+                    <div key={i} className={`p-4 rounded-2xl text-sm font-bold flex justify-between items-center transition-all ${
+                      i === correctIdx ? 'bg-green-100 text-green-700 dark:bg-green-900/20 dark:text-green-400 ring-2 ring-green-500/20' : 
+                      i === selectedOptions[idx] ? 'bg-red-100 text-red-700 dark:bg-red-900/20 dark:text-red-400' : 
+                      isDarkMode ? 'bg-slate-900 text-slate-500 opacity-60' : 'bg-gray-50 text-gray-400 opacity-60'
+                    }`}>
+                      <span>{opt}</span>
+                      {i === correctIdx && <span className="text-[8px] font-black uppercase bg-green-500 text-white px-2 py-1 rounded-md ml-2 shadow-sm">Correct Answer</span>}
+                      {i === selectedOptions[idx] && i !== correctIdx && <span className="text-[8px] font-black uppercase bg-red-500 text-white px-2 py-1 rounded-md ml-2 shadow-sm">Your Answer</span>}
+                    </div>
+                  ))}
+                </div>
+
+                {/* 🔥 DEEP EXPLANATION ANALYSIS BOX */}
+                {q.explanation && (
+                  <div className={`mt-8 p-6 rounded-2xl border space-y-4 ${
+                    isDarkMode ? 'bg-slate-900/50 border-slate-700' : 'bg-blue-50/50 border-blue-100'
                   }`}>
-                    <span>{opt}</span>
-                    {i === q.correct_option && <span className="text-[8px] font-black uppercase bg-green-500 text-white px-2 py-1 rounded-md ml-2 shadow-sm">Correct Answer</span>}
-                    {i === selectedOptions[idx] && i !== q.correct_option && <span className="text-[8px] font-black uppercase bg-red-500 text-white px-2 py-1 rounded-md ml-2 shadow-sm">Your Answer</span>}
+                    <div className="flex items-center gap-2 text-blue-500">
+                      <span className="font-black text-xs uppercase tracking-wider">💡 Deep Explanation Analysis</span>
+                    </div>
+
+                    {q.explanation.summary && (
+                      <p className={`text-sm font-semibold leading-relaxed ${isDarkMode ? 'text-slate-300' : 'text-slate-700'}`}>
+                        {q.explanation.summary}
+                      </p>
+                    )}
+
+                    {q.explanation.why_correct && (
+                      <div className="p-4 rounded-xl bg-green-500/10 border border-green-500/20 text-sm font-medium text-green-700 dark:text-green-400">
+                        <span className="font-black uppercase text-[10px] tracking-wider block mb-1">
+                          ✓ Why "{correctIdx !== -1 ? q.options[correctIdx] : 'Correct'}" is Correct:
+                        </span>
+                        {q.explanation.why_correct}
+                      </div>
+                    )}
+
+                    {q.explanation.why_wrong && (
+                      <div className="space-y-2 pt-2">
+                        <span className="font-black text-[10px] uppercase tracking-wider opacity-60 block mb-2">
+                          ✗ Misconception Breakdown (Why others are wrong):
+                        </span>
+                        {Object.entries(q.explanation.why_wrong).map(([optName, reason], rIdx) => (
+                          <div key={rIdx} className={`p-3 rounded-xl border text-xs ${isDarkMode ? 'bg-red-500/5 border-red-500/10' : 'bg-red-50 border-red-100'}`}>
+                            <span className="font-bold text-red-500 mr-2">[{optName}]:</span>
+                            <span className={`${isDarkMode ? 'text-slate-400' : 'text-slate-600'} font-medium`}>{reason}</span>
+                          </div>
+                        ))}
+                      </div>
+                    )}
                   </div>
-                ))}
+                )}
               </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
       );
     }
