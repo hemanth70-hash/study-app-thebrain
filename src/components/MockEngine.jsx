@@ -177,7 +177,6 @@ export default function MockEngine({ user, onFinish, setIsExamLocked, setIsDarkM
     setLoading(false);
 
     if (data && data.questions) {
-      // 🔥 CRITICAL FIX: Safely extract the array if the JSON is wrapped in an object
       let raw = data.questions;
       if (!Array.isArray(raw) && raw.questions) {
           raw = raw.questions;
@@ -378,7 +377,7 @@ export default function MockEngine({ user, onFinish, setIsExamLocked, setIsDarkM
     );
   }
 
-  // --- VIEW: RESULTS ---
+  // --- VIEW: RESULTS (WITH INLINE EXPLANATIONS) ---
   if (isFinished) {
     const finalScore = Math.round((questions.filter((q, i) => selectedOptions[i] === getCorrectIdx(q)).length / questions.length) * 100);
     const correctCount = questions.filter((q, i) => selectedOptions[i] === getCorrectIdx(q)).length;
@@ -393,71 +392,94 @@ export default function MockEngine({ user, onFinish, setIsExamLocked, setIsDarkM
           
           {questions.map((q, idx) => {
             const correctIdx = getCorrectIdx(q);
+            const userSelectedCorrectly = selectedOptions[idx] === correctIdx;
+
             return (
-              <div key={idx} className={`p-8 rounded-[2.5rem] border-l-8 shadow-xl transition-all hover:shadow-2xl ${isDarkMode ? 'bg-slate-800' : 'bg-white'} ${selectedOptions[idx] === correctIdx ? 'border-green-500' : 'border-red-500'}`}>
+              <div key={idx} className={`p-8 rounded-[2.5rem] border-l-8 shadow-xl transition-all hover:shadow-2xl ${isDarkMode ? 'bg-slate-800' : 'bg-white'} ${userSelectedCorrectly ? 'border-green-500' : 'border-red-500'}`}>
+                
+                {/* Header */}
                 <div className="flex justify-between items-start mb-4">
                    <span className="text-[10px] font-black uppercase text-gray-400 tracking-widest">Question {idx + 1}</span>
-                   {selectedOptions[idx] === correctIdx ? 
+                   {userSelectedCorrectly ? 
                      <div className="flex items-center gap-1 text-green-500 font-black text-[10px] uppercase"><CheckCircle size={16} /> Correct</div> : 
                      <div className="flex items-center gap-1 text-red-500 font-black text-[10px] uppercase"><ShieldAlert size={16} /> Incorrect</div>
                    }
                 </div>
                 
-                <p className={`font-bold text-lg mb-6 leading-tight ${isDarkMode ? 'text-white' : 'text-gray-900'}`}>{q.question}</p>
+                {/* Question Statement */}
+                <p className={`font-bold text-lg mb-4 leading-tight ${isDarkMode ? 'text-white' : 'text-gray-900'}`}>{q.question}</p>
                 
-                <div className="grid grid-cols-1 gap-3">
-                  {q.options.map((opt, i) => (
-                    <div key={i} className={`p-4 rounded-2xl text-sm font-bold flex justify-between items-center transition-all ${
-                      i === correctIdx ? 'bg-green-100 text-green-700 dark:bg-green-900/20 dark:text-green-400 ring-2 ring-green-500/20' : 
-                      i === selectedOptions[idx] ? 'bg-red-100 text-red-700 dark:bg-red-900/20 dark:text-red-400' : 
-                      isDarkMode ? 'bg-slate-900 text-slate-500 opacity-60' : 'bg-gray-50 text-gray-400 opacity-60'
-                    }`}>
-                      <span>{opt}</span>
-                      {i === correctIdx && <span className="text-[8px] font-black uppercase bg-green-500 text-white px-2 py-1 rounded-md ml-2 shadow-sm">Correct Answer</span>}
-                      {i === selectedOptions[idx] && i !== correctIdx && <span className="text-[8px] font-black uppercase bg-red-500 text-white px-2 py-1 rounded-md ml-2 shadow-sm">Your Answer</span>}
-                    </div>
-                  ))}
-                </div>
-
-                {/* 🔥 DEEP EXPLANATION ANALYSIS BOX */}
-                {q.explanation && (
-                  <div className={`mt-8 p-6 rounded-2xl border space-y-4 ${
-                    isDarkMode ? 'bg-slate-900/50 border-slate-700' : 'bg-blue-50/50 border-blue-100'
-                  }`}>
-                    <div className="flex items-center gap-2 text-blue-500">
-                      <span className="font-black text-xs uppercase tracking-wider">💡 Deep Explanation Analysis</span>
-                    </div>
-
-                    {q.explanation.summary && (
-                      <p className={`text-sm font-semibold leading-relaxed ${isDarkMode ? 'text-slate-300' : 'text-slate-700'}`}>
-                        {q.explanation.summary}
-                      </p>
-                    )}
-
-                    {q.explanation.why_correct && (
-                      <div className="p-4 rounded-xl bg-green-500/10 border border-green-500/20 text-sm font-medium text-green-700 dark:text-green-400">
-                        <span className="font-black uppercase text-[10px] tracking-wider block mb-1">
-                          ✓ Why "{correctIdx !== -1 ? q.options[correctIdx] : 'Correct'}" is Correct:
-                        </span>
-                        {q.explanation.why_correct}
-                      </div>
-                    )}
-
-                    {q.explanation.why_wrong && (
-                      <div className="space-y-2 pt-2">
-                        <span className="font-black text-[10px] uppercase tracking-wider opacity-60 block mb-2">
-                          ✗ Misconception Breakdown (Why others are wrong):
-                        </span>
-                        {Object.entries(q.explanation.why_wrong).map(([optName, reason], rIdx) => (
-                          <div key={rIdx} className={`p-3 rounded-xl border text-xs ${isDarkMode ? 'bg-red-500/5 border-red-500/10' : 'bg-red-50 border-red-100'}`}>
-                            <span className="font-bold text-red-500 mr-2">[{optName}]:</span>
-                            <span className={`${isDarkMode ? 'text-slate-400' : 'text-slate-600'} font-medium`}>{reason}</span>
-                          </div>
-                        ))}
-                      </div>
-                    )}
+                {/* Explanation Summary (Key Takeaway) */}
+                {q.explanation?.summary && (
+                  <div className={`mb-6 p-4 rounded-xl border flex gap-3 items-start ${isDarkMode ? 'bg-blue-900/10 border-blue-900/30 text-blue-300' : 'bg-blue-50 border-blue-100 text-blue-800'}`}>
+                    <Zap size={18} className="shrink-0 mt-0.5" />
+                    <p className="text-xs font-bold leading-relaxed">{q.explanation.summary}</p>
                   </div>
                 )}
+                
+                {/* Options List with Inline Explanations */}
+                <div className="grid grid-cols-1 gap-3">
+                  {q.options.map((opt, i) => {
+                    const isCorrect = i === correctIdx;
+                    const isSelected = i === selectedOptions[idx];
+                    
+                    // Fetch appropriate explanation for this specific option
+                    const optExplanation = isCorrect 
+                      ? q.explanation?.why_correct 
+                      : q.explanation?.why_wrong?.[opt];
+
+                    // Determine dynamic styling based on states
+                    let cardStyle = '';
+                    let textStyle = '';
+                    let expBorderStyle = '';
+                    let expTextStyle = '';
+
+                    if (isCorrect) {
+                      cardStyle = 'bg-green-100 border-green-300 dark:bg-green-900/20 dark:border-green-500/30';
+                      textStyle = 'text-green-700 dark:text-green-400';
+                      expBorderStyle = 'border-green-200 dark:border-green-900/50';
+                      expTextStyle = 'text-green-800 dark:text-green-300';
+                    } else if (isSelected) {
+                      cardStyle = 'bg-red-100 border-red-300 dark:bg-red-900/20 dark:border-red-500/30';
+                      textStyle = 'text-red-700 dark:text-red-400';
+                      expBorderStyle = 'border-red-200 dark:border-red-900/50';
+                      expTextStyle = 'text-red-800 dark:text-red-300';
+                    } else {
+                      cardStyle = isDarkMode ? 'bg-slate-900 border-slate-700 opacity-80' : 'bg-gray-50 border-gray-200 opacity-80';
+                      textStyle = isDarkMode ? 'text-slate-400' : 'text-gray-500';
+                      expBorderStyle = isDarkMode ? 'border-slate-800' : 'border-gray-200';
+                      expTextStyle = isDarkMode ? 'text-slate-500' : 'text-gray-500';
+                    }
+
+                    return (
+                      <div key={i} className={`flex flex-col rounded-2xl transition-all border ${cardStyle}`}>
+                        
+                        {/* Option Text & Badges */}
+                        <div className="p-4 flex justify-between items-center text-sm font-bold">
+                          <span className={textStyle}>{opt}</span>
+                          <div className="flex gap-2">
+                            {isCorrect && <span className="text-[8px] font-black uppercase bg-green-500 text-white px-2 py-1 rounded-md shadow-sm">Correct Answer</span>}
+                            {isSelected && !isCorrect && <span className="text-[8px] font-black uppercase bg-red-500 text-white px-2 py-1 rounded-md shadow-sm">Your Answer</span>}
+                          </div>
+                        </div>
+
+                        {/* Nested Specific Explanation (Only renders if JSON provides it) */}
+                        {optExplanation && (
+                          <div className={`px-4 pb-4 text-xs font-medium ${expTextStyle}`}>
+                            <div className={`pt-3 border-t ${expBorderStyle}`}>
+                              <span className="font-black uppercase text-[9px] tracking-wider block mb-1 opacity-70">
+                                {isCorrect ? '✓ Why it is correct' : '✗ Misconception Breakdown'}
+                              </span>
+                              {optExplanation}
+                            </div>
+                          </div>
+                        )}
+
+                      </div>
+                    );
+                  })}
+                </div>
+
               </div>
             );
           })}
