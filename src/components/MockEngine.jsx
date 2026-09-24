@@ -11,10 +11,10 @@ export default function MockEngine({ user, onFinish, setIsExamLocked, setIsDarkM
   const [filteredMocks, setFilteredMocks] = useState([]); 
   const [searchQuery, setSearchQuery] = useState(""); 
   const [selectedMock, setSelectedMock] = useState(null);
-  const [questions, setQuestions] = useState([]); // Flat array for DB compatibility
-  const [subjects, setSubjects] = useState([]); // Grouped array for Modules
+  const [questions, setQuestions] = useState([]); 
+  const [subjects, setSubjects] = useState([]); 
   const [activeSubject, setActiveSubject] = useState(""); 
-  const [currentIdx, setCurrentIdx] = useState(0); // Index within active subject
+  const [currentIdx, setCurrentIdx] = useState(0); 
   const [selectedOptions, setSelectedOptions] = useState({});
   const [timeLeft, setTimeLeft] = useState(0); 
   const [isFinished, setIsFinished] = useState(false);
@@ -25,30 +25,24 @@ export default function MockEngine({ user, onFinish, setIsExamLocked, setIsDarkM
   const [warnings, setWarnings] = useState(0); 
   const [timeUntilMidnight, setTimeUntilMidnight] = useState(""); 
 
-  // --- HELPER: Handle both new JSON ("correct_answer") and old JSON ("correct_option") ---
   const getCorrectIdx = (q) => {
+    if (!q) return -1;
     if (q.correct_option !== undefined) return q.correct_option;
-    if (q.correct_answer !== undefined) return q.options.indexOf(q.correct_answer);
+    if (q.correct_answer !== undefined && Array.isArray(q.options)) return q.options.indexOf(q.correct_answer);
     return -1;
   };
 
   // --- 1. NEURAL TIMER & PROCTORING ---
   useEffect(() => {
     let interval = null;
-    
     if (selectedMock && !isFinished && timeLeft === 0) {
-      console.warn("Time Limit Exhausted. Auto-Submitting...");
       handleSubmit(false); 
       return;
     }
-
     if (selectedMock && !isFinished && timeLeft > 0) {
       if (setIsExamLocked) setIsExamLocked(true);
       if (setIsDarkMode) setIsDarkMode(true);
-
-      interval = setInterval(() => {
-        setTimeLeft((prev) => (prev <= 1 ? 0 : prev - 1));
-      }, 1000);
+      interval = setInterval(() => setTimeLeft((prev) => (prev <= 1 ? 0 : prev - 1)), 1000);
 
       if (selectedMock.is_strict) {
         const handleVisibility = () => {
@@ -65,13 +59,10 @@ export default function MockEngine({ user, onFinish, setIsExamLocked, setIsDarkM
             });
           }
         };
-
         window.history.pushState(null, null, window.location.href);
         const blockNavigation = () => window.history.pushState(null, null, window.location.href);
-
         document.addEventListener("visibilitychange", handleVisibility);
         window.addEventListener('popstate', blockNavigation);
-
         return () => {
           clearInterval(interval);
           document.removeEventListener("visibilitychange", handleVisibility);
@@ -79,10 +70,7 @@ export default function MockEngine({ user, onFinish, setIsExamLocked, setIsDarkM
         };
       }
     }
-
-    return () => {
-      if (interval) clearInterval(interval);
-    };
+    return () => { if (interval) clearInterval(interval); };
   }, [selectedMock?.id, isFinished, timeLeft === 0]); 
 
   // --- 2. MIDNIGHT COUNTDOWN ---
@@ -107,27 +95,17 @@ export default function MockEngine({ user, onFinish, setIsExamLocked, setIsDarkM
     setLoading(true);
     try {
       const today = new Date().toISOString().split('T')[0];
-
       const [dailyRes, normalRes, completionRes] = await Promise.all([
         supabase.from('daily_mocks').select('*'),
         supabase.from('mocks').select('*'),
         supabase.from('completed_daily_mocks').select('mock_id').eq('user_id', user.id)
       ]);
 
-      if (completionRes.data) {
-        setCompletedMockIds(completionRes.data.map(c => c.mock_id));
-      }
+      if (completionRes.data) setCompletedMockIds(completionRes.data.map(c => c.mock_id));
       
       let allMocks = [];
-
-      if (dailyRes.data) {
-        const activeDaily = dailyRes.data.filter(m => m.mock_date === today);
-        allMocks = [...allMocks, ...activeDaily];
-      }
-
-      if (normalRes.data) {
-        allMocks = [...allMocks, ...normalRes.data];
-      }
+      if (dailyRes.data) allMocks = [...allMocks, ...dailyRes.data.filter(m => m.mock_date === today)];
+      if (normalRes.data) allMocks = [...allMocks, ...normalRes.data];
 
       const sorted = allMocks.sort((a, b) => {
         if (a.is_daily && !b.is_daily) return -1;
@@ -137,29 +115,24 @@ export default function MockEngine({ user, onFinish, setIsExamLocked, setIsDarkM
 
       setAvailableMocks(sorted);
       setFilteredMocks(sorted);
-
     } catch (err) {
-      console.error("Sync Error:", err);
+      console.error("Neural Sync Error:", err);
     } finally {
       setLoading(false);
     }
   }, [user.id]);
 
-  useEffect(() => {
-    loadMockData();
-  }, [loadMockData]);
+  useEffect(() => { loadMockData(); }, [loadMockData]);
 
   useEffect(() => {
     if (!searchQuery.trim()) {
       setFilteredMocks(availableMocks);
     } else {
-      const lowerQ = searchQuery.toLowerCase();
-      const filtered = availableMocks.filter(m => m.mock_title.toLowerCase().includes(lowerQ));
-      setFilteredMocks(filtered);
+      setFilteredMocks(availableMocks.filter(m => m.mock_title.toLowerCase().includes(searchQuery.toLowerCase())));
     }
   }, [searchQuery, availableMocks]);
 
-  // --- 4. ENGINE STARTUP (MULTI-MODULE PARSER) ---
+  // --- 4. ENGINE STARTUP (UNIVERSAL PARSER) ---
   const startMock = async (mock) => {
     const isLocked = mock.is_daily && completedMockIds.some(id => String(id) === String(mock.id));
     if (isLocked) { alert("Daily mock already secured."); return; }
@@ -171,17 +144,34 @@ export default function MockEngine({ user, onFinish, setIsExamLocked, setIsDarkM
 
     if (data && data.questions) {
       let raw = data.questions;
-      if (!Array.isArray(raw) && raw.questions) raw = raw.questions; 
+      
+      if (typeof raw === 'string') {
+        try { raw = JSON.parse(raw); } catch (e) { raw = []; }
+      }
 
-      if (raw[0]?.subject) {
+      // Format A: Object wrapper containing questions array or categorized subjects
+      if (!Array.isArray(raw)) {
+        if (raw?.questions) {
+          raw = raw.questions;
+        } else {
+          raw = Object.values(raw);
+        }
+      }
+
+      // Check if format is categorized by subjects: [{ subject: "...", questions: [...] }]
+      const isCategorized = Array.isArray(raw) && raw.length > 0 && raw[0]?.subject && Array.isArray(raw[0]?.questions);
+
+      if (isCategorized) {
         setSubjects(raw);
         setQuestions(raw.flatMap(s => s.questions)); 
         setActiveSubject(raw[0].subject);
       } else {
+        // Format B: Flat array of questions (e.g., historical questionnaire you just shared)
         setSubjects([{ subject: "General Module", questions: raw }]);
         setQuestions(raw);
         setActiveSubject("General Module");
       }
+      
       setSelectedMock(data);
       setWarnings(0); setCurrentIdx(0); setSelectedOptions({});
       const limitInMinutes = parseInt(data.time_limit) || 10;
@@ -193,7 +183,7 @@ export default function MockEngine({ user, onFinish, setIsExamLocked, setIsDarkM
     let offset = 0;
     for (let s of subjects) {
       if (s.subject === subName) break;
-      offset += s.questions.length;
+      offset += (s.questions || []).length;
     }
     return offset + qIdx;
   };
@@ -209,33 +199,33 @@ export default function MockEngine({ user, onFinish, setIsExamLocked, setIsDarkM
       const correctIdx = getCorrectIdx(q);
       const isCorrect = selectedIdx === correctIdx;
       
-      // Determine Subject for this flat question
       let qSubject = "General Module";
       let counter = 0;
       for (let s of subjects) {
-         if (idx < counter + s.questions.length) { qSubject = s.subject; break; }
-         counter += s.questions.length;
+         if (idx < counter + (s.questions || []).length) { qSubject = s.subject; break; }
+         counter += (s.questions || []).length;
       }
 
       if (isCorrect && !isPenalty) scoreCount++;
       return {
         subject: qSubject,
         question: q.question,
-        selected_option: selectedIdx !== undefined ? q.options[selectedIdx] : "Not Attempted",
-        correct_answer: correctIdx !== -1 ? q.options[correctIdx] : "Unknown",
+        selected_option: selectedIdx !== undefined && Array.isArray(q.options) ? q.options[selectedIdx] : "Not Attempted",
+        correct_answer: correctIdx !== -1 && Array.isArray(q.options) ? q.options[correctIdx] : "Unknown",
         status: isPenalty ? "DISQUALIFIED" : (isCorrect ? "CORRECT" : "WRONG"),
-        options: q.options,
+        options: q.options || [],
         explanation: q.explanation 
       };
     });
 
-    const percentage = isPenalty ? 0 : Math.round((scoreCount / questions.length) * 100);
+    const percentage = isPenalty || questions.length === 0 ? 0 : Math.round((scoreCount / questions.length) * 100);
 
     try {
-      await supabase.from('scores').insert([{
+      const { error: scoreErr } = await supabase.from('scores').insert([{
         user_id: user.id, mock_id: selectedMock.id, score: scoreCount, 
         percentage: percentage, mock_title: selectedMock.mock_title, status: isPenalty ? 'DISQUALIFIED' : 'COMPLETED'
       }]);
+      if (scoreErr && scoreErr.code !== '23505') throw scoreErr;
 
       const updatePayload = { 
         total_exams_completed: (user.total_exams_completed || 0) + 1,
@@ -248,11 +238,15 @@ export default function MockEngine({ user, onFinish, setIsExamLocked, setIsDarkM
           percentage: percentage, timestamp: new Date().toISOString(), breakdown: breakdown 
         };
       }
+      
       await supabase.from('profiles').update(updatePayload).eq('id', user.id);
 
       if (selectedMock.is_daily) {
-        await supabase.from('completed_daily_mocks').insert([{ user_id: user.id, mock_id: selectedMock.id }]);
-        setCompletedMockIds(prev => [...prev, selectedMock.id]);
+        const { error: lockErr } = await supabase.from('completed_daily_mocks').insert([{ user_id: user.id, mock_id: selectedMock.id }]);
+        if (!lockErr || lockErr.code === '23505') {
+            setCompletedMockIds(prev => [...prev, selectedMock.id]);
+        }
+        
         if (!isPenalty) {
           const today = new Date().toISOString().split('T')[0];
           await supabase.from('profiles').update({ streak_count: (user.streak_count || 0) + 1, last_mock_date: today }).eq('id', user.id);
@@ -260,7 +254,10 @@ export default function MockEngine({ user, onFinish, setIsExamLocked, setIsDarkM
         }
       }
       setIsFinished(true);
-    } catch (err) { alert("Submission Error: " + err.message); }
+    } catch (err) { 
+      console.warn("Soft Data Sync Error: ", err.message); 
+      setIsFinished(true); 
+    }
   };
 
   const handleReturn = () => {
@@ -276,7 +273,6 @@ export default function MockEngine({ user, onFinish, setIsExamLocked, setIsDarkM
     const dailyExists = availableMocks.some(m => m.is_daily);
     return (
       <div className="space-y-6">
-        {/* Same standard library view as before */}
         <div className="flex flex-col md:flex-row items-center justify-between mb-2 gap-4">
           <div className="flex items-center gap-3">
             <Play className="text-blue-600" fill="currentColor" />
@@ -315,7 +311,7 @@ export default function MockEngine({ user, onFinish, setIsExamLocked, setIsDarkM
 
   // --- VIEW: RESULTS & REVIEW ---
   if (isFinished) {
-    const finalScore = Math.round((questions.filter((q, i) => selectedOptions[i] === getCorrectIdx(q)).length / questions.length) * 100);
+    const finalScore = questions.length === 0 ? 0 : Math.round((questions.filter((q, i) => selectedOptions[i] === getCorrectIdx(q)).length / questions.length) * 100);
     const correctCount = questions.filter((q, i) => selectedOptions[i] === getCorrectIdx(q)).length;
     
     if (showReview) {
@@ -326,14 +322,13 @@ export default function MockEngine({ user, onFinish, setIsExamLocked, setIsDarkM
             <div className={`px-4 py-2 rounded-xl font-black uppercase text-[10px] ${isDarkMode ? 'bg-slate-800 text-slate-400' : 'bg-gray-100 text-gray-500'}`}>Module Review Mode</div>
           </div>
           
-          {/* 🔥 REVIEW GROUPED BY SUBJECT */}
           {subjects.map((sub, sIdx) => (
             <div key={sIdx} className="space-y-6">
               <h3 className="text-xl font-black uppercase tracking-tight flex items-center gap-3 text-blue-500 border-b-2 border-blue-500/20 pb-4">
                  <Layout size={24} /> Module: {sub.subject}
               </h3>
 
-              {sub.questions.map((q, qIdx) => {
+              {(sub.questions || []).map((q, qIdx) => {
                 const absIdx = getAbsIdx(sub.subject, qIdx);
                 const correctIdx = getCorrectIdx(q);
                 const userSelectedCorrectly = selectedOptions[absIdx] === correctIdx;
@@ -354,7 +349,7 @@ export default function MockEngine({ user, onFinish, setIsExamLocked, setIsDarkM
                     )}
                     
                     <div className="grid grid-cols-1 gap-3">
-                      {q.options.map((opt, i) => {
+                      {(q.options || []).map((opt, i) => {
                         const isCorrect = i === correctIdx;
                         const isSelected = i === selectedOptions[absIdx];
                         const optExplanation = isCorrect ? q.explanation?.why_correct : q.explanation?.why_wrong?.[opt];
@@ -402,19 +397,18 @@ export default function MockEngine({ user, onFinish, setIsExamLocked, setIsDarkM
         )}
         <div className="text-center">
           <Award size={64} className="mx-auto text-green-500 mb-6" />
-          <h2 className={`text-3xl font-black uppercase tracking-tighter ${isDarkMode ? 'text-white' : 'text-gray-900'}`}> Record</h2>
+          <h2 className={`text-3xl font-black uppercase tracking-tighter ${isDarkMode ? 'text-white' : 'text-gray-900'}`}>Neural Record</h2>
           <div className="text-6xl font-black text-blue-600 my-6">{finalScore}%</div>
           <p className="text-gray-400 font-bold text-[10px] uppercase mb-10 tracking-widest italic">Overall Grid Accuracy</p>
         </div>
 
-        {/* 🔥 NEW: MODULE BREAKDOWN STATS */}
         <div className="mb-10">
           <h4 className="text-[10px] font-black uppercase tracking-widest text-gray-400 mb-4 flex items-center gap-2 border-b border-gray-200 dark:border-gray-700 pb-2"><BarChart2 size={14}/> Module Diagnostics</h4>
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
             {subjects.map((sub, i) => {
-              const totalSub = sub.questions.length;
+              const totalSub = (sub.questions || []).length;
               let correctSub = 0;
-              sub.questions.forEach((q, qIdx) => { if(selectedOptions[getAbsIdx(sub.subject, qIdx)] === getCorrectIdx(q)) correctSub++; });
+              (sub.questions || []).forEach((q, qIdx) => { if(selectedOptions[getAbsIdx(sub.subject, qIdx)] === getCorrectIdx(q)) correctSub++; });
               
               return (
                 <div key={i} className={`p-4 rounded-2xl border flex flex-col items-center justify-center text-center ${isDarkMode ? 'bg-slate-900/50 border-slate-700' : 'bg-gray-50 border-gray-100'}`}>
@@ -438,20 +432,21 @@ export default function MockEngine({ user, onFinish, setIsExamLocked, setIsDarkM
   const activeSubData = subjects.find(s => s.subject === activeSubject);
   const activeSubIndex = subjects.findIndex(s => s.subject === activeSubject);
   const isFinalMinute = timeLeft <= 60; 
-  const isLastQuestionInSub = currentIdx === (activeSubData?.questions?.length - 1);
+  const activeSubQuestions = activeSubData?.questions || [];
+  const isLastQuestionInSub = currentIdx === (activeSubQuestions.length - 1);
   const hasNextModule = activeSubIndex < subjects.length - 1;
 
-  if (!activeSubData || !activeSubData.questions) return <div className="p-20 text-center animate-pulse">Loading Modules...</div>;
+  if (!activeSubData || activeSubQuestions.length === 0) return <div className="p-20 text-center animate-pulse">Loading Modules...</div>;
+
+  const currentQuestion = activeSubQuestions[currentIdx] || {};
 
   return (
     <div className="max-w-6xl mx-auto space-y-6">
-      
-      {/* 🔥 DYNAMIC MODULE TABS HEADER */}
       <div className={`p-4 rounded-[2rem] shadow-xl flex flex-wrap justify-between items-center border transition-colors ${isDarkMode ? 'bg-slate-800 border-slate-700' : 'bg-white border-gray-100'}`}>
         <div className="flex flex-wrap gap-2">
           {subjects.map(s => {
-            // Check if all questions in this module have been attempted
-            const isSubComplete = s.questions.every((_, i) => selectedOptions[getAbsIdx(s.subject, i)] !== undefined);
+            const safeQuestions = s.questions || [];
+            const isSubComplete = safeQuestions.length > 0 && safeQuestions.every((_, i) => selectedOptions[getAbsIdx(s.subject, i)] !== undefined);
 
             return (
               <button key={s.subject} onClick={() => {setActiveSubject(s.subject); setCurrentIdx(0);}} 
@@ -470,7 +465,6 @@ export default function MockEngine({ user, onFinish, setIsExamLocked, setIsDarkM
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
-        {/* EXAM PANEL */}
         <div className={`lg:col-span-3 p-10 rounded-[3rem] shadow-2xl border relative transition-colors ${isDarkMode ? 'bg-slate-800 border-slate-700' : 'bg-white border-gray-100'}`}>
           {selectedMock.is_strict && <div className="absolute top-6 right-10 text-red-500 font-black text-[10px] uppercase flex items-center gap-2 animate-pulse"><ShieldAlert size={14} /> Strikes: {warnings}/2</div>}
           
@@ -478,10 +472,10 @@ export default function MockEngine({ user, onFinish, setIsExamLocked, setIsDarkM
              {activeSubject} / Question {currentIdx + 1}
           </h4>
           
-          <h3 className={`text-2xl font-bold mb-10 leading-tight ${isDarkMode ? 'text-white' : 'text-gray-900'}`}>{activeSubData.questions[currentIdx].question}</h3>
+          <h3 className={`text-2xl font-bold mb-10 leading-tight ${isDarkMode ? 'text-white' : 'text-gray-900'}`}>{currentQuestion.question}</h3>
           
           <div className="grid grid-cols-1 gap-4">
-            {activeSubData.questions[currentIdx].options.map((opt, i) => {
+            {(currentQuestion.options || []).map((opt, i) => {
               const absIdx = getAbsIdx(activeSubject, currentIdx);
               const isSelected = selectedOptions[absIdx] === i;
               return (
@@ -495,8 +489,6 @@ export default function MockEngine({ user, onFinish, setIsExamLocked, setIsDarkM
 
           <div className={`mt-12 flex justify-between pt-8 border-t ${isDarkMode ? 'border-slate-700' : 'border-gray-100'}`}>
             <button disabled={currentIdx === 0} onClick={() => setCurrentIdx(prev => prev - 1)} className="px-6 py-2 text-gray-400 font-bold uppercase text-xs disabled:opacity-30 hover:text-gray-600 transition-all">Previous</button>
-            
-            {/* 🔥 SMART "NEXT" BUTTON */}
             <button 
               onClick={() => {
                 if (isLastQuestionInSub) {
@@ -513,11 +505,10 @@ export default function MockEngine({ user, onFinish, setIsExamLocked, setIsDarkM
           </div>
         </div>
 
-        {/* PALETTE PANEL */}
         <div className={`p-8 rounded-[3rem] shadow-xl border text-center transition-colors flex flex-col h-full ${isDarkMode ? 'bg-slate-800 border-slate-700' : 'bg-white border-gray-100'}`}>
           <p className="text-[10px] font-black uppercase text-gray-400 mb-6 tracking-widest border-b pb-4 dark:border-slate-700">{activeSubject} Palette</p>
           <div className="grid grid-cols-4 gap-2 mb-8 flex-1 overflow-y-auto pr-2 custom-scrollbar">
-            {activeSubData.questions.map((_, i) => {
+            {activeSubQuestions.map((_, i) => {
               const absIdx = getAbsIdx(activeSubject, i);
               const isDone = selectedOptions[absIdx] !== undefined;
               return (
@@ -526,7 +517,7 @@ export default function MockEngine({ user, onFinish, setIsExamLocked, setIsDarkM
               )
             })}
           </div>
-          <button onClick={() => { if(window.confirm("Submit final transmission?")) handleSubmit(false); }} className="w-full mt-auto bg-red-600 text-white py-4 rounded-2xl font-black uppercase text-xs shadow-xl active:scale-95 transition-all hover:bg-red-700">Submit Full Test</button>
+          <button onClick={() => { if(window.confirm("Submit final neural transmission?")) handleSubmit(false); }} className="w-full mt-auto bg-red-600 text-white py-4 rounded-2xl font-black uppercase text-xs shadow-xl active:scale-95 transition-all hover:bg-red-700">Submit Full Test</button>
         </div>
       </div>
     </div>
