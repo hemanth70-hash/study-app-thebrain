@@ -21,7 +21,7 @@ import StudyChat from './components/StudyChat';
 import { ShieldAlert, Megaphone, Loader2 } from 'lucide-react';
 
 // --- MAIN DASHBOARD COMPONENT ---
-function DashboardLayout({ user, isDarkMode, setIsDarkMode, activeTab, setActiveTab, setUser, refreshUser, onLogout }) {
+function DashboardLayout({ user, isDarkMode, setIsDarkMode, activeTab, setActiveTab, updateUser, refreshUser, onLogout }) {
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
   const [globalMsg, setGlobalMsg] = useState(null);
   const [isExamLocked, setIsExamLocked] = useState(false); 
@@ -91,7 +91,7 @@ function DashboardLayout({ user, isDarkMode, setIsDarkMode, activeTab, setActive
               <span className="text-2xl animate-pulse">🔥</span>
               <span className="font-black text-xl text-orange-500">{user.streak_count || 0}</span>
             </div>
-            {/* 🔥 NEW DISCONNECT (LOGOUT) BUTTON */}
+            {/* 🔥 DISCONNECT (LOGOUT) BUTTON */}
             <button 
               onClick={onLogout} 
               className="px-6 py-2.5 rounded-2xl bg-red-600/10 text-red-500 hover:bg-red-600 hover:text-white font-black uppercase tracking-widest text-[10px] transition-all border border-red-500/20 active:scale-95"
@@ -137,7 +137,9 @@ function DashboardLayout({ user, isDarkMode, setIsDarkMode, activeTab, setActive
 
           {activeTab === 'ranking' && <Leaderboard isDarkMode={isDarkMode} />}
           {activeTab === 'admin' && <AdminPanel user={user} isDarkMode={isDarkMode} />}
-          {activeTab === 'profile' && <Profile user={user} isDarkMode={isDarkMode} />}
+          
+          {/* 🔥 ADDED updateUser PROP TO PROFILE */}
+          {activeTab === 'profile' && <Profile user={user} isDarkMode={isDarkMode} updateUser={updateUser} />}
         </div>
 
         {/* ADMIN REQUEST BUTTON */}
@@ -153,8 +155,8 @@ function DashboardLayout({ user, isDarkMode, setIsDarkMode, activeTab, setActive
 
 // --- ROOT APP COMPONENT ---
 export default function App() {
-  const [session, setSession] = useState(null); // 🔥 NEW: Auth Session
-  const [user, setUser] = useState(null);       // Profile Data
+  const [session, setSession] = useState(null); 
+  const [user, setUser] = useState(null);       
   const [activeTab, setActiveTab] = useState('dashboard');
   const [isDarkMode, setIsDarkMode] = useState(false);
   const [isLoadingProfile, setIsLoadingProfile] = useState(true);
@@ -214,17 +216,14 @@ export default function App() {
     const { data, error } = await supabase.from('profiles').select('*').eq('id', userId).single();
     
     if (data && !error) {
-      // Check streak status before saving to state
       const updatedProfile = await handleStreakCheck(data);
       setUser(updatedProfile);
 
-      // 🔥 Update local storage if it's a legacy user
       if (legacyUser && legacyUser.id === userId) {
          setLegacyUser(updatedProfile);
          localStorage.setItem('legacy_neural_user', JSON.stringify(updatedProfile));
       }
       
-      // Trigger Reaper if Admin
       if (updatedProfile.username?.toLowerCase() === 'thebrain') {
         runTheReaper();
       }
@@ -234,13 +233,11 @@ export default function App() {
 
   // --- GLOBAL AUTHENTICATION EFFECT ---
   useEffect(() => {
-    // 🔥 Skip Supabase Auth check if they are a local legacy user
     if (legacyUser) {
       setIsLoadingProfile(false);
       return;
     }
 
-    // 1. Check Session on Load
     supabase.auth.getSession().then(({ data: { session } }) => {
       setSession(session);
       if (session?.user?.id) {
@@ -250,7 +247,6 @@ export default function App() {
       }
     });
 
-    // 2. Listen for Auth Changes (Login / Logout / Sign Up)
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
       setSession(session);
       if (session?.user?.id) {
@@ -265,13 +261,11 @@ export default function App() {
     return () => subscription.unsubscribe();
   }, [refreshUser, legacyUser]);
 
-  // 🔥 LEGACY LOGIN HANDLER
   const handleLegacyLogin = (profile) => {
     setLegacyUser(profile);
     localStorage.setItem('legacy_neural_user', JSON.stringify(profile));
   };
 
-  // 🔥 GLOBAL LOGOUT HANDLER
   const handleLogout = async () => {
     if (legacyUser) {
       setLegacyUser(null);
@@ -282,7 +276,16 @@ export default function App() {
     setActiveTab('dashboard'); 
   };
 
-  // Combine standard user or legacy user
+  // 🔥 NEW: MASTER STATE UPDATER (Routes data correctly for Legacy vs Standard Users)
+  const handleUserUpdate = (updatedData) => {
+    if (legacyUser) {
+      setLegacyUser(updatedData);
+      localStorage.setItem('legacy_neural_user', JSON.stringify(updatedData));
+    } else {
+      setUser(updatedData);
+    }
+  };
+
   const activeUser = legacyUser || user;
 
   return (
@@ -290,7 +293,6 @@ export default function App() {
       <div className={isDarkMode ? 'dark' : ''}>
         <Routes>
           
-          {/* 🔥 ROUTE 1: THE NEURAL TOOLS POPUP (NO SIDEBAR) */}
           <Route 
             path="/tools" 
             element={
@@ -300,30 +302,26 @@ export default function App() {
             } 
           />
 
-          {/* 🔥 ROUTE 2: MAIN APP (AUTH & DASHBOARD) */}
           <Route 
             path="/" 
             element={
               !activeUser ? (
-                // --- 1. NEW SECURE AUTH COMPONENT ---
                 <Auth isDarkMode={isDarkMode} onLegacyLogin={handleLegacyLogin} />
               ) : isLoadingProfile ? (
-                // --- 2. LOADING STATE (Fetching Profile Data) ---
                 <div className={`flex flex-col items-center justify-center min-h-screen transition-colors duration-500 ${isDarkMode ? 'bg-slate-950 text-blue-500' : 'bg-blue-50 text-blue-600'}`}>
                    <Loader2 size={48} className="animate-spin mb-4" />
                    <p className="font-black text-xs uppercase tracking-widest animate-pulse">Initializing Neural Link...</p>
                 </div>
               ) : (
-                // --- 3. MAIN DASHBOARD ---
                 <DashboardLayout 
                   user={activeUser} 
                   isDarkMode={isDarkMode} 
                   setIsDarkMode={setIsDarkMode} 
                   activeTab={activeTab} 
                   setActiveTab={setActiveTab} 
-                  setUser={setUser} 
+                  updateUser={handleUserUpdate} // 🔥 PASSED MASTER UPDATER TO LAYOUT
                   refreshUser={refreshUser}
-                  onLogout={handleLogout} // 🔥 Passing logout down
+                  onLogout={handleLogout} 
                 />
               )
             } 

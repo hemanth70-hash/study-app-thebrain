@@ -8,13 +8,14 @@ import {
   ChevronDown, ChevronUp, GraduationCap, Target, Edit3, Activity, ShieldCheck, FileText, Download, Megaphone, ArrowRight, FileDown, Lock, Mail
 } from 'lucide-react';
 
-export default function Profile({ user, isDarkMode }) {
+// 🔥 ADDED updateUser prop to sync with parent state
+export default function Profile({ user, isDarkMode, updateUser }) {
   // --- CORE STATES ---
   const [stats, setStats] = useState({ history: [] });
   const [loading, setLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
   const [showTools, setShowTools] = useState(false); 
-  const [showSecurity, setShowSecurity] = useState(false); // 🔥 New Toggle
+  const [showSecurity, setShowSecurity] = useState(false); 
   
   // --- IDENTITY & GOAL STATES ---
   const [gender, setGender] = useState(user.gender || 'neutral');
@@ -161,6 +162,18 @@ export default function Profile({ user, isDarkMode }) {
         .eq('id', user.id);
 
       if (error) throw error;
+      
+      // 🔥 NEW: Push the updated data back to App.jsx so the Sidebar updates instantly
+      if (updateUser) {
+        updateUser({
+          ...user,
+          gender: gender,
+          avatar_seed: currentSeed,
+          education: education,
+          preparing_for: preparingFor
+        });
+      }
+
       alert(" Identity Refined. Data synchronized.");
       setShowTools(false);
     } catch (err) {
@@ -261,7 +274,7 @@ export default function Profile({ user, isDarkMode }) {
               </div>
             )}
 
-            {/* 🔥 NEW: SECURITY PROTOCOLS */}
+            {/* SECURITY PROTOCOLS */}
             {showSecurity && (
               <div className="mt-6 p-6 rounded-3xl border-2 border-dashed border-orange-500/30 bg-orange-500/5 animate-in slide-in-from-top-4 duration-300">
                 <h4 className="text-[10px] font-black uppercase tracking-widest text-orange-500 mb-4 flex items-center gap-2"><Lock size={12}/> Security Override</h4>
