@@ -25,12 +25,47 @@ export default function MockEngine({ user, onFinish, setIsExamLocked, setIsDarkM
   const [warnings, setWarnings] = useState(0); 
   const [timeUntilMidnight, setTimeUntilMidnight] = useState(""); 
 
-  const getCorrectIdx = (q) => {
-    if (!q) return -1;
-    if (q.correct_option !== undefined) return q.correct_option;
-    if (q.correct_answer !== undefined && Array.isArray(q.options)) return q.options.indexOf(q.correct_answer);
-    return -1;
+  // --- 🛡️ THE OMNI-PARSER & DICTIONARY TRANSFORMER ---
+  const forceArray = (val) => {
+    if (Array.isArray(val)) return val;
+    if (val && typeof val === 'object') return Object.values(val);
+    return [];
   };
+
+  const sanitizeQuestions = (qList) => {
+    const arr = forceArray(qList);
+    return arr.map(q => {
+        if (!q || typeof q !== 'object') return null;
+
+        let opts = forceArray(q.options || q.Options || q.choices || q.Choices);
+        if (opts.length === 0) opts = ["Option A", "Option B", "Option C", "Option D"];
+
+        const ansStr = q.correct_answer || q.Correct_Answer || q.answer;
+        let cIdx = q.correct_option ?? q.Correct_Option ?? q.correctIndex;
+
+        if (cIdx === undefined && ansStr !== undefined) {
+            cIdx = opts.findIndex(o => String(o).trim().toLowerCase() === String(ansStr).trim().toLowerCase());
+        }
+
+        return {
+            ...q,
+            question: q.question || q.Question || q.text || "⚠️ Missing Question Data",
+            options: opts,
+            correct_option: cIdx !== undefined && cIdx !== -1 ? cIdx : 0,
+            explanation: q.explanation || q.Explanation || null
+        };
+    }).filter(Boolean); 
+  };
+
+  const parsePayload = (raw) => {
+    let parsed = raw;
+    while (typeof parsed === 'string') {
+        try { parsed = JSON.parse(parsed); } catch (e) { break; }
+    }
+    return parsed;
+  };
+
+  const getCorrectIdx = (q) => q?.correct_option ?? 0;
 
   // --- 1. NEURAL TIMER & PROCTORING ---
   useEffect(() => {
@@ -132,7 +167,7 @@ export default function MockEngine({ user, onFinish, setIsExamLocked, setIsDarkM
     }
   }, [searchQuery, availableMocks]);
 
-  // --- 4. ENGINE STARTUP (UNIVERSAL PARSER) ---
+  // --- 4. ENGINE STARTUP (WITH DICTIONARY DECODER) ---
   const startMock = async (mock) => {
     const isLocked = mock.is_daily && completedMockIds.some(id => String(id) === String(mock.id));
     if (isLocked) { alert("Daily mock already secured."); return; }
@@ -143,37 +178,60 @@ export default function MockEngine({ user, onFinish, setIsExamLocked, setIsDarkM
     setLoading(false);
 
     if (data && data.questions) {
-      let raw = data.questions;
-      
-      if (typeof raw === 'string') {
-        try { raw = JSON.parse(raw); } catch (e) { raw = []; }
+      let rawData = parsePayload(data.questions);
+
+      if (!rawData || (typeof rawData === 'object' && Object.keys(rawData).length === 0) || (Array.isArray(rawData) && rawData.length === 0)) {
+          alert("CRITICAL ERROR: Simulation data is empty.");
+          setSelectedMock(null);
+          return;
       }
 
-      // Format A: Object wrapper containing questions array or categorized subjects
-      if (!Array.isArray(raw)) {
-        if (raw?.questions) {
-          raw = raw.questions;
-        } else {
-          raw = Object.values(raw);
-        }
+      let finalSubjects = [];
+
+      // 🛡️ SCENARIO 1: The data is a dictionary like {"Module 1": [...], "Module 2": [...]}
+      if (typeof rawData === 'object' && !Array.isArray(rawData)) {
+          // If there's an outer wrapper like {"questions": {"Module 1": [...]}}, strip it
+          if (rawData.questions && typeof rawData.questions === 'object' && !Array.isArray(rawData.questions)) {
+              rawData = rawData.questions;
+          }
+
+          finalSubjects = Object.keys(rawData).map(key => {
+              if (key === 'is_strict') return null; // Ignore config flags
+              return {
+                  subject: key,
+                  questions: sanitizeQuestions(rawData[key])
+              };
+          }).filter(sub => sub && sub.questions.length > 0);
+      } 
+      // 🛡️ SCENARIO 2: The data is an array of objects
+      else if (Array.isArray(rawData)) {
+          const isCategorized = rawData.some(item => (item.subject || item.Subject) && (item.questions || item.Questions));
+          
+          if (isCategorized) {
+              finalSubjects = rawData.map(sub => ({
+                  subject: sub.subject || sub.Subject || "Module",
+                  questions: sanitizeQuestions(sub.questions || sub.Questions)
+              })).filter(sub => sub.questions.length > 0);
+          } else {
+              finalSubjects = [{
+                  subject: "General Module",
+                  questions: sanitizeQuestions(rawData)
+              }].filter(sub => sub.questions.length > 0);
+          }
       }
 
-      // Check if format is categorized by subjects: [{ subject: "...", questions: [...] }]
-      const isCategorized = Array.isArray(raw) && raw.length > 0 && raw[0]?.subject && Array.isArray(raw[0]?.questions);
-
-      if (isCategorized) {
-        setSubjects(raw);
-        setQuestions(raw.flatMap(s => s.questions)); 
-        setActiveSubject(raw[0].subject);
-      } else {
-        // Format B: Flat array of questions (e.g., historical questionnaire you just shared)
-        setSubjects([{ subject: "General Module", questions: raw }]);
-        setQuestions(raw);
-        setActiveSubject("General Module");
+      if (finalSubjects.length === 0) {
+          alert("CRITICAL ERROR: Failed to extract valid questions from the simulation.");
+          setSelectedMock(null);
+          return;
       }
-      
+
+      setSubjects(finalSubjects);
+      setQuestions(finalSubjects.flatMap(s => s.questions));
+      setActiveSubject(finalSubjects[0].subject);
       setSelectedMock(data);
       setWarnings(0); setCurrentIdx(0); setSelectedOptions({});
+      
       const limitInMinutes = parseInt(data.time_limit) || 10;
       setTimeLeft(limitInMinutes * 60); 
     }
@@ -181,9 +239,9 @@ export default function MockEngine({ user, onFinish, setIsExamLocked, setIsDarkM
 
   const getAbsIdx = (subName, qIdx) => {
     let offset = 0;
-    for (let s of subjects) {
+    for (let s of forceArray(subjects)) {
       if (s.subject === subName) break;
-      offset += (s.questions || []).length;
+      offset += forceArray(s.questions).length;
     }
     return offset + qIdx;
   };
@@ -194,31 +252,34 @@ export default function MockEngine({ user, onFinish, setIsExamLocked, setIsDarkM
     if (setIsExamLocked) setIsExamLocked(false); 
 
     let scoreCount = 0;
-    const breakdown = questions.map((q, idx) => {
+    const safeQuestions = forceArray(questions);
+    
+    const breakdown = safeQuestions.map((q, idx) => {
       const selectedIdx = selectedOptions[idx];
       const correctIdx = getCorrectIdx(q);
       const isCorrect = selectedIdx === correctIdx;
       
       let qSubject = "General Module";
       let counter = 0;
-      for (let s of subjects) {
-         if (idx < counter + (s.questions || []).length) { qSubject = s.subject; break; }
-         counter += (s.questions || []).length;
+      for (let s of forceArray(subjects)) {
+         const sQuestions = forceArray(s.questions);
+         if (idx < counter + sQuestions.length) { qSubject = s.subject; break; }
+         counter += sQuestions.length;
       }
 
       if (isCorrect && !isPenalty) scoreCount++;
       return {
         subject: qSubject,
         question: q.question,
-        selected_option: selectedIdx !== undefined && Array.isArray(q.options) ? q.options[selectedIdx] : "Not Attempted",
-        correct_answer: correctIdx !== -1 && Array.isArray(q.options) ? q.options[correctIdx] : "Unknown",
+        selected_option: selectedIdx !== undefined && forceArray(q.options) ? forceArray(q.options)[selectedIdx] : "Not Attempted",
+        correct_answer: correctIdx !== -1 && forceArray(q.options) ? forceArray(q.options)[correctIdx] : "Unknown",
         status: isPenalty ? "DISQUALIFIED" : (isCorrect ? "CORRECT" : "WRONG"),
-        options: q.options || [],
+        options: forceArray(q.options),
         explanation: q.explanation 
       };
     });
 
-    const percentage = isPenalty || questions.length === 0 ? 0 : Math.round((scoreCount / questions.length) * 100);
+    const percentage = isPenalty || safeQuestions.length === 0 ? 0 : Math.round((scoreCount / safeQuestions.length) * 100);
 
     try {
       const { error: scoreErr } = await supabase.from('scores').insert([{
@@ -234,7 +295,7 @@ export default function MockEngine({ user, onFinish, setIsExamLocked, setIsDarkM
 
       if (!selectedMock.is_daily) {
         updatePayload.last_regular_result = {
-          title: selectedMock.mock_title, score: scoreCount, total: questions.length,
+          title: selectedMock.mock_title, score: scoreCount, total: safeQuestions.length,
           percentage: percentage, timestamp: new Date().toISOString(), breakdown: breakdown 
         };
       }
@@ -311,8 +372,9 @@ export default function MockEngine({ user, onFinish, setIsExamLocked, setIsDarkM
 
   // --- VIEW: RESULTS & REVIEW ---
   if (isFinished) {
-    const finalScore = questions.length === 0 ? 0 : Math.round((questions.filter((q, i) => selectedOptions[i] === getCorrectIdx(q)).length / questions.length) * 100);
-    const correctCount = questions.filter((q, i) => selectedOptions[i] === getCorrectIdx(q)).length;
+    const safeQuestions = forceArray(questions);
+    const finalScore = safeQuestions.length === 0 ? 0 : Math.round((safeQuestions.filter((q, i) => selectedOptions[i] === getCorrectIdx(q)).length / safeQuestions.length) * 100);
+    const correctCount = safeQuestions.filter((q, i) => selectedOptions[i] === getCorrectIdx(q)).length;
     
     if (showReview) {
       return (
@@ -322,13 +384,13 @@ export default function MockEngine({ user, onFinish, setIsExamLocked, setIsDarkM
             <div className={`px-4 py-2 rounded-xl font-black uppercase text-[10px] ${isDarkMode ? 'bg-slate-800 text-slate-400' : 'bg-gray-100 text-gray-500'}`}>Module Review Mode</div>
           </div>
           
-          {subjects.map((sub, sIdx) => (
+          {forceArray(subjects).map((sub, sIdx) => (
             <div key={sIdx} className="space-y-6">
               <h3 className="text-xl font-black uppercase tracking-tight flex items-center gap-3 text-blue-500 border-b-2 border-blue-500/20 pb-4">
                  <Layout size={24} /> Module: {sub.subject}
               </h3>
 
-              {(sub.questions || []).map((q, qIdx) => {
+              {forceArray(sub.questions).map((q, qIdx) => {
                 const absIdx = getAbsIdx(sub.subject, qIdx);
                 const correctIdx = getCorrectIdx(q);
                 const userSelectedCorrectly = selectedOptions[absIdx] === correctIdx;
@@ -349,7 +411,7 @@ export default function MockEngine({ user, onFinish, setIsExamLocked, setIsDarkM
                     )}
                     
                     <div className="grid grid-cols-1 gap-3">
-                      {(q.options || []).map((opt, i) => {
+                      {forceArray(q.options).map((opt, i) => {
                         const isCorrect = i === correctIdx;
                         const isSelected = i === selectedOptions[absIdx];
                         const optExplanation = isCorrect ? q.explanation?.why_correct : q.explanation?.why_wrong?.[opt];
@@ -405,10 +467,11 @@ export default function MockEngine({ user, onFinish, setIsExamLocked, setIsDarkM
         <div className="mb-10">
           <h4 className="text-[10px] font-black uppercase tracking-widest text-gray-400 mb-4 flex items-center gap-2 border-b border-gray-200 dark:border-gray-700 pb-2"><BarChart2 size={14}/> Module Diagnostics</h4>
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-            {subjects.map((sub, i) => {
-              const totalSub = (sub.questions || []).length;
+            {forceArray(subjects).map((sub, i) => {
+              const safeSubQ = forceArray(sub.questions);
+              const totalSub = safeSubQ.length;
               let correctSub = 0;
-              (sub.questions || []).forEach((q, qIdx) => { if(selectedOptions[getAbsIdx(sub.subject, qIdx)] === getCorrectIdx(q)) correctSub++; });
+              safeSubQ.forEach((q, qIdx) => { if(selectedOptions[getAbsIdx(sub.subject, qIdx)] === getCorrectIdx(q)) correctSub++; });
               
               return (
                 <div key={i} className={`p-4 rounded-2xl border flex flex-col items-center justify-center text-center ${isDarkMode ? 'bg-slate-900/50 border-slate-700' : 'bg-gray-50 border-gray-100'}`}>
@@ -429,23 +492,39 @@ export default function MockEngine({ user, onFinish, setIsExamLocked, setIsDarkM
   }
 
   // --- VIEW: MULTI-MODULE CBT INTERFACE ---
-  const activeSubData = subjects.find(s => s.subject === activeSubject);
-  const activeSubIndex = subjects.findIndex(s => s.subject === activeSubject);
+  const safeSubjectsArray = forceArray(subjects);
+  const activeSubData = safeSubjectsArray.find(s => s.subject === activeSubject);
+  const activeSubIndex = safeSubjectsArray.findIndex(s => s.subject === activeSubject);
   const isFinalMinute = timeLeft <= 60; 
-  const activeSubQuestions = activeSubData?.questions || [];
+  const activeSubQuestions = forceArray(activeSubData?.questions);
   const isLastQuestionInSub = currentIdx === (activeSubQuestions.length - 1);
-  const hasNextModule = activeSubIndex < subjects.length - 1;
+  const hasNextModule = activeSubIndex < safeSubjectsArray.length - 1;
 
-  if (!activeSubData || activeSubQuestions.length === 0) return <div className="p-20 text-center animate-pulse">Loading Modules...</div>;
+  // 🛡️ CORRUPTION FALLBACK (Prevents infinite loading)
+  if (!activeSubData || activeSubQuestions.length === 0) {
+      return (
+          <div className="p-20 flex flex-col items-center justify-center text-center font-black animate-in zoom-in duration-500">
+              <ShieldAlert size={64} className="text-red-500 mb-6" />
+              <h2 className="text-3xl text-red-500 uppercase tracking-tighter mb-2">Grid Corruption Detected</h2>
+              <p className="text-gray-400 uppercase text-[10px] tracking-widest max-w-md">
+                  The simulation data structure is invalid or fundamentally missing. This usually happens when the JSON uploaded to the database is malformed.
+              </p>
+              <button onClick={handleReturn} className="mt-8 px-8 py-4 bg-red-600 text-white rounded-2xl shadow-xl hover:bg-red-700 transition-all">
+                  Abort Simulation
+              </button>
+          </div>
+      );
+  }
 
   const currentQuestion = activeSubQuestions[currentIdx] || {};
+  const currentOptions = forceArray(currentQuestion.options);
 
   return (
     <div className="max-w-6xl mx-auto space-y-6">
       <div className={`p-4 rounded-[2rem] shadow-xl flex flex-wrap justify-between items-center border transition-colors ${isDarkMode ? 'bg-slate-800 border-slate-700' : 'bg-white border-gray-100'}`}>
         <div className="flex flex-wrap gap-2">
-          {subjects.map(s => {
-            const safeQuestions = s.questions || [];
+          {safeSubjectsArray.map(s => {
+            const safeQuestions = forceArray(s.questions);
             const isSubComplete = safeQuestions.length > 0 && safeQuestions.every((_, i) => selectedOptions[getAbsIdx(s.subject, i)] !== undefined);
 
             return (
@@ -475,7 +554,7 @@ export default function MockEngine({ user, onFinish, setIsExamLocked, setIsDarkM
           <h3 className={`text-2xl font-bold mb-10 leading-tight ${isDarkMode ? 'text-white' : 'text-gray-900'}`}>{currentQuestion.question}</h3>
           
           <div className="grid grid-cols-1 gap-4">
-            {(currentQuestion.options || []).map((opt, i) => {
+            {currentOptions.map((opt, i) => {
               const absIdx = getAbsIdx(activeSubject, currentIdx);
               const isSelected = selectedOptions[absIdx] === i;
               return (
@@ -492,7 +571,7 @@ export default function MockEngine({ user, onFinish, setIsExamLocked, setIsDarkM
             <button 
               onClick={() => {
                 if (isLastQuestionInSub) {
-                  if (hasNextModule) { setActiveSubject(subjects[activeSubIndex + 1].subject); setCurrentIdx(0); }
+                  if (hasNextModule) { setActiveSubject(safeSubjectsArray[activeSubIndex + 1].subject); setCurrentIdx(0); }
                 } else {
                   setCurrentIdx(prev => prev + 1);
                 }
