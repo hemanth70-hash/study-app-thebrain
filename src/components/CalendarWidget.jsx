@@ -10,8 +10,6 @@ export default function CalendarWidget({ isDarkMode, user }) {
   const [currentDate, setCurrentDate] = useState(new Date());
   const [activeView, setActiveView] = useState('calendar'); 
   const [events, setEvents] = useState([]);
-  
-  // Keep track of user ID reliably
   const [currentUserId, setCurrentUserId] = useState(user?.id || null);
 
   // --- STATES ---
@@ -23,25 +21,21 @@ export default function CalendarWidget({ isDarkMode, user }) {
   const [editorLabel, setEditorLabel] = useState("");
   const [editorType, setEditorType] = useState("target");
 
-  // --- INSTANT LOCAL SESSION RECOVERY ---
+  // --- GET USER & FETCH EVENTS ---
   useEffect(() => {
-    if (user?.id) {
-      setCurrentUserId(user.id);
-      return;
-    }
-
-    // Grab from Supabase local storage client synchronously / instantly
-    const session = supabase.auth.session ? supabase.auth.session() : null;
-    if (session?.user?.id) {
-      setCurrentUserId(session.user.id);
-    } else {
-      supabase.auth.getUser().then(({ data }) => {
-        if (data?.user) setCurrentUserId(data.user.id);
-      });
-    }
+    const initUser = async () => {
+      if (user?.id) {
+        setCurrentUserId(user.id);
+        return;
+      }
+      const { data } = await supabase.auth.getSession();
+      if (data?.session?.user?.id) {
+        setCurrentUserId(data.session.user.id);
+      }
+    };
+    initUser();
   }, [user]);
 
-  // --- FETCH EVENTS ---
   useEffect(() => {
     if (!currentUserId) return;
 
@@ -100,14 +94,22 @@ export default function CalendarWidget({ isDarkMode, user }) {
 
   const saveEvent = async () => {
     if (!editorLabel) return;
-    
-    if (!currentUserId) {
-      console.error("User ID not loaded yet.");
+
+    // Direct fetch on click to ensure we never miss the user ID
+    let userId = currentUserId;
+    if (!userId) {
+      const { data } = await supabase.auth.getSession();
+      userId = data?.session?.user?.id;
+      if (userId) setCurrentUserId(userId);
+    }
+
+    if (!userId) {
+      alert("Error: No active user session found. Please log in again.");
       return;
     }
 
     const payload = {
-      user_id: currentUserId,
+      user_id: userId,
       day: selectedDate.day,
       month: selectedDate.month,
       year: selectedDate.year,
