@@ -1,19 +1,18 @@
 import React, { useState, useEffect } from 'react';
+import { supabase } from '../supabaseClient';
 import { 
   Calendar as CalendarIcon, ChevronLeft, ChevronRight, 
   Target, Coffee, X, Trash2, Save, 
-  Edit, BellRing // Using standard Edit icon
+  Edit, BellRing 
 } from 'lucide-react';
 
-export default function CalendarWidget({ isDarkMode }) {
+export default function CalendarWidget({ isDarkMode, user }) {
   const [currentDate, setCurrentDate] = useState(new Date());
   const [activeView, setActiveView] = useState('calendar'); 
+  const [events, setEvents] = useState([]);
   
-  // --- USER GOALS (Targets & Rest Days) ---
-  const [events, setEvents] = useState([
-    { id: 1, day: 15, month: new Date().getMonth(), year: new Date().getFullYear(), type: 'target', label: 'Physics Mock' },
-    { id: 2, day: 25, month: new Date().getMonth(), year: new Date().getFullYear(), type: 'holiday', label: 'Rest Day' }
-  ]);
+  // Keep track of user ID reliably
+  const [currentUserId, setCurrentUserId] = useState(user?.id || null);
 
   // --- STATES ---
   const [selectedDate, setSelectedDate] = useState(null);
@@ -24,12 +23,48 @@ export default function CalendarWidget({ isDarkMode }) {
   const [editorLabel, setEditorLabel] = useState("");
   const [editorType, setEditorType] = useState("target");
 
+  // --- INSTANT LOCAL SESSION RECOVERY ---
+  useEffect(() => {
+    if (user?.id) {
+      setCurrentUserId(user.id);
+      return;
+    }
+
+    // Grab from Supabase local storage client synchronously / instantly
+    const session = supabase.auth.session ? supabase.auth.session() : null;
+    if (session?.user?.id) {
+      setCurrentUserId(session.user.id);
+    } else {
+      supabase.auth.getUser().then(({ data }) => {
+        if (data?.user) setCurrentUserId(data.user.id);
+      });
+    }
+  }, [user]);
+
+  // --- FETCH EVENTS ---
+  useEffect(() => {
+    if (!currentUserId) return;
+
+    const fetchEvents = async () => {
+      const { data, error } = await supabase
+        .from('user_events')
+        .select('*')
+        .eq('user_id', currentUserId);
+
+      if (!error && data) {
+        setEvents(data);
+      }
+    };
+
+    fetchEvents();
+  }, [currentUserId]);
+
   // --- INIT: NOTIFICATIONS ---
   useEffect(() => {
+    if (events.length === 0) return;
     const today = new Date();
     const dayNum = today.getDate();
     
-    // Check if Today has an event
     const goal = events.find(e => 
       e.day === dayNum && e.month === today.getMonth() && e.year === today.getFullYear()
     );
@@ -39,7 +74,7 @@ export default function CalendarWidget({ isDarkMode }) {
       const timer = setTimeout(() => setNotification(null), 6000);
       return () => clearTimeout(timer);
     }
-  }, []);
+  }, [events]);
 
   // --- CALENDAR HELPERS ---
   const daysInMonth = new Date(currentDate.getFullYear(), currentDate.getMonth() + 1, 0).getDate();
@@ -50,8 +85,8 @@ export default function CalendarWidget({ isDarkMode }) {
 
   // --- ACTIONS ---
   const openDayView = (day) => {
-    const existing = events.find(e => e.day === day && e.month === currentDate.getMonth());
-    setSelectedDate({ day, month: currentDate.getMonth(), year: currentDate.getFullYear() });
+    const existing = events.find(e => e.day === day && e.month === currentDate.getMonth() && e.year === currentDate.getFullYear());
+    setSelectedDate({ day, month: currentDate.getMonth(), year: currentDate.getFullYear(), db_id: existing?.id });
     
     if (existing) {
       setEditorLabel(existing.label);
@@ -63,22 +98,66 @@ export default function CalendarWidget({ isDarkMode }) {
     setIsEditing(false);
   };
 
-  const saveEvent = () => {
+  const saveEvent = async () => {
     if (!editorLabel) return;
-    const cleaned = events.filter(e => !(e.day === selectedDate.day && e.month === selectedDate.month));
-    cleaned.push({
-      id: Date.now(),
-      ...selectedDate,
+    
+    if (!currentUserId) {
+      console.error("User ID not loaded yet.");
+      return;
+    }
+
+    const payload = {
+      user_id: currentUserId,
+      day: selectedDate.day,
+      month: selectedDate.month,
+      year: selectedDate.year,
       label: editorLabel,
       type: editorType
-    });
-    setEvents(cleaned);
+    };
+
+    if (selectedDate.db_id) {
+      const { data, error } = await supabase
+        .from('user_events')
+        .update(payload)
+        .eq('id', selectedDate.db_id)
+        .select();
+
+      if (!error && data) {
+        setEvents(prev => prev.map(e => e.id === selectedDate.db_id ? data[0] : e));
+      } else if (error) {
+        console.error("Update error:", error.message);
+      }
+    } else {
+      const { data, error } = await supabase
+        .from('user_events')
+        .insert([payload])
+        .select();
+
+      if (!error && data) {
+        setEvents(prev => [...prev, data[0]]);
+      } else if (error) {
+        console.error("Insert error:", error.message);
+      }
+    }
+
     setIsEditing(false);
     setSelectedDate(null);
   };
 
-  const deleteEvent = () => {
-    setEvents(events.filter(e => !(e.day === selectedDate.day && e.month === selectedDate.month)));
+  const deleteEvent = async () => {
+    if (!selectedDate.db_id) return;
+
+    const { error } = await supabase
+      .from('user_events')
+      .delete()
+      .eq('id', selectedDate.db_id);
+
+    if (!error) {
+      setEvents(prev => prev.filter(e => e.id !== selectedDate.db_id));
+    } else {
+      console.error("Delete error:", error.message);
+    }
+
     setIsEditing(false);
     setSelectedDate(null);
   };
@@ -95,7 +174,7 @@ export default function CalendarWidget({ isDarkMode }) {
 
   // --- VISUAL ENGINE ---
   const renderVisuals = (day) => {
-    const evt = events.find(e => e.day === day && e.month === currentDate.getMonth());
+    const evt = events.find(e => e.day === day && e.month === currentDate.getMonth() && e.year === currentDate.getFullYear());
     
     if (!evt) return null;
 
@@ -148,15 +227,14 @@ export default function CalendarWidget({ isDarkMode }) {
         {/* CALENDAR VIEW */}
         {activeView === 'calendar' && (
           <div className="animate-in fade-in zoom-in-95 duration-300">
-            {/* 🔥 FIX: Used index (i) as key to fix duplicate key warning */}
             <div className={`grid grid-cols-7 mb-1 text-center text-[10px] font-black ${theme.subText}`}>
               {['S','M','T','W','T','F','S'].map((d, i) => <span key={i}>{d}</span>)}
             </div>
             <div className="grid grid-cols-7 gap-1">
               {padding.map((_, i) => <div key={`pad-${i}`} />)}
               {days.map(day => {
-                const isToday = day === new Date().getDate() && currentDate.getMonth() === new Date().getMonth();
-                const evt = events.find(e => e.day === day && e.month === currentDate.getMonth());
+                const isToday = day === new Date().getDate() && currentDate.getMonth() === new Date().getMonth() && currentDate.getFullYear() === new Date().getFullYear();
+                const evt = events.find(e => e.day === day && e.month === currentDate.getMonth() && e.year === currentDate.getFullYear());
                 
                 return (
                   <button 
@@ -167,7 +245,7 @@ export default function CalendarWidget({ isDarkMode }) {
                         ? 'bg-indigo-600 border-indigo-500 text-white shadow-lg' 
                         : evt 
                           ? `${isDarkMode ? 'bg-slate-900 border-slate-700' : 'bg-slate-50 border-slate-200'}` 
-                          : `${theme.hover} ${theme.border}`
+                          : `${theme.hover}${theme.border}`
                     }`}
                   >
                     <span className={`text-[12px] font-bold ${isToday ? 'text-white' : theme.text}`}>{day}</span>
@@ -191,7 +269,10 @@ export default function CalendarWidget({ isDarkMode }) {
                     <p className={`text-[10px] font-bold ${theme.subText}`}>{monthNames[e.month]} {e.day}</p>
                   </div>
                 </div>
-                <button onClick={() => openDayView(e.day)} className="p-2 bg-indigo-100 text-indigo-600 rounded-xl dark:bg-indigo-900/30 dark:text-indigo-400">
+                <button onClick={() => {
+                  setCurrentDate(new Date(e.year, e.month, e.day));
+                  openDayView(e.day);
+                }} className="p-2 bg-indigo-100 text-indigo-600 rounded-xl dark:bg-indigo-900/30 dark:text-indigo-400">
                   <Edit size={16} />
                 </button>
               </div>
@@ -242,7 +323,7 @@ export default function CalendarWidget({ isDarkMode }) {
                   </button>
                 </div>
                 <div className="flex gap-2 pt-2">
-                  {events.find(e => e.day === selectedDate.day) && (
+                  {selectedDate.db_id && (
                     <button onClick={deleteEvent} className="p-3 bg-red-100 text-red-600 rounded-xl hover:bg-red-200 dark:bg-red-900/30 dark:text-red-400"><Trash2 size={20} /></button>
                   )}
                   <button onClick={saveEvent} className="flex-1 bg-indigo-600 text-white rounded-xl font-black uppercase text-xs hover:bg-indigo-700 py-3 flex items-center justify-center gap-2">
@@ -261,7 +342,7 @@ export default function CalendarWidget({ isDarkMode }) {
                     <p className={`text-xs font-bold uppercase tracking-widest ${theme.subText}`}>{editorType === 'target' ? 'Target Goal' : 'Rest Day'}</p>
                   </div>
                 ) : (
-                  <div className="space-y-2 opacity-50">
+                  <div className="space-y-0.5 opacity-50">
                     <p className="text-sm font-bold">No events scheduled.</p>
                     <p className="text-[10px] uppercase">Click pen to add.</p>
                   </div>
