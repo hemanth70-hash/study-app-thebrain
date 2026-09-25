@@ -108,7 +108,7 @@ function DashboardLayout({ user, isDarkMode, setIsDarkMode, activeTab, setActive
             <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-700">
               <WelcomeHeader isDarkMode={isDarkMode} />
               <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
-                <div className="h-full lg:col-span-1"><CalendarWidget isDarkMode={isDarkMode} /></div>
+                <div className="h-full lg:col-span-1"><CalendarWidget isDarkMode={isDarkMode} user={user} /></div>
                 <div className="h-full lg:col-span-2"><StudyChat user={user} isDarkMode={isDarkMode} /></div>
                 <div className="h-full lg:col-span-1"><GoalTracker user={user} isDarkMode={isDarkMode} /></div>
               </div>
