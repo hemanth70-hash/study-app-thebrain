@@ -33,23 +33,53 @@ export default function MockEngine({ user, onFinish, setIsExamLocked, setIsDarkM
   };
 
   const sanitizeQuestions = (qList) => {
-    const arr = forceArray(qList);
+    let arr = [];
+    if (Array.isArray(qList)) {
+        arr = qList;
+    } else if (qList && typeof qList === 'object') {
+        if (qList.question || qList.Question || qList.text || qList.options || qList.Options) {
+            arr = [qList];
+        } else {
+            arr = Object.values(qList);
+        }
+    }
+
     return arr.map(q => {
         if (!q || typeof q !== 'object') return null;
 
-        let opts = forceArray(q.options || q.Options || q.choices || q.Choices);
-        if (opts.length === 0) opts = ["Option A", "Option B", "Option C", "Option D"];
+        let qText = q.question || q.Question || q.text || q.prompt || q.title || q.QuestionText || q.question_text;
 
-        const ansStr = q.correct_answer || q.Correct_Answer || q.answer;
+        let rawOpts = q.options || q.Options || q.choices || q.Choices || q.answers;
+        let opts = [];
+        if (Array.isArray(rawOpts)) opts = rawOpts;
+        else if (rawOpts && typeof rawOpts === 'object') opts = Object.values(rawOpts);
+        else if (typeof rawOpts === 'string') {
+            try { opts = JSON.parse(rawOpts); } catch(e) { opts = [rawOpts]; }
+        }
+
+        if (!Array.isArray(opts) || opts.length === 0) {
+            let dynamicOpts = [];
+            ['a','b','c','d','A','B','C','D'].forEach(k => {
+                if (q[k]) dynamicOpts.push(q[k]);
+            });
+            if (dynamicOpts.length > 0) opts = [...new Set(dynamicOpts)];
+            else opts = ["Option A", "Option B", "Option C", "Option D"];
+        }
+
+        const ansStr = q.correct_answer || q.Correct_Answer || q.answer || q.Answer;
         let cIdx = q.correct_option ?? q.Correct_Option ?? q.correctIndex;
 
         if (cIdx === undefined && ansStr !== undefined) {
             cIdx = opts.findIndex(o => String(o).trim().toLowerCase() === String(ansStr).trim().toLowerCase());
+            if (cIdx === -1 && typeof ansStr === 'string' && ansStr.length === 1) {
+                const charCode = ansStr.toUpperCase().charCodeAt(0) - 65;
+                if (charCode >= 0 && charCode < opts.length) cIdx = charCode;
+            }
         }
 
         return {
             ...q,
-            question: q.question || q.Question || q.text || "⚠️ Missing Question Data",
+            question: qText || "⚠️ Missing Question Data",
             options: opts,
             correct_option: cIdx !== undefined && cIdx !== -1 ? cIdx : 0,
             explanation: q.explanation || q.Explanation || null
@@ -180,31 +210,23 @@ export default function MockEngine({ user, onFinish, setIsExamLocked, setIsDarkM
     if (data && data.questions) {
       let rawData = parsePayload(data.questions);
 
-      if (!rawData || (typeof rawData === 'object' && Object.keys(rawData).length === 0) || (Array.isArray(rawData) && rawData.length === 0)) {
+      if (!rawData) {
           alert("CRITICAL ERROR: Simulation data is empty.");
           setSelectedMock(null);
           return;
       }
 
+      // 🔥 FIX: The Ultimate Unwrapper
+      // Detects if the payload is wrapped inside a "questions" key at the root level and unwraps it instantly.
+      if (typeof rawData === 'object' && !Array.isArray(rawData) && rawData.questions) {
+          rawData = rawData.questions;
+      }
+
       let finalSubjects = [];
 
-      // 🛡️ SCENARIO 1: The data is a dictionary like {"Module 1": [...], "Module 2": [...]}
-      if (typeof rawData === 'object' && !Array.isArray(rawData)) {
-          // If there's an outer wrapper like {"questions": {"Module 1": [...]}}, strip it
-          if (rawData.questions && typeof rawData.questions === 'object' && !Array.isArray(rawData.questions)) {
-              rawData = rawData.questions;
-          }
-
-          finalSubjects = Object.keys(rawData).map(key => {
-              if (key === 'is_strict') return null; // Ignore config flags
-              return {
-                  subject: key,
-                  questions: sanitizeQuestions(rawData[key])
-              };
-          }).filter(sub => sub && sub.questions.length > 0);
-      } 
-      // 🛡️ SCENARIO 2: The data is an array of objects
-      else if (Array.isArray(rawData)) {
+      // Detect the structure format
+      if (Array.isArray(rawData)) {
+          // Format A: Array of Modules (e.g., [{"subject": "Math", "questions": [...]}])
           const isCategorized = rawData.some(item => (item.subject || item.Subject) && (item.questions || item.Questions));
           
           if (isCategorized) {
@@ -213,10 +235,25 @@ export default function MockEngine({ user, onFinish, setIsExamLocked, setIsDarkM
                   questions: sanitizeQuestions(sub.questions || sub.Questions)
               })).filter(sub => sub.questions.length > 0);
           } else {
+              // Format B: Flat array of questions
               finalSubjects = [{
                   subject: "General Module",
                   questions: sanitizeQuestions(rawData)
               }].filter(sub => sub.questions.length > 0);
+          }
+      } else if (typeof rawData === 'object') {
+          if (rawData.question || rawData.Question || rawData.text) {
+             // Format C: Single question object
+             finalSubjects = [{ subject: "General Module", questions: sanitizeQuestions([rawData]) }];
+          } else {
+             // Format D: Dictionary format (e.g., {"Module 1": [...], "Module 2": [...]})
+             finalSubjects = Object.keys(rawData).map(key => {
+                 if (key === 'is_strict' || key === 'mock_title' || key === 'time_limit') return null;
+                 return {
+                     subject: key,
+                     questions: sanitizeQuestions(rawData[key])
+                 };
+             }).filter(sub => sub && sub.questions.length > 0);
           }
       }
 
@@ -374,7 +411,6 @@ export default function MockEngine({ user, onFinish, setIsExamLocked, setIsDarkM
   if (isFinished) {
     const safeQuestions = forceArray(questions);
     const finalScore = safeQuestions.length === 0 ? 0 : Math.round((safeQuestions.filter((q, i) => selectedOptions[i] === getCorrectIdx(q)).length / safeQuestions.length) * 100);
-    const correctCount = safeQuestions.filter((q, i) => selectedOptions[i] === getCorrectIdx(q)).length;
     
     if (showReview) {
       return (
@@ -500,7 +536,7 @@ export default function MockEngine({ user, onFinish, setIsExamLocked, setIsDarkM
   const isLastQuestionInSub = currentIdx === (activeSubQuestions.length - 1);
   const hasNextModule = activeSubIndex < safeSubjectsArray.length - 1;
 
-  // 🛡️ CORRUPTION FALLBACK (Prevents infinite loading)
+  // 🛡️ CORRUPTION FALLBACK
   if (!activeSubData || activeSubQuestions.length === 0) {
       return (
           <div className="p-20 flex flex-col items-center justify-center text-center font-black animate-in zoom-in duration-500">
