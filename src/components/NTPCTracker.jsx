@@ -5,7 +5,7 @@ import autoTable from 'jspdf-autotable';
 import { 
   Calendar, BookOpen, Edit3, Calculator, BarChart2, 
   FileText, CheckCircle, AlertTriangle, 
-  Download, Plus, Clock, Target, Zap, Loader2
+  Download, Plus, Clock, Target, Zap, Loader2, Users
 } from 'lucide-react';
 
 const SYLLABUS_TOPICS = {
@@ -25,6 +25,9 @@ export default function NTPCTracker({ user, isDarkMode }) {
   // --- STATE MANAGEMENT ---
   const [activeTab, setActiveTab] = useState('daily');
   const [isLoading, setIsLoading] = useState(true);
+  const [isAdmin, setIsAdmin] = useState(false); // Security state for Admin Override
+  
+  // Normal User State
   const [data, setData] = useState({
     sessions: [], 
     mockTests: [], 
@@ -33,13 +36,73 @@ export default function NTPCTracker({ user, isDarkMode }) {
     syllabus: { math: {}, reasoning: {}, ga: {} }
   });
 
+  // Admin Override State
+  const [adminMode, setAdminMode] = useState(false);
+  const [allStudentsData, setAllStudentsData] = useState({ sessions: [], mocks: [], profiles: [] });
+  const [isAdminLoading, setIsAdminLoading] = useState(false);
+
   // Forms State
   const [dailyForm, setDailyForm] = useState({ subject: 'Mathematics', topic: '', duration: '', questions: '', correct: '', conceptClear: false, needRevision: false, formulaNoted: false, notes: '' });
   const [mockForm, setMockForm] = useState({ name: '', total: 100, attempted: '', correct: '', time: '', date: new Date().toISOString().split('T')[0], mathScore: '', reasoningScore: '', gaScore: '' });
 
-  // --- 🛡️ DATABASE FETCHING (BULLETPROOF) ---
+  // --- 🛡️ ADMIN OVERRIDE FETCH ---
+  const fetchAllStudentsData = async () => {
+    setIsAdminLoading(true);
+    try {
+      const [allSessions, allMocks, allProfiles] = await Promise.all([
+        supabase.from('study_sessions').select('*').order('session_date', { ascending: false }),
+        supabase.from('manual_mocks').select('*').order('mock_date', { ascending: false }),
+        supabase.from('profiles').select('id, username') // Adjusted to username
+      ]);
+
+      setAllStudentsData({
+        sessions: allSessions.data || [],
+        mocks: allMocks.data || [],
+        profiles: allProfiles.data || []
+      });
+      setAdminMode(true);
+    } catch (err) {
+      alert("Admin Override Failed: " + err.message);
+    } finally {
+      setIsAdminLoading(false);
+    }
+  };
+
+  const downloadAdminReport = () => {
+    const doc = new jsPDF();
+    doc.setFontSize(20);
+    doc.setTextColor(220, 38, 38);
+    doc.text('ADMIN OVERRIDE: Global Grid Report', 20, 20);
+    doc.setFontSize(10);
+    doc.setTextColor(0, 0, 0);
+    doc.text(`Generated: ${new Date().toLocaleDateString()}`, 20, 30);
+    
+    doc.setFontSize(14);
+    doc.text('All Recent Grid Activity (All Users)', 20, 45);
+    
+    const tableData = allStudentsData.sessions.slice(0, 50).map(s => {
+      const uProfile = allStudentsData.profiles.find(p => p.id === s.user_id);
+      return [
+        new Date(s.session_date).toLocaleDateString(),
+        uProfile ? uProfile.username : 'Unknown ID', // Adjusted to username
+        s.subject,
+        s.topic,
+        `${s.duration} min`,
+        `${s.correct}/${s.questions}`
+      ]
+    });
+
+    autoTable(doc, {
+      startY: 50,
+      head: [['Date', 'User', 'Subject', 'Topic', 'Time', 'Score']],
+      body: tableData,
+    });
+
+    doc.save(`Admin_Global_Report_${new Date().toISOString().split('T')[0]}.pdf`);
+  };
+
+  // --- 🛡️ NORMAL DATABASE FETCHING ---
   const fetchTrackerData = useCallback(async () => {
-    // 🔥 FIX 1: If no user, turn off loader and stop. 
     if (!user?.id) {
         setIsLoading(false);
         return;
@@ -50,15 +113,18 @@ export default function NTPCTracker({ user, isDarkMode }) {
       const [sessionsRes, mocksRes, profileRes] = await Promise.all([
         supabase.from('study_sessions').select('*').eq('user_id', user.id).order('session_date', { ascending: false }),
         supabase.from('manual_mocks').select('*').eq('user_id', user.id).order('mock_date', { ascending: false }),
-        supabase.from('profiles').select('ntpc_syllabus, ntpc_formulas').eq('id', user.id).single()
+        supabase.from('profiles').select('ntpc_syllabus, ntpc_formulas, is_admin').eq('id', user.id).single() // Fetching is_admin status
       ]);
 
-      // Fallback arrays to prevent .map() crashes
       const fetchedSessions = sessionsRes.data || [];
       const fetchedMocks = mocksRes.data || [];
       const profile = profileRes.data || {};
 
-      // 🔥 FIX 2: Aggressive Null Checks for JSONB
+      // Set admin status based on database
+      if (profile.is_admin === true) {
+        setIsAdmin(true);
+      }
+
       const safeFormulas = (profile.ntpc_formulas && Array.isArray(profile.ntpc_formulas) && profile.ntpc_formulas.length > 0) 
         ? profile.ntpc_formulas 
         : INITIAL_FORMULAS;
@@ -72,7 +138,6 @@ export default function NTPCTracker({ user, isDarkMode }) {
         mockTests: fetchedMocks,
         formulas: safeFormulas,
         totalStudyTime: fetchedSessions.reduce((acc, curr) => acc + (curr.duration || 0), 0),
-        // Ensure nested objects exist to prevent syllabus tab crashes
         syllabus: {
             math: safeSyllabus.math || {},
             reasoning: safeSyllabus.reasoning || {},
@@ -82,7 +147,7 @@ export default function NTPCTracker({ user, isDarkMode }) {
     } catch (err) {
       console.error("Failed to load NTPC Tracker data:", err);
     } finally {
-      setIsLoading(false); // ALWAYS turn off loader
+      setIsLoading(false); 
     }
   }, [user?.id]);
 
@@ -255,7 +320,6 @@ export default function NTPCTracker({ user, isDarkMode }) {
     );
   }
 
-  // If component loaded but no user exists
   if (!user?.id) {
      return (
        <div className={`min-h-[80vh] flex flex-col items-center justify-center ${theme.bg}`}>
@@ -265,15 +329,98 @@ export default function NTPCTracker({ user, isDarkMode }) {
      );
   }
 
+  // ================= ADMIN VIEW CONDITIONAL RENDER =================
+  if (adminMode && isAdmin) {
+    return (
+      <div className={`min-h-screen p-4 md:p-8 font-sans transition-colors duration-500 ${theme.bg}`}>
+        <div className={`p-6 md:p-8 rounded-3xl shadow-xl border-4 border-red-500 mb-8 ${theme.card}`}>
+          <div className="flex justify-between items-center w-full">
+            <div>
+              <h1 className="text-3xl md:text-4xl font-black uppercase tracking-tight flex items-center gap-3 text-red-500 mb-2">
+                <AlertTriangle /> ADMIN OVERRIDE ACTIVE
+              </h1>
+              <p className="text-sm font-bold opacity-60 uppercase tracking-widest text-red-400">Viewing Global Grid Data for All Students</p>
+            </div>
+            <button onClick={() => setAdminMode(false)} className="bg-red-600 text-white px-6 py-3 rounded-xl font-black uppercase text-xs tracking-widest shadow-lg hover:scale-105 transition-all">
+              Exit Admin View
+            </button>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
+          <div className={`p-8 rounded-3xl shadow-xl border ${theme.card}`}>
+            <h3 className="font-black uppercase tracking-widest text-xs mb-6 text-red-500 flex items-center gap-2"><Target size={16}/> Global Stats</h3>
+            <div className="text-4xl font-black mb-1 text-red-400">{allStudentsData.sessions.length}</div>
+            <p className="text-[10px] uppercase font-bold opacity-60">Total Sessions Logged Grid-Wide</p>
+          </div>
+          <div className={`p-8 rounded-3xl shadow-xl border flex flex-col items-center justify-center ${theme.card}`}>
+            <button onClick={downloadAdminReport} className="flex items-center gap-3 bg-gradient-to-r from-red-600 to-orange-600 text-white px-8 py-4 rounded-2xl font-black uppercase text-sm tracking-widest transition-all shadow-xl hover:scale-105 active:scale-95">
+              <Download size={18} /> Download Global CSV
+            </button>
+          </div>
+        </div>
+
+        <div className={`p-8 rounded-3xl shadow-xl border overflow-x-auto ${theme.card}`}>
+          <h3 className="font-black uppercase tracking-widest text-xs mb-6 text-red-500">Live Grid Feed (All Users)</h3>
+          <table className="w-full text-left">
+            <thead>
+              <tr className="text-[10px] uppercase tracking-widest opacity-50 border-b dark:border-slate-700">
+                <th className="pb-4 pr-4 text-red-400">Student Name</th>
+                <th className="pb-4 pr-4">Date</th>
+                <th className="pb-4 pr-4">Subject</th>
+                <th className="pb-4 pr-4">Topic</th>
+                <th className="pb-4 pr-4">Time</th>
+                <th className="pb-4">Score</th>
+              </tr>
+            </thead>
+            <tbody className="text-sm font-bold">
+              {allStudentsData.sessions.map((s, i) => {
+                const uProfile = allStudentsData.profiles.find(p => p.id === s.user_id);
+                const displayUser = uProfile ? uProfile.username : s.user_id.substring(0,8); // Adjusted to username
+                return (
+                  <tr key={s.id || i} className="border-b dark:border-slate-800 last:border-0 hover:bg-slate-800/50 transition-colors">
+                    <td className="py-4 pr-4 text-red-400">{displayUser}</td>
+                    <td className="py-4 pr-4 opacity-70">{new Date(s.session_date).toLocaleDateString()}</td>
+                    <td className="py-4 pr-4 text-blue-500">{s.subject}</td>
+                    <td className="py-4 pr-4">{s.topic}</td>
+                    <td className="py-4 pr-4 opacity-70">{s.duration}m</td>
+                    <td className="py-4">{s.correct}/{s.questions}</td>
+                  </tr>
+                )
+              })}
+            </tbody>
+          </table>
+          {allStudentsData.sessions.length === 0 && <p className="text-center py-10 opacity-50 font-bold uppercase text-xs">No data exists on the grid.</p>}
+        </div>
+      </div>
+    );
+  }
+
+  // ================= NORMAL USER VIEW =================
   return (
     <div className={`min-h-screen p-4 md:p-8 font-sans transition-colors duration-500 ${theme.bg}`}>
       
       {/* HEADER */}
       <div className={`p-6 md:p-8 rounded-3xl shadow-xl border mb-8 ${theme.card}`}>
-        <h1 className="text-3xl md:text-4xl font-black uppercase tracking-tight flex items-center gap-3 text-blue-600 dark:text-blue-400 mb-2">
-          🚆 NTPC Prep Hub
-        </h1>
-        <p className="text-sm font-bold opacity-60 uppercase tracking-widest">Your Centralized Railway Exam Command Center</p>
+        <div className="flex flex-col md:flex-row justify-between items-start md:items-center w-full gap-4">
+          <div>
+            <h1 className="text-3xl md:text-4xl font-black uppercase tracking-tight flex items-center gap-3 text-blue-600 dark:text-blue-400 mb-2">
+              🚆 NTPC Prep Hub
+            </h1>
+            <p className="text-sm font-bold opacity-60 uppercase tracking-widest">Your Centralized Railway Exam Command Center</p>
+          </div>
+          
+          {/* Conditionally render Admin button only if isAdmin is true */}
+          {isAdmin && (
+            <button 
+              onClick={adminMode ? () => setAdminMode(false) : fetchAllStudentsData}
+              className={`flex items-center gap-2 px-6 py-3 rounded-xl font-black uppercase text-xs tracking-widest transition-all shadow-lg ${adminMode ? 'bg-red-600 text-white' : 'bg-slate-800 text-emerald-400 hover:scale-105 border border-emerald-900'}`}
+            >
+              {isAdminLoading ? <Loader2 size={16} className="animate-spin" /> : <Users size={16} />}
+              {adminMode ? "Exit Admin View" : "Admin Override"}
+            </button>
+          )}
+        </div>
         
         {/* TABS */}
         <div className="flex gap-2 overflow-x-auto custom-scrollbar mt-8 pb-2">
