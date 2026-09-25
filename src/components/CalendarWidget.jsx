@@ -10,7 +10,26 @@ export default function CalendarWidget({ isDarkMode, user }) {
   const [currentDate, setCurrentDate] = useState(new Date());
   const [activeView, setActiveView] = useState('calendar'); 
   const [events, setEvents] = useState([]);
-  const [currentUserId, setCurrentUserId] = useState(user?.id || null);
+  
+  // --- DIRECT USER ID RESOLUTION ---
+  const getUserId = () => {
+    if (user?.id) return user.id;
+    try {
+      // Check local storage Supabase keys directly
+      for (let i = 0; i < localStorage.length; i++) {
+        const key = localStorage.key(i);
+        if (key && key.includes('auth-token')) {
+          const val = JSON.parse(localStorage.getItem(key));
+          if (val?.user?.id) return val.user.id;
+        }
+      }
+    } catch (e) {
+      console.error("Auth token parse error:", e);
+    }
+    return null;
+  };
+
+  const [currentUserId, setCurrentUserId] = useState(getUserId());
 
   // --- STATES ---
   const [selectedDate, setSelectedDate] = useState(null);
@@ -21,29 +40,17 @@ export default function CalendarWidget({ isDarkMode, user }) {
   const [editorLabel, setEditorLabel] = useState("");
   const [editorType, setEditorType] = useState("target");
 
-  // --- GET USER & FETCH EVENTS ---
+  // --- FETCH EVENTS ---
   useEffect(() => {
-    const initUser = async () => {
-      if (user?.id) {
-        setCurrentUserId(user.id);
-        return;
-      }
-      const { data } = await supabase.auth.getSession();
-      if (data?.session?.user?.id) {
-        setCurrentUserId(data.session.user.id);
-      }
-    };
-    initUser();
-  }, [user]);
-
-  useEffect(() => {
-    if (!currentUserId) return;
+    const uid = getUserId();
+    if (uid && !currentUserId) setCurrentUserId(uid);
+    if (!uid) return;
 
     const fetchEvents = async () => {
       const { data, error } = await supabase
         .from('user_events')
         .select('*')
-        .eq('user_id', currentUserId);
+        .eq('user_id', uid);
 
       if (!error && data) {
         setEvents(data);
@@ -95,21 +102,14 @@ export default function CalendarWidget({ isDarkMode, user }) {
   const saveEvent = async () => {
     if (!editorLabel) return;
 
-    // Direct fetch on click to ensure we never miss the user ID
-    let userId = currentUserId;
-    if (!userId) {
-      const { data } = await supabase.auth.getSession();
-      userId = data?.session?.user?.id;
-      if (userId) setCurrentUserId(userId);
-    }
-
-    if (!userId) {
-      alert("Error: No active user session found. Please log in again.");
+    const uid = getUserId();
+    if (!uid) {
+      console.error("User session missing.");
       return;
     }
 
     const payload = {
-      user_id: userId,
+      user_id: uid,
       day: selectedDate.day,
       month: selectedDate.month,
       year: selectedDate.year,
