@@ -5,7 +5,8 @@ import autoTable from 'jspdf-autotable';
 import { 
   Calendar, BookOpen, Edit3, Calculator, BarChart2, 
   FileText, CheckCircle, AlertTriangle, 
-  Download, Plus, Clock, Target, Zap, Loader2, Users
+  Download, Plus, Clock, Target, Zap, Loader2, Users,
+  Trash2, X // Added missing icons for edit/delete actions
 } from 'lucide-react';
 
 const SYLLABUS_TOPICS = {
@@ -25,7 +26,7 @@ export default function NTPCTracker({ user, isDarkMode }) {
   // --- STATE MANAGEMENT ---
   const [activeTab, setActiveTab] = useState('daily');
   const [isLoading, setIsLoading] = useState(true);
-  const [isAdmin, setIsAdmin] = useState(false); // Security state for Admin Override
+  const [isAdmin, setIsAdmin] = useState(false);
   
   // Normal User State
   const [data, setData] = useState({
@@ -42,8 +43,15 @@ export default function NTPCTracker({ user, isDarkMode }) {
   const [isAdminLoading, setIsAdminLoading] = useState(false);
 
   // Forms State
-  const [dailyForm, setDailyForm] = useState({ subject: 'Mathematics', topic: '', duration: '', questions: '', correct: '', conceptClear: false, needRevision: false, formulaNoted: false, notes: '' });
-  const [mockForm, setMockForm] = useState({ name: '', total: 100, attempted: '', correct: '', time: '', date: new Date().toISOString().split('T')[0], mathScore: '', reasoningScore: '', gaScore: '' });
+  const initialDailyForm = { subject: 'Mathematics', topic: '', duration: '', questions: '', correct: '', conceptClear: false, needRevision: false, formulaNoted: false, notes: '' };
+  const initialMockForm = { name: '', total: 100, attempted: '', correct: '', time: '', date: new Date().toISOString().split('T')[0], mathScore: '', reasoningScore: '', gaScore: '' };
+  
+  const [dailyForm, setDailyForm] = useState(initialDailyForm);
+  const [mockForm, setMockForm] = useState(initialMockForm);
+
+  // Edit Tracking State
+  const [editingSessionId, setEditingSessionId] = useState(null);
+  const [editingMockId, setEditingMockId] = useState(null);
 
   // --- 🛡️ ADMIN OVERRIDE FETCH ---
   const fetchAllStudentsData = async () => {
@@ -52,7 +60,7 @@ export default function NTPCTracker({ user, isDarkMode }) {
       const [allSessions, allMocks, allProfiles] = await Promise.all([
         supabase.from('study_sessions').select('*').order('session_date', { ascending: false }),
         supabase.from('manual_mocks').select('*').order('mock_date', { ascending: false }),
-        supabase.from('profiles').select('id, username') // Adjusted to username
+        supabase.from('profiles').select('id, username')
       ]);
 
       setAllStudentsData({
@@ -84,7 +92,7 @@ export default function NTPCTracker({ user, isDarkMode }) {
       const uProfile = allStudentsData.profiles.find(p => p.id === s.user_id);
       return [
         new Date(s.session_date).toLocaleDateString(),
-        uProfile ? uProfile.username : 'Unknown ID', // Adjusted to username
+        uProfile ? uProfile.username : 'Unknown ID',
         s.subject,
         s.topic,
         `${s.duration} min`,
@@ -113,14 +121,13 @@ export default function NTPCTracker({ user, isDarkMode }) {
       const [sessionsRes, mocksRes, profileRes] = await Promise.all([
         supabase.from('study_sessions').select('*').eq('user_id', user.id).order('session_date', { ascending: false }),
         supabase.from('manual_mocks').select('*').eq('user_id', user.id).order('mock_date', { ascending: false }),
-        supabase.from('profiles').select('ntpc_syllabus, ntpc_formulas, is_admin').eq('id', user.id).single() // Fetching is_admin status
+        supabase.from('profiles').select('ntpc_syllabus, ntpc_formulas, is_admin').eq('id', user.id).single()
       ]);
 
       const fetchedSessions = sessionsRes.data || [];
       const fetchedMocks = mocksRes.data || [];
       const profile = profileRes.data || {};
 
-      // Set admin status based on database
       if (profile.is_admin === true) {
         setIsAdmin(true);
       }
@@ -155,13 +162,12 @@ export default function NTPCTracker({ user, isDarkMode }) {
     fetchTrackerData();
   }, [fetchTrackerData]);
 
-  // --- DATABASE SAVING HANDLERS ---
+  // --- ✏️ CRUD HANDLERS: SESSIONS ---
   const handleSaveSession = async () => {
     if (!dailyForm.topic || !dailyForm.duration) return alert('Please fill in Topic and Duration');
     
-    const newSession = {
+    const payload = {
       user_id: user.id,
-      session_date: new Date().toISOString(),
       subject: dailyForm.subject,
       topic: dailyForm.topic,
       duration: parseInt(dailyForm.duration) || 0,
@@ -174,26 +180,79 @@ export default function NTPCTracker({ user, isDarkMode }) {
     };
 
     try {
-      const { data: inserted, error } = await supabase.from('study_sessions').insert([newSession]).select();
-      if (error) throw error;
+      if (editingSessionId) {
+        const { data: updated, error } = await supabase.from('study_sessions').update(payload).eq('id', editingSessionId).select();
+        if (error) throw error;
+        
+        setData(prev => {
+          const newSessions = prev.sessions.map(s => s.id === editingSessionId ? updated[0] : s);
+          return {
+            ...prev,
+            sessions: newSessions,
+            totalStudyTime: newSessions.reduce((acc, curr) => acc + (curr.duration || 0), 0)
+          };
+        });
+        alert('Session Updated!');
+      } else {
+        payload.session_date = new Date().toISOString();
+        const { data: inserted, error } = await supabase.from('study_sessions').insert([payload]).select();
+        if (error) throw error;
 
-      setData(prev => ({
-        ...prev,
-        sessions: [inserted[0], ...prev.sessions],
-        totalStudyTime: prev.totalStudyTime + newSession.duration
-      }));
+        setData(prev => ({
+          ...prev,
+          sessions: [inserted[0], ...prev.sessions],
+          totalStudyTime: prev.totalStudyTime + payload.duration
+        }));
+        alert('Session Saved!');
+      }
 
-      setDailyForm({ subject: 'Mathematics', topic: '', duration: '', questions: '', correct: '', conceptClear: false, needRevision: false, formulaNoted: false, notes: '' });
-      alert('Session Saved to Database!');
+      setDailyForm(initialDailyForm);
+      setEditingSessionId(null);
     } catch (error) {
       alert("Error saving session: " + error.message);
     }
   };
 
+  const editSession = (session) => {
+    setEditingSessionId(session.id);
+    setDailyForm({
+      subject: session.subject,
+      topic: session.topic,
+      duration: session.duration,
+      questions: session.questions,
+      correct: session.correct,
+      conceptClear: session.concept_clear,
+      needRevision: session.need_revision,
+      formulaNoted: session.formula_noted,
+      notes: session.notes || ''
+    });
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
+  const deleteSession = async (id) => {
+    if (!window.confirm("Are you sure you want to delete this session?")) return;
+    try {
+      const { error } = await supabase.from('study_sessions').delete().eq('id', id);
+      if (error) throw error;
+
+      setData(prev => {
+        const newSessions = prev.sessions.filter(s => s.id !== id);
+        return {
+          ...prev,
+          sessions: newSessions,
+          totalStudyTime: newSessions.reduce((acc, curr) => acc + (curr.duration || 0), 0)
+        };
+      });
+    } catch (error) {
+      alert("Error deleting session: " + error.message);
+    }
+  };
+
+  // --- ✏️ CRUD HANDLERS: MOCKS ---
   const handleSaveMock = async () => {
     if (!mockForm.name || !mockForm.correct) return alert('Please fill Test Name and Correct Score');
     
-    const newMock = {
+    const payload = {
       user_id: user.id,
       name: mockForm.name,
       total: parseInt(mockForm.total) || 100,
@@ -207,14 +266,52 @@ export default function NTPCTracker({ user, isDarkMode }) {
     };
 
     try {
-      const { data: inserted, error } = await supabase.from('manual_mocks').insert([newMock]).select();
-      if (error) throw error;
+      if (editingMockId) {
+        const { data: updated, error } = await supabase.from('manual_mocks').update(payload).eq('id', editingMockId).select();
+        if (error) throw error;
+        
+        setData(prev => ({ ...prev, mockTests: prev.mockTests.map(m => m.id === editingMockId ? updated[0] : m) }));
+        alert('Mock Updated!');
+      } else {
+        const { data: inserted, error } = await supabase.from('manual_mocks').insert([payload]).select();
+        if (error) throw error;
+        
+        setData(prev => ({ ...prev, mockTests: [inserted[0], ...prev.mockTests] }));
+        alert('Mock Saved!');
+      }
 
-      setData(prev => ({ ...prev, mockTests: [inserted[0], ...prev.mockTests] }));
-      setMockForm({ name: '', total: 100, attempted: '', correct: '', time: '', date: new Date().toISOString().split('T')[0], mathScore: '', reasoningScore: '', gaScore: '' });
-      alert('Mock Test Saved to Database!');
+      setMockForm(initialMockForm);
+      setEditingMockId(null);
     } catch (error) {
       alert("Error saving mock: " + error.message);
+    }
+  };
+
+  const editMock = (mock) => {
+    setEditingMockId(mock.id);
+    setMockForm({
+      name: mock.name,
+      total: mock.total,
+      attempted: mock.attempted,
+      correct: mock.correct,
+      time: mock.time_taken,
+      date: mock.mock_date.split('T')[0],
+      mathScore: mock.math_score || '',
+      reasoningScore: mock.reasoning_score || '',
+      gaScore: mock.ga_score || ''
+    });
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
+  const deleteMock = async (id) => {
+    if (!window.confirm("Are you sure you want to delete this mock test?")) return;
+    try {
+      const { error } = await supabase.from('manual_mocks').delete().eq('id', id);
+      if (error) throw error;
+
+      setData(prev => ({ ...prev, mockTests: prev.mockTests.filter(m => m.id !== id) }));
+    } catch (error) {
+      alert("Error deleting mock test: " + error.message);
     }
   };
 
@@ -376,7 +473,7 @@ export default function NTPCTracker({ user, isDarkMode }) {
             <tbody className="text-sm font-bold">
               {allStudentsData.sessions.map((s, i) => {
                 const uProfile = allStudentsData.profiles.find(p => p.id === s.user_id);
-                const displayUser = uProfile ? uProfile.username : s.user_id.substring(0,8); // Adjusted to username
+                const displayUser = uProfile ? uProfile.username : s.user_id.substring(0,8);
                 return (
                   <tr key={s.id || i} className="border-b dark:border-slate-800 last:border-0 hover:bg-slate-800/50 transition-colors">
                     <td className="py-4 pr-4 text-red-400">{displayUser}</td>
@@ -410,7 +507,6 @@ export default function NTPCTracker({ user, isDarkMode }) {
             <p className="text-sm font-bold opacity-60 uppercase tracking-widest">Your Centralized Railway Exam Command Center</p>
           </div>
           
-          {/* Conditionally render Admin button only if isAdmin is true */}
           {isAdmin && (
             <button 
               onClick={adminMode ? () => setAdminMode(false) : fetchAllStudentsData}
@@ -466,7 +562,16 @@ export default function NTPCTracker({ user, isDarkMode }) {
               </div>
 
               <div className={`p-6 rounded-2xl border-2 border-dashed ${isDarkMode ? 'border-slate-700 bg-slate-800/50' : 'border-blue-200 bg-blue-50/50'}`}>
-                <h3 className="font-black uppercase tracking-widest text-xs mb-6 text-blue-500">Log New Session</h3>
+                <div className="flex justify-between items-center mb-6">
+                  <h3 className="font-black uppercase tracking-widest text-xs text-blue-500">
+                    {editingSessionId ? "Edit Session" : "Log New Session"}
+                  </h3>
+                  {editingSessionId && (
+                    <button onClick={() => { setEditingSessionId(null); setDailyForm(initialDailyForm); }} className="text-xs font-bold flex items-center gap-1 opacity-60 hover:opacity-100">
+                      <X size={14} /> Cancel Edit
+                    </button>
+                  )}
+                </div>
                 
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
                   <div>
@@ -515,7 +620,9 @@ export default function NTPCTracker({ user, isDarkMode }) {
 
                 <textarea placeholder="Session notes, doubts, or observations..." rows="2" className={`w-full p-4 rounded-xl border outline-none font-bold text-sm mb-4 ${theme.input}`} value={dailyForm.notes} onChange={e => setDailyForm({...dailyForm, notes: e.target.value})}></textarea>
                 
-                <button onClick={handleSaveSession} className="bg-blue-600 hover:bg-blue-700 text-white px-8 py-3 rounded-xl font-black uppercase text-xs tracking-widest transition-all active:scale-95 shadow-lg">Save Session Data</button>
+                <button onClick={handleSaveSession} className={`${editingSessionId ? 'bg-orange-600 hover:bg-orange-700' : 'bg-blue-600 hover:bg-blue-700'} text-white px-8 py-3 rounded-xl font-black uppercase text-xs tracking-widest transition-all active:scale-95 shadow-lg`}>
+                  {editingSessionId ? "Update Session Data" : "Save Session Data"}
+                </button>
               </div>
             </div>
 
@@ -530,19 +637,28 @@ export default function NTPCTracker({ user, isDarkMode }) {
                     <th className="pb-4 pr-4">Topic</th>
                     <th className="pb-4 pr-4">Time</th>
                     <th className="pb-4 pr-4">Score</th>
-                    <th className="pb-4">Status</th>
+                    <th className="pb-4 pr-4">Status</th>
+                    <th className="pb-4 text-right">Actions</th>
                   </tr>
                 </thead>
                 <tbody className="text-sm font-bold">
                   {data.sessions.slice(0,10).map((s, i) => (
-                    <tr key={s.id || i} className="border-b dark:border-slate-800 last:border-0">
+                    <tr key={s.id || i} className="border-b dark:border-slate-800 last:border-0 hover:bg-slate-800/20 transition-colors">
                       <td className="py-4 pr-4 opacity-70">{new Date(s.session_date).toLocaleDateString()}</td>
                       <td className="py-4 pr-4 text-blue-500">{s.subject}</td>
                       <td className="py-4 pr-4">{s.topic}</td>
                       <td className="py-4 pr-4 opacity-70">{s.duration}m</td>
                       <td className="py-4 pr-4">{s.correct}/{s.questions}</td>
-                      <td className="py-4">
+                      <td className="py-4 pr-4">
                         {s.concept_clear ? <CheckCircle size={16} className="text-green-500" /> : <AlertTriangle size={16} className="text-orange-500" />}
+                      </td>
+                      <td className="py-4 text-right flex justify-end gap-3">
+                        <button onClick={() => editSession(s)} className="text-blue-500 hover:text-blue-400 transition-colors">
+                          <Edit3 size={16} />
+                        </button>
+                        <button onClick={() => deleteSession(s.id)} className="text-red-500 hover:text-red-400 transition-colors">
+                          <Trash2 size={16} />
+                        </button>
                       </td>
                     </tr>
                   ))}
@@ -560,7 +676,17 @@ export default function NTPCTracker({ user, isDarkMode }) {
               <h2 className="text-2xl font-black uppercase tracking-tight mb-6">Mock Test Repository</h2>
               
               <div className={`p-6 rounded-2xl border-2 border-dashed mb-10 ${isDarkMode ? 'border-slate-700 bg-slate-800/50' : 'border-purple-200 bg-purple-50/50'}`}>
-                <h3 className="font-black uppercase tracking-widest text-xs mb-6 text-purple-500">Record New Mock</h3>
+                <div className="flex justify-between items-center mb-6">
+                  <h3 className="font-black uppercase tracking-widest text-xs text-purple-500">
+                    {editingMockId ? "Edit Mock Test" : "Record New Mock"}
+                  </h3>
+                  {editingMockId && (
+                    <button onClick={() => { setEditingMockId(null); setMockForm(initialMockForm); }} className="text-xs font-bold flex items-center gap-1 opacity-60 hover:opacity-100">
+                      <X size={14} /> Cancel Edit
+                    </button>
+                  )}
+                </div>
+
                 <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-4">
                   <div className="md:col-span-2">
                     <label className="block text-[10px] font-bold uppercase opacity-60 mb-2">Test Name</label>
@@ -603,7 +729,9 @@ export default function NTPCTracker({ user, isDarkMode }) {
                     </div>
                 </div>
                 
-                <button onClick={handleSaveMock} className="bg-purple-600 hover:bg-purple-700 text-white px-8 py-3 rounded-xl font-black uppercase text-xs tracking-widest transition-all active:scale-95 shadow-lg">Save Mock Results</button>
+                <button onClick={handleSaveMock} className={`${editingMockId ? 'bg-orange-600 hover:bg-orange-700' : 'bg-purple-600 hover:bg-purple-700'} text-white px-8 py-3 rounded-xl font-black uppercase text-xs tracking-widest transition-all active:scale-95 shadow-lg`}>
+                  {editingMockId ? "Update Mock Results" : "Save Mock Results"}
+                </button>
               </div>
 
               <h3 className="font-black uppercase tracking-widest text-xs mb-6">Mock History</h3>
@@ -611,20 +739,32 @@ export default function NTPCTracker({ user, isDarkMode }) {
                 {data.mockTests.map((mock, i) => {
                   const percentage = Math.round((mock.correct / mock.total) * 100);
                   return (
-                    <div key={mock.id || i} className={`p-6 rounded-2xl border flex flex-col justify-between ${theme.card}`}>
+                    <div key={mock.id || i} className={`p-6 rounded-2xl border flex flex-col justify-between group ${theme.card}`}>
                       <div className="flex justify-between items-start mb-4">
                         <div>
-                           <h4 className="font-black text-lg uppercase tracking-tight">{mock.name}</h4>
+                           <h4 className="font-black text-lg uppercase tracking-tight pr-2">{mock.name}</h4>
                            <p className="text-[10px] uppercase font-bold opacity-60">{new Date(mock.mock_date).toLocaleDateString()} • {mock.time_taken} mins</p>
                         </div>
-                        <div className={`px-4 py-2 rounded-xl text-xl font-black ${percentage >= 70 ? 'bg-green-100 text-green-600 dark:bg-green-900/30' : 'bg-orange-100 text-orange-600 dark:bg-orange-900/30'}`}>
+                        <div className={`px-4 py-2 rounded-xl text-xl font-black shrink-0 ${percentage >= 70 ? 'bg-green-100 text-green-600 dark:bg-green-900/30' : 'bg-orange-100 text-orange-600 dark:bg-orange-900/30'}`}>
                           {percentage}%
                         </div>
                       </div>
-                      <div className="flex gap-4 text-xs font-bold opacity-70">
-                         <span>M: {mock.math_score || '-'}</span>
-                         <span>R: {mock.reasoning_score || '-'}</span>
-                         <span>GA: {mock.ga_score || '-'}</span>
+                      
+                      <div className="flex justify-between items-end">
+                        <div className="flex gap-4 text-xs font-bold opacity-70">
+                           <span>M: {mock.math_score || '-'}</span>
+                           <span>R: {mock.reasoning_score || '-'}</span>
+                           <span>GA: {mock.ga_score || '-'}</span>
+                        </div>
+                        {/* Edit/Delete Actions */}
+                        <div className="flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                          <button onClick={() => editMock(mock)} className="p-2 rounded-lg bg-blue-100 text-blue-600 dark:bg-blue-900/30 dark:text-blue-400 hover:scale-105 transition-all">
+                            <Edit3 size={14} />
+                          </button>
+                          <button onClick={() => deleteMock(mock.id)} className="p-2 rounded-lg bg-red-100 text-red-600 dark:bg-red-900/30 dark:text-red-400 hover:scale-105 transition-all">
+                            <Trash2 size={14} />
+                          </button>
+                        </div>
                       </div>
                     </div>
                   )
