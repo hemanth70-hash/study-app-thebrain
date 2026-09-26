@@ -16,6 +16,9 @@ export default function StudyHub({ user, isDarkMode }) {
   const [saving, setSaving] = useState(false);
   const [isSearching, setIsSearching] = useState(false);
   const [lastSaved, setLastSaved] = useState(null);
+  
+  // Custom Username State
+  const [myUsername, setMyUsername] = useState("Student");
 
   // --- LAYOUT STATES ---
   const [showActiveNotes, setShowActiveNotes] = useState(false);
@@ -46,10 +49,59 @@ export default function StudyHub({ user, isDarkMode }) {
 
   // --- 1. DATA & PRESENCE INITIALIZATION ---
   useEffect(() => {
+    let isMounted = true;
+    
     fetchSavedNotes();
     fetchChatHistory();
 
-    // 1. Subscribe to Global Chat
+    const initializeProfileAndPresence = async () => {
+      // 1. Fetch exact username from the database
+      let resolvedUsername = user.user_metadata?.username || user.email?.split('@')[0] || "Student";
+      
+      try {
+        const { data } = await supabase
+          .from('profiles')
+          .select('username')
+          .eq('id', user.id)
+          .maybeSingle();
+          
+        if (data && data.username) {
+          resolvedUsername = data.username;
+        }
+      } catch (err) {
+        console.error("Failed to fetch profile username:", err);
+      }
+
+      if (isMounted) setMyUsername(resolvedUsername);
+
+      // 2. Setup Presence with the confirmed username
+      const presenceChannel = supabase.channel('study_hub_presence');
+      
+      presenceChannel
+        .on('presence', { event: 'sync' }, () => {
+          const state = presenceChannel.presenceState();
+          const users = Object.values(state).flat();
+          
+          // Remove duplicates and FILTER OUT 'admin'
+          const uniqueUsers = Array.from(new Map(users.map(u => [u.user_id, u])).values())
+            .filter(u => u.username && u.username.toLowerCase() !== 'admin');
+            
+          setOnlineUsers(uniqueUsers);
+        })
+        .subscribe(async (status) => {
+          if (status === 'SUBSCRIBED') {
+            await presenceChannel.track({
+              user_id: user.id,
+              username: resolvedUsername,
+              current_video: ""
+            });
+          }
+        });
+    };
+
+    initializeProfileAndPresence();
+
+    // 3. Subscribe to Global Chat
     const chatSub = supabase
       .channel('public:study_hub_chat')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'study_hub_chat' }, payload => {
@@ -64,49 +116,25 @@ export default function StudyHub({ user, isDarkMode }) {
       })
       .subscribe();
 
-    // 2. Setup Presence (Who is online & watching what)
-    const presenceChannel = supabase.channel('study_hub_presence');
-    
-    presenceChannel
-      .on('presence', { event: 'sync' }, () => {
-        const state = presenceChannel.presenceState();
-        const users = Object.values(state).flat();
-        
-        // Remove duplicates and FILTER OUT 'admin'
-        const uniqueUsers = Array.from(new Map(users.map(u => [u.user_id, u])).values())
-          .filter(u => u.username && u.username.toLowerCase() !== 'admin');
-          
-        setOnlineUsers(uniqueUsers);
-      })
-      .subscribe(async (status) => {
-        if (status === 'SUBSCRIBED') {
-          await presenceChannel.track({
-            user_id: user.id,
-            username: user.user_metadata?.username || user.email?.split('@')[0] || "Student",
-            current_video: videoId
-          });
-        }
-      });
-
     return () => {
+      isMounted = false;
       supabase.removeChannel(chatSub);
-      supabase.removeChannel(presenceChannel);
-    };
-  }, []);
-
-  // Update presence whenever the video changes
-  useEffect(() => {
-    if (videoId) {
       const presenceChannel = supabase.getChannels().find(c => c.topic === 'realtime:study_hub_presence');
-      if (presenceChannel) {
-        presenceChannel.track({
-          user_id: user.id,
-          username: user.user_metadata?.username || user.email?.split('@')[0] || "Student",
-          current_video: videoId
-        });
-      }
+      if(presenceChannel) supabase.removeChannel(presenceChannel);
+    };
+  }, [user.id]);
+
+  // Update presence whenever the video or username changes
+  useEffect(() => {
+    const presenceChannel = supabase.getChannels().find(c => c.topic === 'realtime:study_hub_presence');
+    if (presenceChannel && myUsername) {
+      presenceChannel.track({
+        user_id: user.id,
+        username: myUsername,
+        current_video: videoId
+      });
     }
-  }, [videoId]);
+  }, [videoId, myUsername, user.id]);
 
   const fetchSavedNotes = async () => {
     const { data } = await supabase.from('video_notes').select('*').eq('user_id', user.id).order('updated_at', { ascending: false });
@@ -142,7 +170,7 @@ export default function StudyHub({ user, isDarkMode }) {
     } else {
       await supabase.from('study_hub_chat').insert([{
         user_id: user.id,
-        username: user.user_metadata?.username || user.email?.split('@')[0] || "Student",
+        username: myUsername, // Uses the fetched profile username
         content: newMessage,
         watching_video_id: videoId,
         reply_to: replyingTo?.id || null
@@ -465,7 +493,6 @@ export default function StudyHub({ user, isDarkMode }) {
             <div className={`p-3 border-b flex gap-3 overflow-x-auto custom-scrollbar ${isDarkMode ? 'border-slate-700 bg-slate-900' : 'border-gray-200 bg-white'}`}>
               <div className="flex items-center gap-2 shrink-0">
                 <Users size={14} className="text-emerald-500" />
-                {/* DISPLAY COUNT HERE */}
                 <span className={`text-[10px] font-bold uppercase tracking-widest ${theme.text}`}>
                   Live ({onlineUsers.length}):
                 </span>
