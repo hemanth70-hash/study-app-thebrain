@@ -2,165 +2,195 @@ import React, { useState, useEffect, useRef } from 'react';
 import { Zap, Volume2, VolumeX, Coffee, X, Play, Pause, RotateCcw, Trash2 } from 'lucide-react';
 
 // --- 🔊 AUDIO CONFIGURATION ---
-// Keeping your existing sounds as requested
 const AUDIO_TICK = new Audio('https://assets.mixkit.co/active_storage/sfx/2568/2568-preview.mp3');
 const AUDIO_ALARM = new Audio('https://assets.mixkit.co/active_storage/sfx/1435/1435-preview.mp3');
 const AUDIO_BELL = new Audio('https://assets.mixkit.co/active_storage/sfx/2869/2869-preview.mp3');
-
-// 🔥 YOUR LOCAL RESET SOUND
-// Since it's in "public/sounds/reset sound.mp3", we reference it from the root "/"
 const AUDIO_RESET = new Audio('/sounds/reset%20sound.mp3'); 
 
-export default function GoalTracker({ isDarkMode }) {
-  // Max Scale: 24 Hours
-  const MAX_SCALE_SECONDS = 24 * 3600; 
+const MAX_SCALE_SECONDS = 24 * 3600; 
 
-  // --- 🧠 1. SMART INITIALIZATION (PERSISTENCE) ---
-  // This logic checks LocalStorage before setting the default "0"
-  const getInitialTime = () => {
+// ============================================================================
+// 🌍 GLOBAL BACKGROUND ENGINE (Runs independent of component lifecycle)
+// ============================================================================
+let bgInterval = null;
+const subscribers = new Set();
+
+// 1. Catch up missed time (in case the browser was completely closed)
+const catchUpTime = () => {
+  const now = Date.now();
+  const lastTick = parseInt(localStorage.getItem('gt_lastTick') || now.toString());
+  const wasActive = localStorage.getItem('gt_isActive') === 'true';
+  const mode = localStorage.getItem('gt_mode') || 'FOCUS';
+  
+  if (wasActive && mode === 'FOCUS') {
     const savedTime = parseInt(localStorage.getItem('gt_timeLeft') || '0');
-    const wasActive = JSON.parse(localStorage.getItem('gt_isActive') || 'false');
-    const lastTick = parseInt(localStorage.getItem('gt_lastTick') || Date.now().toString());
+    const passed = Math.floor((now - lastTick) / 1000);
+    localStorage.setItem('gt_timeLeft', Math.max(0, savedTime - passed).toString());
+  } else if (mode === 'BREAK') {
+    const savedBreakTime = parseInt(localStorage.getItem('gt_breakTimeLeft') || '0');
+    const passed = Math.floor((now - lastTick) / 1000);
+    localStorage.setItem('gt_breakTimeLeft', Math.max(0, savedBreakTime - passed).toString());
+  }
+  localStorage.setItem('gt_lastTick', now.toString());
+};
+catchUpTime();
 
-    // If timer was running, subtract the time passed while you were away
-    if (wasActive && savedTime > 0) {
-      const now = Date.now();
-      const secondsPassed = Math.floor((now - lastTick) / 1000);
-      return Math.max(0, savedTime - secondsPassed);
+// 2. State Management Helpers
+const getGlobalState = () => ({
+  timeLeft: parseInt(localStorage.getItem('gt_timeLeft') || '0'),
+  isActive: localStorage.getItem('gt_isActive') === 'true',
+  mode: localStorage.getItem('gt_mode') || 'FOCUS',
+  breaks: JSON.parse(localStorage.getItem('gt_breaks') || '[]'),
+  activeBreak: JSON.parse(localStorage.getItem('gt_activeBreak') || 'null'),
+  breakTimeLeft: parseInt(localStorage.getItem('gt_breakTimeLeft') || '0'),
+  soundEnabled: localStorage.getItem('gt_soundEnabled') !== 'false'
+});
+
+const setGlobalState = (updates) => {
+  const next = { ...getGlobalState(), ...updates };
+  
+  localStorage.setItem('gt_timeLeft', next.timeLeft.toString());
+  localStorage.setItem('gt_isActive', next.isActive.toString());
+  localStorage.setItem('gt_mode', next.mode);
+  localStorage.setItem('gt_breaks', JSON.stringify(next.breaks));
+  localStorage.setItem('gt_activeBreak', JSON.stringify(next.activeBreak));
+  localStorage.setItem('gt_breakTimeLeft', next.breakTimeLeft.toString());
+  localStorage.setItem('gt_soundEnabled', next.soundEnabled.toString());
+  localStorage.setItem('gt_lastTick', Date.now().toString());
+
+  subscribers.forEach(cb => cb(next));
+};
+
+// 3. Background Engine Loop
+const startBackgroundEngine = () => {
+  if (bgInterval) return;
+  
+  // Request Native Notifications for when you are on other tabs
+  if ("Notification" in window && Notification.permission === "default") {
+    Notification.requestPermission();
+  }
+
+  bgInterval = setInterval(() => {
+    const state = getGlobalState();
+    const isMockActive = localStorage.getItem('isMockActive') === 'true'; 
+    
+    // Always update last tick
+    localStorage.setItem('gt_lastTick', Date.now().toString());
+
+    if (state.isActive && state.mode === 'FOCUS' && state.timeLeft > 0) {
+      const nextTime = state.timeLeft - 1;
+      const hitBreak = state.breaks.find(b => Math.abs(b.triggerAt - nextTime) < 1 && !b.completed);
+
+      if (hitBreak) {
+        // 🔥 BREAK INTERCEPTION
+        if (state.soundEnabled) {
+          AUDIO_BELL.currentTime = 0; AUDIO_BELL.play().catch(()=>{});
+        }
+        
+        // Notification Logic
+        if (Notification.permission === 'granted') {
+           if (isMockActive) {
+             new Notification("Background Break Started", { body: "Your scheduled break hit, but you're in a Mock. Keep pushing!", icon: '/favicon.ico' });
+           } else if (document.visibilityState === 'hidden') {
+             new Notification("Rest Protocol Active", { body: "Time for a short rest. System cooling down.", icon: '/favicon.ico' });
+           }
+        }
+
+        setGlobalState({
+          isActive: false,
+          mode: 'BREAK',
+          activeBreak: hitBreak,
+          breakTimeLeft: hitBreak.duration,
+          timeLeft: nextTime
+        });
+      } else {
+        // Normal Tick
+        if (state.soundEnabled && nextTime <= 60 && nextTime > 0) {
+          AUDIO_TICK.currentTime = 0; AUDIO_TICK.play().catch(()=>{});
+        }
+        setGlobalState({ timeLeft: nextTime });
+      }
+
+    } else if (state.timeLeft <= 0 && state.isActive && state.mode === 'FOCUS') {
+      // Timer finished
+      setGlobalState({ isActive: false, timeLeft: 0 });
+      if (state.soundEnabled) AUDIO_ALARM.play().catch(()=>{});
+      if (Notification.permission === 'granted') {
+         new Notification("Study Complete!", { body: "Neural Focus session ended." });
+      }
+    } 
+    
+    else if (state.mode === 'BREAK' && state.breakTimeLeft > 0) {
+      const nextBreakTime = state.breakTimeLeft - 1;
+      if (state.soundEnabled && nextBreakTime <= 10 && nextBreakTime > 0) {
+        AUDIO_BELL.currentTime = 0; AUDIO_BELL.play().catch(()=>{});
+      }
+      setGlobalState({ breakTimeLeft: nextBreakTime });
+    } 
+    
+    else if (state.mode === 'BREAK' && state.breakTimeLeft <= 0) {
+      // Break over
+      let updatedBreaks = state.breaks;
+      if (state.activeBreak) {
+        updatedBreaks = state.breaks.map(b => b.id === state.activeBreak.id ? { ...b, completed: true } : b);
+      }
+      if (state.soundEnabled) AUDIO_ALARM.play().catch(()=>{});
+      if (Notification.permission === 'granted') {
+         new Notification("Break Over", { body: "Time to get back to focus." });
+      }
+      setGlobalState({
+        mode: 'FOCUS',
+        isActive: true,
+        breaks: updatedBreaks,
+        activeBreak: null
+      });
     }
-    return savedTime;
-  };
+  }, 1000);
+};
 
-  // --- STATE ---
-  const [timeLeft, setTimeLeft] = useState(getInitialTime); 
-  const [isActive, setIsActive] = useState(() => JSON.parse(localStorage.getItem('gt_isActive') || 'false'));
-  const [mode, setMode] = useState(() => localStorage.getItem('gt_mode') || 'FOCUS'); 
-  const [showCelebration, setShowCelebration] = useState(false); // 🎉 CHEERING STATE
+startBackgroundEngine();
 
-  // --- BREAK SYSTEM ---
-  const [breaks, setBreaks] = useState(() => JSON.parse(localStorage.getItem('gt_breaks') || '[]'));
+// ============================================================================
+// 🎨 REACT VIEW COMPONENT
+// ============================================================================
+export default function GoalTracker({ isDarkMode }) {
+  const [state, setState] = useState(getGlobalState());
   const [showBreakForm, setShowBreakForm] = useState(false);
   const [breakConfig, setBreakConfig] = useState({ afterMins: 30, durationMins: 5 });
-  const [activeBreak, setActiveBreak] = useState(() => JSON.parse(localStorage.getItem('gt_activeBreak') || 'null'));
-  const [breakTimeLeft, setBreakTimeLeft] = useState(() => parseInt(localStorage.getItem('gt_breakTimeLeft') || '0'));
-
-  // --- AUDIO ENGINE ---
-  const [soundEnabled, setSoundEnabled] = useState(true);
+  const [showCelebration, setShowCelebration] = useState(false);
+  
+  const prevTimeRef = useRef(state.timeLeft);
   const lastSoundTime = useRef(0); 
 
-  // --- 💾 2. SAVE STATE EVERY SECOND ---
-  // This fixes the "timer resets when moving sections" bug
+  // Sync component with global background engine
   useEffect(() => {
-    localStorage.setItem('gt_timeLeft', timeLeft);
-    localStorage.setItem('gt_isActive', isActive);
-    localStorage.setItem('gt_mode', mode);
-    localStorage.setItem('gt_breaks', JSON.stringify(breaks));
-    localStorage.setItem('gt_activeBreak', JSON.stringify(activeBreak));
-    localStorage.setItem('gt_breakTimeLeft', breakTimeLeft);
-    localStorage.setItem('gt_lastTick', Date.now().toString());
-  }, [timeLeft, isActive, mode, breaks, activeBreak, breakTimeLeft]);
-
-  // --- 3. MAIN TIMER ENGINE ---
-  useEffect(() => {
-    let interval = null;
-
-    if (isActive && mode === 'FOCUS' && timeLeft > 0) {
-      interval = setInterval(() => {
-        setTimeLeft((prev) => {
-          const next = prev - 1;
-
-          // 🔥 BREAK INTERCEPTION
-          const hitBreak = breaks.find(b => Math.abs(b.triggerAt - next) < 1 && !b.completed);
-          
-          if (hitBreak) {
-            setIsActive(false); 
-            setMode('BREAK');
-            setActiveBreak(hitBreak);
-            setBreakTimeLeft(hitBreak.duration);
-            
-            // 🔊 BREAK START
-            if (soundEnabled) {
-              AUDIO_BELL.currentTime = 0;
-              AUDIO_BELL.play().catch(() => {});
-              setTimeout(() => {
-                 AUDIO_BELL.currentTime = 0;
-                 AUDIO_BELL.play().catch(() => {});
-              }, 250);
-            }
-          }
-
-          // 🔊 NORMAL TICK
-          if (soundEnabled && next <= 60 && next > 0) {
-            AUDIO_TICK.currentTime = 0;
-            AUDIO_TICK.play().catch(() => {});
-          }
-
-          return next;
-        });
-      }, 1000);
-
-    } else if (timeLeft <= 0 && isActive && mode === 'FOCUS') {
-      // 🏁 TIMER FINISHED
-      setIsActive(false); 
-      setTimeLeft(0);
-      
-      // 🎉 TRIGGER CHEERING
-      setShowCelebration(true); 
-      if (soundEnabled) AUDIO_ALARM.play().catch(() => {});
-      
-      // Hide cheering after 5 seconds
-      setTimeout(() => setShowCelebration(false), 5000);
-    }
-
-    return () => clearInterval(interval);
-  }, [isActive, timeLeft, mode, breaks, soundEnabled]);
-
-  // --- 4. BREAK TIMER ENGINE ---
-  useEffect(() => {
-    let breakInterval = null;
-
-    if (mode === 'BREAK' && breakTimeLeft > 0) {
-      breakInterval = setInterval(() => {
-        setBreakTimeLeft((prev) => {
-          const next = prev - 1;
-          // 🔊 WARNING
-          if (soundEnabled && next <= 10 && next > 0) {
-             AUDIO_BELL.currentTime = 0;
-             AUDIO_BELL.play().catch(() => {});
-          }
-          return next;
-        });
-      }, 1000);
-    } else if (mode === 'BREAK' && breakTimeLeft === 0) {
-      // 🏁 BREAK OVER
-      setMode('FOCUS');
-      setIsActive(true);
-      if (activeBreak) {
-        setBreaks(prev => prev.map(b => b.id === activeBreak.id ? { ...b, completed: true } : b));
+    const handleUpdate = (newState) => {
+      setState(newState);
+      // Trigger visual celebration if timer just hit zero while focused
+      if (prevTimeRef.current > 0 && newState.timeLeft === 0 && newState.mode === 'FOCUS') {
+        setShowCelebration(true);
+        setTimeout(() => setShowCelebration(false), 5000);
       }
-      setActiveBreak(null);
-      if (soundEnabled) AUDIO_ALARM.play().catch(() => {});
-    }
+      prevTimeRef.current = newState.timeLeft;
+    };
+    subscribers.add(handleUpdate);
+    return () => subscribers.delete(handleUpdate);
+  }, []);
 
-    return () => clearInterval(breakInterval);
-  }, [mode, breakTimeLeft, activeBreak, soundEnabled]);
+  // Check if we are currently in a Mock test
+  const isMockActive = localStorage.getItem('isMockActive') === 'true';
 
   // --- ACTIONS ---
-  
-  // 🔥 UPDATED RESET HANDLER
   const handleReset = () => {
-    setTimeLeft(0);
-    setIsActive(false);
-    setMode('FOCUS');
-    setActiveBreak(null);
-    setBreakTimeLeft(0);
+    setGlobalState({
+      timeLeft: 0,
+      isActive: false,
+      mode: 'FOCUS',
+      activeBreak: null,
+      breakTimeLeft: 0
+    });
     
-    // Clear storage so it stays at 0
-    localStorage.setItem('gt_timeLeft', '0');
-    localStorage.setItem('gt_isActive', 'false');
-
-    // 🔊 PLAY YOUR RESET SOUND
-    if (soundEnabled) {
+    if (state.soundEnabled) {
         AUDIO_RESET.currentTime = 0;
         AUDIO_RESET.play().catch(e => console.log("Reset sound error:", e));
     }
@@ -170,7 +200,7 @@ export default function GoalTracker({ isDarkMode }) {
     let val = parseInt(value);
     if (isNaN(val)) val = 0;
 
-    const current = formatTime(timeLeft);
+    const current = formatTime(state.timeLeft);
     let newSeconds = 0;
 
     if (field === 'h') newSeconds = (val * 3600) + (current.m * 60) + current.s;
@@ -178,7 +208,7 @@ export default function GoalTracker({ isDarkMode }) {
     if (field === 's') newSeconds = (current.h * 3600) + (current.m * 60) + val;
 
     if (newSeconds > MAX_SCALE_SECONDS) newSeconds = MAX_SCALE_SECONDS;
-    setTimeLeft(newSeconds);
+    setGlobalState({ timeLeft: newSeconds });
   };
 
   const handleDrag = (e) => {
@@ -187,7 +217,7 @@ export default function GoalTracker({ isDarkMode }) {
     const percent = x / rect.width;
     const newSeconds = Math.round(percent * MAX_SCALE_SECONDS);
 
-    if (soundEnabled && Math.abs(newSeconds - timeLeft) > 60) {
+    if (state.soundEnabled && Math.abs(newSeconds - state.timeLeft) > 60) {
       const now = Date.now();
       if (now - lastSoundTime.current > 40) { 
         AUDIO_TICK.currentTime = 0;
@@ -195,12 +225,12 @@ export default function GoalTracker({ isDarkMode }) {
         lastSoundTime.current = now;
       }
     }
-    setTimeLeft(newSeconds);
+    setGlobalState({ timeLeft: newSeconds });
   };
 
   const addBreak = () => {
     const startAfterSeconds = (parseInt(breakConfig.afterMins) || 0) * 60;
-    const triggerAt = timeLeft - startAfterSeconds;
+    const triggerAt = state.timeLeft - startAfterSeconds;
 
     if (triggerAt <= 0) {
       alert("Error: Break must be within the current timer range.");
@@ -214,12 +244,12 @@ export default function GoalTracker({ isDarkMode }) {
       completed: false
     };
 
-    setBreaks([...breaks, newBreak]);
+    setGlobalState({ breaks: [...state.breaks, newBreak] });
     setShowBreakForm(false);
   };
 
   const deleteBreak = (id) => {
-    setBreaks(breaks.filter(b => b.id !== id));
+    setGlobalState({ breaks: state.breaks.filter(b => b.id !== id) });
   };
 
   const formatTime = (s) => {
@@ -230,8 +260,8 @@ export default function GoalTracker({ isDarkMode }) {
     return { h, m, s: sec };
   };
 
-  const t = formatTime(timeLeft);
-  const bt = formatTime(breakTimeLeft);
+  const t = formatTime(state.timeLeft);
+  const bt = formatTime(state.breakTimeLeft);
 
   const theme = {
     bg: isDarkMode ? 'bg-slate-950 text-white' : 'bg-white text-slate-900',
@@ -257,38 +287,51 @@ export default function GoalTracker({ isDarkMode }) {
         </div>
       )}
 
-      {/* 🔥 FULL SCREEN REST OVERLAY */}
-      {mode === 'BREAK' && (
-        <div className="fixed inset-0 z-[9999] bg-black/80 backdrop-blur-xl flex flex-col items-center justify-center animate-in fade-in duration-500">
+      {/* 🔥 FULL SCREEN REST OVERLAY (Hides if Mock is active) */}
+      {state.mode === 'BREAK' && !isMockActive && (
+        <div className="absolute inset-0 z-[100] bg-black/90 backdrop-blur-xl flex flex-col items-center justify-center animate-in fade-in duration-500 rounded-[2rem]">
           <div className="p-6 bg-orange-500 rounded-full mb-6 shadow-[0_0_50px_orange] animate-pulse">
             <Coffee size={60} className="text-white" />
           </div>
           
-          <h2 className="text-4xl font-black text-white uppercase tracking-[0.2em] mb-2">Rest Protocol Active</h2>
-          <p className="text-orange-400 font-bold text-sm uppercase mb-10 tracking-widest">System Cooling Down...</p>
+          <h2 className="text-2xl font-black text-white uppercase tracking-[0.2em] mb-2 text-center">Rest Protocol Active</h2>
+          <p className="text-orange-400 font-bold text-xs uppercase mb-8 tracking-widest">System Cooling Down...</p>
           
           {/* BIG BREAK TIMER */}
-          <div className="text-8xl font-black text-white tabular-nums tracking-tighter mb-12 drop-shadow-2xl">
+          <div className="text-7xl font-black text-white tabular-nums tracking-tighter mb-10 drop-shadow-2xl">
             {String(bt.m).padStart(2,'0')}:{String(bt.s).padStart(2,'0')}
           </div>
 
           <button 
-            onClick={() => { setMode('FOCUS'); setIsActive(true); }}
-            className="px-10 py-4 bg-white text-black font-black uppercase rounded-2xl hover:scale-105 hover:bg-orange-100 transition-all shadow-[0_0_30px_rgba(255,255,255,0.3)]"
+            onClick={() => setGlobalState({ mode: 'FOCUS', isActive: true })}
+            className="px-8 py-3 bg-white text-black font-black uppercase text-xs rounded-xl hover:scale-105 hover:bg-orange-100 transition-all shadow-[0_0_30px_rgba(255,255,255,0.3)]"
           >
-            Skip Break & Resume
+            Skip Break
           </button>
+        </div>
+      )}
+
+      {/* 🚀 MOCK ENGINE BREAK NOTIFICATION TOAST */}
+      {state.mode === 'BREAK' && isMockActive && (
+        <div className="absolute top-2 left-2 right-2 bg-gradient-to-r from-orange-500 to-red-500 rounded-xl p-3 shadow-xl z-50 flex justify-between items-center animate-in slide-in-from-top-2">
+          <div>
+            <p className="text-white text-[10px] font-black uppercase tracking-widest opacity-80">Background Break Active</p>
+            <p className="text-white font-bold text-xs">Don't lose focus on your mock.</p>
+          </div>
+          <div className="text-white text-xl font-black tabular-nums">
+            {String(bt.m).padStart(2,'0')}:{String(bt.s).padStart(2,'0')}
+          </div>
         </div>
       )}
 
       {/* HEADER */}
       <div className="flex justify-between items-center mb-4">
         <div className="flex items-center gap-2 text-blue-500">
-          <Zap size={16} className={isActive ? "animate-pulse" : ""} />
+          <Zap size={16} className={state.isActive ? "animate-pulse" : ""} />
           <span className="font-black uppercase tracking-widest text-[10px]">Study⌛Timer</span>
         </div>
-        <button onClick={() => setSoundEnabled(!soundEnabled)} className="opacity-50 hover:opacity-100">
-          {soundEnabled ? <Volume2 size={16} /> : <VolumeX size={16} />}
+        <button onClick={() => setGlobalState({ soundEnabled: !state.soundEnabled })} className="opacity-50 hover:opacity-100 transition-opacity">
+          {state.soundEnabled ? <Volume2 size={16} /> : <VolumeX size={16} />}
         </button>
       </div>
 
@@ -321,7 +364,7 @@ export default function GoalTracker({ isDarkMode }) {
           <div className="flex flex-col items-center">
             <input 
               type="number" 
-              className={`w-20 text-center text-5xl font-black bg-transparent outline-none focus:text-blue-400 appearance-none m-0 p-0 leading-none ${isActive ? 'text-red-500' : 'text-slate-400'}`}
+              className={`w-20 text-center text-5xl font-black bg-transparent outline-none focus:text-blue-400 appearance-none m-0 p-0 leading-none ${state.isActive ? 'text-red-500' : 'text-slate-400'}`}
               value={String(t.s).padStart(2, '0')}
               onChange={(e) => handleEditTime('s', e.target.value)}
             />
@@ -345,11 +388,11 @@ export default function GoalTracker({ isDarkMode }) {
           {/* Liquid Fill */}
           <div 
             className="h-full bg-gradient-to-r from-blue-700 to-cyan-500 transition-all duration-75 ease-out"
-            style={{ width: `${MAX_SCALE_SECONDS > 0 ? (timeLeft / MAX_SCALE_SECONDS) * 100 : 0}%` }}
+            style={{ width: `${MAX_SCALE_SECONDS > 0 ? (state.timeLeft / MAX_SCALE_SECONDS) * 100 : 0}%` }}
           />
 
           {/* 🟠 ORANGE BREAK MARKERS */}
-          {breaks.map(b => {
+          {state.breaks.map(b => {
               const pos = (b.triggerAt / MAX_SCALE_SECONDS) * 100;
               return (
                 <div 
@@ -363,7 +406,7 @@ export default function GoalTracker({ isDarkMode }) {
           {/* Handle */}
           <div 
               className="absolute top-0 bottom-0 w-1 bg-white border-x border-slate-300 z-30 shadow-[0_0_10px_white]"
-              style={{ left: `${MAX_SCALE_SECONDS > 0 ? (timeLeft / MAX_SCALE_SECONDS) * 100 : 0}%` }}
+              style={{ left: `${MAX_SCALE_SECONDS > 0 ? (state.timeLeft / MAX_SCALE_SECONDS) * 100 : 0}%` }}
           />
         </div>
       </div>
@@ -372,12 +415,12 @@ export default function GoalTracker({ isDarkMode }) {
       <div className="space-y-3 relative z-20">
         <div className="flex gap-2">
           <button 
-            onClick={() => setIsActive(!isActive)}
+            onClick={() => setGlobalState({ isActive: !state.isActive })}
             className={`flex-1 py-3 rounded-xl font-black uppercase text-xs tracking-widest transition-all hover:scale-[1.02] active:scale-95 flex items-center justify-center gap-2 ${
-              isActive ? 'bg-red-600 text-white shadow-red-500/30 shadow-lg' : 'bg-blue-600 text-white shadow-blue-500/30 shadow-lg'
+              state.isActive ? 'bg-red-600 text-white shadow-red-500/30 shadow-lg' : 'bg-blue-600 text-white shadow-blue-500/30 shadow-lg'
             }`}
           >
-            {isActive ? <><Pause size={16} fill="currentColor" /> PAUSE</> : <><Play size={16} fill="currentColor" /> START</>}
+            {state.isActive ? <><Pause size={16} fill="currentColor" /> PAUSE</> : <><Play size={16} fill="currentColor" /> START</>}
           </button>
           
           <button 
@@ -434,9 +477,9 @@ export default function GoalTracker({ isDarkMode }) {
         )}
 
         {/* 🗑️ BREAK LIST */}
-        {breaks.length > 0 && (
+        {state.breaks.length > 0 && (
             <div className="flex flex-wrap gap-2 mt-1 max-h-16 overflow-y-auto custom-scrollbar">
-              {breaks.map(b => (
+              {state.breaks.map(b => (
                 <div key={b.id} className="bg-slate-100 dark:bg-slate-800 text-[9px] font-black uppercase px-2 py-1 rounded border border-slate-300 dark:border-slate-700 flex items-center gap-1 group">
                   <span className={b.completed ? "text-green-500 line-through opacity-50" : "text-orange-500"}>
                     {b.duration / 60}m Break
@@ -453,7 +496,6 @@ export default function GoalTracker({ isDarkMode }) {
             </div>
         )}
       </div>
-
     </div>
   );
 }

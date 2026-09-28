@@ -3,7 +3,7 @@ import { supabase } from '../supabaseClient';
 import { 
   UploadCloud, History, Megaphone, Trash2, 
   Zap, ShieldAlert, Key, UserPlus, 
-  Clock, MessageSquare, X, BookOpen, ListFilter, Database, ShieldCheck, Lock
+  Clock, MessageSquare, X, BookOpen, ListFilter, Database, ShieldCheck, Lock, Edit2
 } from 'lucide-react';
 
 export default function AdminPanel({ user, isDarkMode }) {
@@ -34,6 +34,9 @@ export default function AdminPanel({ user, isDarkMode }) {
   const [bookTitle, setBookTitle] = useState('');
   const [bookUrl, setBookUrl] = useState('');
   const [bookCategory, setBookCategory] = useState('Computer Science'); 
+  const [libraryResources, setLibraryResources] = useState([]);
+  const [editingResourceId, setEditingResourceId] = useState(null);
+  const [editingResourceCreator, setEditingResourceCreator] = useState(null);
 
   const librarySubjects = [
     "Computer Science", "Reasoning", "Aptitude", 
@@ -51,14 +54,16 @@ export default function AdminPanel({ user, isDarkMode }) {
   const fetchAdminData = useCallback(async () => {
     setLoading(true);
     try {
-      const [reg, dai, profs] = await Promise.all([
+      const [reg, dai, profs, mats] = await Promise.all([
         supabase.from('mocks').select('*'),
         supabase.from('daily_mocks').select('*'),
-        supabase.from('profiles').select('*'), 
+        supabase.from('profiles').select('*'),
+        supabase.from('study_materials').select('*').order('created_at', { ascending: false }) 
       ]);
 
       setRegularMocks(reg.data || []);
       setDailyMocks(dai.data || []);
+      setLibraryResources(mats.data || []);
       
       const civilianNodes = (profs.data || []).filter(u => u.username?.toLowerCase() !== 'thebrain');
       setAllUsers(civilianNodes);
@@ -110,7 +115,6 @@ export default function AdminPanel({ user, isDarkMode }) {
         questions: parsedQuestions,
         is_strict: isStrict,
         time_limit: parseInt(timeLimit) || 10,
-        // 🔥 CRITICAL FIX: Save the owner's ID
         created_by: user.id,
         ...(isDailyQuickMock && { is_daily: true, mock_date: today })
       };
@@ -131,14 +135,12 @@ export default function AdminPanel({ user, isDarkMode }) {
   const deleteMock = async (id, table) => {
     if (!window.confirm("Confirm deletion? This will also remove associated student scores.")) return;
     try {
-      // 1. Delete Scores first
       await supabase.from('scores').delete().eq('mock_id', id);
       
       if (table === 'daily_mocks') {
         await supabase.from('completed_daily_mocks').delete().eq('mock_id', id);
       }
 
-      // 2. Delete the Mock
       const { error } = await supabase.from(table).delete().eq('id', id);
       
       if (error) throw error;
@@ -168,22 +170,70 @@ export default function AdminPanel({ user, isDarkMode }) {
     fetchAdminData();
   };
 
-  const uploadResource = async () => {
+  // --- LIBRARY HANDLERS ---
+  const handleResourceSubmit = async () => {
     if (!bookTitle || !bookUrl) return alert("Data missing.");
-    const { error } = await supabase.from('study_materials').insert([
-      { 
-        title: bookTitle, 
-        file_url: bookUrl, 
-        category: bookCategory 
+    
+    if (editingResourceId) {
+      const { error } = await supabase.from('study_materials').update({
+        title: bookTitle,
+        file_url: bookUrl,
+        category: bookCategory,
+        created_by: editingResourceCreator 
+      }).eq('id', editingResourceId);
+
+      if (error) {
+        alert(`Update Error: ${error.message}`);
+      } else {
+        alert("Resource Updated Successfully.");
+        cancelEditResource();
+        fetchAdminData();
       }
-    ]);
-    if (error) alert(`Upload Error: ${error.message}`);
-    else {
-      setBookTitle(''); setBookUrl(''); 
-      alert("Knowledge Synced to Library.");
+    } else {
+      const { error } = await supabase.from('study_materials').insert([
+        { 
+          title: bookTitle, 
+          file_url: bookUrl, 
+          category: bookCategory,
+          created_by: user.id 
+        }
+      ]);
+
+      if (error) {
+        alert(`Upload Error: ${error.message}`);
+      } else {
+        setBookTitle(''); setBookUrl(''); 
+        setBookCategory('Computer Science');
+        alert("Knowledge Synced to Library.");
+        fetchAdminData();
+      }
     }
   };
 
+  const handleEditResource = (resource) => {
+    setEditingResourceId(resource.id);
+    setEditingResourceCreator(resource.created_by);
+    setBookTitle(resource.title);
+    setBookUrl(resource.file_url);
+    setBookCategory(resource.category || 'Computer Science');
+  };
+
+  const cancelEditResource = () => {
+    setEditingResourceId(null);
+    setEditingResourceCreator(null);
+    setBookTitle('');
+    setBookUrl('');
+    setBookCategory('Computer Science');
+  };
+
+  const deleteResource = async (id) => {
+    if (!window.confirm("Delete this resource from the library permanently?")) return;
+    const { error } = await supabase.from('study_materials').delete().eq('id', id);
+    if (error) alert(`Delete Error: ${error.message}`);
+    else fetchAdminData();
+  };
+
+  // --- SYSTEM HANDLERS ---
   const setPermission = async (userId, level) => {
     if (!isRoot) return;
     const updates = { 
@@ -280,7 +330,6 @@ export default function AdminPanel({ user, isDarkMode }) {
                     {regularMocks.map(m => (
                       <div key={m.id} className={`p-3 rounded-xl flex justify-between items-center group transition-all border ${isDarkMode ? 'bg-slate-800 border-slate-700' : 'bg-slate-50 border-transparent hover:border-blue-500/30'}`}>
                         <div><p className={`font-bold text-[10px] uppercase truncate w-24 ${theme.text}`}>{m.mock_title}</p><p className="text-[8px] font-bold text-slate-400 uppercase">{m.time_limit}m</p></div>
-                        {/* 🔥 CHECK OWNERSHIP BEFORE SHOWING DELETE */}
                         {(isRoot || m.created_by === user.id) && (
                           <button onClick={() => deleteMock(m.id, 'mocks')} className="p-1.5 text-slate-400 hover:text-red-500"><Trash2 size={14}/></button>
                         )}
@@ -294,7 +343,6 @@ export default function AdminPanel({ user, isDarkMode }) {
                     {dailyMocks.filter(m => m.mock_date === todayStr).map(m => (
                       <div key={m.id} className={`p-3 rounded-xl flex justify-between items-center group transition-all border ${isDarkMode ? 'bg-slate-800 border-slate-700' : 'bg-orange-50 border-transparent hover:border-red-500/30'}`}>
                         <div><p className={`font-bold text-[10px] uppercase truncate w-24 ${theme.text}`}>{m.mock_title}</p><p className="text-[8px] font-bold text-slate-400 uppercase">{m.time_limit}m</p></div>
-                        {/* 🔥 CHECK OWNERSHIP BEFORE SHOWING DELETE */}
                         {(isRoot || m.created_by === user.id) && (
                            <button onClick={() => deleteMock(m.id, 'daily_mocks')} className="p-1.5 text-slate-400 hover:text-red-500"><Trash2 size={14}/></button>
                         )}
@@ -308,7 +356,6 @@ export default function AdminPanel({ user, isDarkMode }) {
 
         {/* RIGHT: TOOLS */}
         <div className="space-y-8 h-full">
-          {/* ... (Keep existing Invite Generator & Library Code exactly as is) ... */}
           <div className={`p-8 rounded-[32px] shadow-xl border transition-colors ${theme.bg} ${theme.border}`}>
             <div className="flex items-center gap-3 mb-6 text-indigo-600"><Key size={32} /><h2 className={`text-2xl font-black uppercase ${theme.text}`}>Invite Generator</h2></div>
             <div className="mb-6 space-y-4">
@@ -327,14 +374,50 @@ export default function AdminPanel({ user, isDarkMode }) {
 
           <div className={`p-8 rounded-[32px] shadow-xl border transition-colors ${theme.bg} ${theme.border}`}>
             <div className="flex items-center gap-3 mb-6 text-orange-500"><BookOpen size={32} /><h2 className={`text-2xl font-black uppercase ${theme.text}`}>Library</h2></div>
+            
+            {/* LIBRARY FORM */}
             <div className="space-y-4">
               <input className={`w-full p-4 rounded-2xl border outline-none transition-colors ${theme.input} ${theme.border}`} placeholder="Resource Title" value={bookTitle} onChange={e => setBookTitle(e.target.value)} />
               <select className={`w-full p-4 rounded-2xl border outline-none transition-colors cursor-pointer ${theme.input} ${theme.border}`} value={bookCategory} onChange={e => setBookCategory(e.target.value)}>
                 {librarySubjects.map(sub => <option key={sub} value={sub}>{sub}</option>)}
               </select>
               <input className={`w-full p-4 rounded-2xl border outline-none transition-colors ${theme.input} ${theme.border}`} placeholder="PDF URL" value={bookUrl} onChange={e => setBookUrl(e.target.value)} />
-              <button onClick={uploadResource} className="w-full bg-orange-500 text-white py-4 rounded-2xl font-black uppercase shadow-lg transition-all active:scale-95 hover:bg-orange-600">Upload Resource</button>
+              
+              <div className="flex gap-2">
+                <button onClick={handleResourceSubmit} className="flex-1 bg-orange-500 text-white py-4 rounded-2xl font-black uppercase shadow-lg transition-all active:scale-95 hover:bg-orange-600">
+                  {editingResourceId ? 'Update Resource' : 'Upload Resource'}
+                </button>
+                {editingResourceId && (
+                  <button onClick={cancelEditResource} className={`px-6 py-4 rounded-2xl font-black uppercase transition-all ${isDarkMode ? 'bg-slate-800 text-slate-300 hover:bg-slate-700' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'}`}>
+                    Cancel
+                  </button>
+                )}
+              </div>
             </div>
+
+            {/* UPLOADED RESOURCES LIST */}
+            {libraryResources.length > 0 && (
+              <div className={`mt-6 pt-6 border-t space-y-3 ${theme.border}`}>
+                <p className="text-[10px] font-black uppercase text-orange-400 flex items-center gap-2"><ListFilter size={14}/> Uploaded Resources</p>
+                <div className="max-h-40 overflow-y-auto custom-scrollbar space-y-2 pr-2">
+                  {libraryResources.map(res => (
+                    <div key={res.id} className={`p-3 rounded-xl flex justify-between items-center group transition-all border ${isDarkMode ? 'bg-slate-800 border-slate-700' : 'bg-orange-50 border-transparent hover:border-orange-500/30'}`}>
+                      <div className="overflow-hidden pr-2">
+                        <p className={`font-bold text-xs truncate ${theme.text}`}>{res.title}</p>
+                        <p className="text-[9px] font-bold text-slate-400 uppercase mt-0.5">{res.category}</p>
+                      </div>
+                      
+                      {(isRoot || res.created_by === user.id) && (
+                        <div className="flex items-center gap-1 shrink-0">
+                          <button onClick={() => handleEditResource(res)} className="p-2 text-slate-400 hover:text-blue-500 transition-colors"><Edit2 size={14}/></button>
+                          <button onClick={() => deleteResource(res.id)} className="p-2 text-slate-400 hover:text-red-500 transition-colors"><Trash2 size={14}/></button>
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
         </div>
       </div>

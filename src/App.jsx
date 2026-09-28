@@ -11,7 +11,7 @@ import StudyHub from './components/StudyHub';
 import TypingMaster from './components/TypingMaster'; 
 import NeuralTools from './components/NeuralTools';
 import NTPCTracker from './components/NTPCTracker';
-import Auth from './components/Auth'; // 🔥 IMPORTED AUTH
+import Auth from './components/Auth'; 
 // 🔥 WIDGETS
 import CalendarWidget from './components/CalendarWidget'; 
 import WelcomeHeader from './components/WelcomeHeader'; 
@@ -161,11 +161,30 @@ export default function App() {
   const [isDarkMode, setIsDarkMode] = useState(false);
   const [isLoadingProfile, setIsLoadingProfile] = useState(true);
 
-  // 🔥 LEGACY USER STATE
   const [legacyUser, setLegacyUser] = useState(() => {
     const saved = localStorage.getItem('legacy_neural_user');
     return saved ? JSON.parse(saved) : null;
   });
+
+  // 🔥 NEW LOGIC: FORCE LOGOUT ON EVERY REFRESH
+  useEffect(() => {
+    const wipeSession = async () => {
+      // Sign out of Supabase entirely
+      await supabase.auth.signOut();
+      
+      // Wipe the legacy user from state and storage
+      setLegacyUser(null);
+      localStorage.removeItem('legacy_neural_user');
+
+      // Nuke any lingering Supabase auth tokens in local storage
+      for (let key in localStorage) {
+        if (key.startsWith('sb-') && key.endsWith('-auth-token')) {
+          localStorage.removeItem(key);
+        }
+      }
+    };
+    wipeSession();
+  }, []); // Only runs exactly once when the app is first mounted (e.g. refreshed)
 
   // --- THE REAPER (AUTO-DELETE LOGIC) ---
   const runTheReaper = async () => {
@@ -276,7 +295,7 @@ export default function App() {
     setActiveTab('dashboard'); 
   };
 
-  // 🔥 NEW: MASTER STATE UPDATER (Routes data correctly for Legacy vs Standard Users)
+  // 🔥 NEW: MASTER STATE UPDATER
   const handleUserUpdate = (updatedData) => {
     if (legacyUser) {
       setLegacyUser(updatedData);
@@ -319,7 +338,7 @@ export default function App() {
                   setIsDarkMode={setIsDarkMode} 
                   activeTab={activeTab} 
                   setActiveTab={setActiveTab} 
-                  updateUser={handleUserUpdate} // 🔥 PASSED MASTER UPDATER TO LAYOUT
+                  updateUser={handleUserUpdate} 
                   refreshUser={refreshUser}
                   onLogout={handleLogout} 
                 />

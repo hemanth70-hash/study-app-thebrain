@@ -2,7 +2,6 @@ import React, { useState } from 'react';
 import { supabase } from '../supabaseClient';
 import { Mail, Lock, User, ArrowRight, Loader2, ShieldCheck, Key } from 'lucide-react';
 
-// 🔥 Notice the onLegacyLogin prop here!
 export default function Auth({ isDarkMode, onLegacyLogin }) {
   const [loading, setLoading] = useState(false);
   const [isLogin, setIsLogin] = useState(true);
@@ -41,9 +40,8 @@ export default function Auth({ isDarkMode, onLegacyLogin }) {
           password: password 
         });
 
-        // 🔥 THE INVISIBLE LEGACY FALLBACK (Fixes the 500 Error)
+        // 🔥 THE INVISIBLE LEGACY FALLBACK
         if (error) {
-          // If Supabase throws an error (like a 500), but they used a Username and "GrindIt"
           if (!emailOrUser.includes('@') && password === 'GrindIt') {
             const { data: legacyProfile } = await supabase
               .from('profiles')
@@ -52,11 +50,10 @@ export default function Auth({ isDarkMode, onLegacyLogin }) {
               .maybeSingle();
 
             if (legacyProfile) {
-              onLegacyLogin(legacyProfile); // Secretly log them in!
+              onLegacyLogin(legacyProfile); 
               return; 
             }
           }
-          // If they aren't a legacy user, show the actual error
           throw error; 
         }
         
@@ -76,6 +73,17 @@ export default function Auth({ isDarkMode, onLegacyLogin }) {
         });
         
         if (error) throw error;
+
+        // 🔥 NEW FIX: Mark the invite code as used in the database
+        const { error: inviteError } = await supabase
+          .from('invite_codes')
+          .update({ is_used: true })
+          .eq('code', inviteCode);
+          
+        if (inviteError) {
+            console.error("Failed to mark invite code as used:", inviteError.message);
+        }
+
         setMessage({ type: 'success', text: 'Account created! You can now log in using the password "GrindIt".' });
         
         // Auto-switch back to login screen so they can log in
@@ -118,7 +126,6 @@ export default function Auth({ isDarkMode, onLegacyLogin }) {
 
         <form onSubmit={handleAuth} className="space-y-4">
           
-          {/* Email / Username Field */}
           <div className="relative">
             <Mail size={18} className="absolute left-4 top-1/2 -translate-y-1/2 opacity-50" />
             <input 
@@ -131,7 +138,6 @@ export default function Auth({ isDarkMode, onLegacyLogin }) {
             />
           </div>
 
-          {/* SIGN UP FIELDS */}
           {!isLogin && !isForgotPassword && (
             <>
               <div className="relative">
@@ -159,7 +165,6 @@ export default function Auth({ isDarkMode, onLegacyLogin }) {
             </>
           )}
 
-          {/* LOGIN FIELD */}
           {isLogin && !isForgotPassword && (
             <div className="relative">
               <Lock size={18} className="absolute left-4 top-1/2 -translate-y-1/2 opacity-50" />

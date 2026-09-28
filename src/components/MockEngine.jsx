@@ -6,6 +6,14 @@ import {
 } from 'lucide-react';
 
 export default function MockEngine({ user, onFinish, setIsExamLocked, setIsDarkMode, isDarkMode }) {
+ 
+
+  useEffect(() => {
+  localStorage.setItem('isMockActive', 'true');
+  return () => localStorage.setItem('isMockActive', 'false'); // Disables exception when you leave the mock
+}, []);
+
+
   // --- STATE MANAGEMENT ---
   const [availableMocks, setAvailableMocks] = useState([]);
   const [filteredMocks, setFilteredMocks] = useState([]); 
