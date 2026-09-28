@@ -7,12 +7,10 @@ import {
 
 export default function MockEngine({ user, onFinish, setIsExamLocked, setIsDarkMode, isDarkMode }) {
  
-
   useEffect(() => {
   localStorage.setItem('isMockActive', 'true');
   return () => localStorage.setItem('isMockActive', 'false'); // Disables exception when you leave the mock
 }, []);
-
 
   // --- STATE MANAGEMENT ---
   const [availableMocks, setAvailableMocks] = useState([]);
@@ -225,7 +223,6 @@ export default function MockEngine({ user, onFinish, setIsExamLocked, setIsDarkM
       }
 
       // 🔥 FIX: The Ultimate Unwrapper
-      // Detects if the payload is wrapped inside a "questions" key at the root level and unwraps it instantly.
       if (typeof rawData === 'object' && !Array.isArray(rawData) && rawData.questions) {
           rawData = rawData.questions;
       }
@@ -234,7 +231,6 @@ export default function MockEngine({ user, onFinish, setIsExamLocked, setIsDarkM
 
       // Detect the structure format
       if (Array.isArray(rawData)) {
-          // Format A: Array of Modules (e.g., [{"subject": "Math", "questions": [...]}])
           const isCategorized = rawData.some(item => (item.subject || item.Subject) && (item.questions || item.Questions));
           
           if (isCategorized) {
@@ -243,7 +239,6 @@ export default function MockEngine({ user, onFinish, setIsExamLocked, setIsDarkM
                   questions: sanitizeQuestions(sub.questions || sub.Questions)
               })).filter(sub => sub.questions.length > 0);
           } else {
-              // Format B: Flat array of questions
               finalSubjects = [{
                   subject: "General Module",
                   questions: sanitizeQuestions(rawData)
@@ -251,10 +246,8 @@ export default function MockEngine({ user, onFinish, setIsExamLocked, setIsDarkM
           }
       } else if (typeof rawData === 'object') {
           if (rawData.question || rawData.Question || rawData.text) {
-             // Format C: Single question object
              finalSubjects = [{ subject: "General Module", questions: sanitizeQuestions([rawData]) }];
           } else {
-             // Format D: Dictionary format (e.g., {"Module 1": [...], "Module 2": [...]})
              finalSubjects = Object.keys(rawData).map(key => {
                  if (key === 'is_strict' || key === 'mock_title' || key === 'time_limit') return null;
                  return {
@@ -588,6 +581,8 @@ export default function MockEngine({ user, onFinish, setIsExamLocked, setIsDarkM
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
+        
+        {/* --- LEFT SIDE: QUESTION AREA --- */}
         <div className={`lg:col-span-3 p-10 rounded-[3rem] shadow-2xl border relative transition-colors ${isDarkMode ? 'bg-slate-800 border-slate-700' : 'bg-white border-gray-100'}`}>
           {selectedMock.is_strict && <div className="absolute top-6 right-10 text-red-500 font-black text-[10px] uppercase flex items-center gap-2 animate-pulse"><ShieldAlert size={14} /> Strikes: {warnings}/2</div>}
           
@@ -628,18 +623,38 @@ export default function MockEngine({ user, onFinish, setIsExamLocked, setIsDarkM
           </div>
         </div>
 
-        <div className={`p-8 rounded-[3rem] shadow-xl border text-center transition-colors flex flex-col h-full ${isDarkMode ? 'bg-slate-800 border-slate-700' : 'bg-white border-gray-100'}`}>
-          <p className="text-[10px] font-black uppercase text-gray-400 mb-6 tracking-widest border-b pb-4 dark:border-slate-700">{activeSubject} Palette</p>
-          <div className="grid grid-cols-4 gap-2 mb-8 flex-1 overflow-y-auto pr-2 custom-scrollbar">
+        {/* --- RIGHT SIDE: COMPACT, STICKY PALETTE MODULE --- */}
+        <div className={`p-6 rounded-[3rem] shadow-xl border text-center transition-colors flex flex-col h-fit sticky top-6 ${isDarkMode ? 'bg-slate-800 border-slate-700' : 'bg-white border-gray-100'}`}>
+          <p className="text-[10px] font-black uppercase text-gray-400 mb-4 tracking-widest border-b pb-3 dark:border-slate-700">{activeSubject} Palette</p>
+          
+          <div className="h-48 grid grid-cols-4 gap-2 mb-4 content-start overflow-y-auto pr-2 custom-scrollbar">
             {activeSubQuestions.map((_, i) => {
               const absIdx = getAbsIdx(activeSubject, i);
               const isDone = selectedOptions[absIdx] !== undefined;
               return (
                 <button key={i} onClick={() => setCurrentIdx(i)} 
-                  className={`aspect-square rounded-xl font-black text-xs transition-all ${currentIdx === i ? 'ring-2 ring-blue-500 ring-offset-2 scale-110' : ''} ${isDone ? 'bg-green-500 text-white shadow-md' : `${isDarkMode ? 'bg-slate-900 text-slate-600 hover:bg-slate-700' : 'bg-gray-100 text-gray-400 hover:bg-gray-200'}`}`}>{i + 1}</button>
+                  className={`aspect-square rounded-xl font-black text-xs transition-all flex items-center justify-center ${currentIdx === i ? 'ring-2 ring-blue-500 ring-offset-2 scale-105' : ''} ${isDone ? 'bg-green-500 text-white shadow-md' : `${isDarkMode ? 'bg-slate-900 text-slate-600 hover:bg-slate-700' : 'bg-gray-100 text-gray-400 hover:bg-gray-200'}`}`}>{i + 1}</button>
               )
             })}
           </div>
+
+          <div className="grid grid-cols-2 gap-2 mb-4">
+            <button 
+              disabled={currentIdx === 0} 
+              onClick={() => setCurrentIdx(prev => prev - 1)} 
+              className={`py-3 rounded-xl font-black uppercase text-[10px] transition-all disabled:opacity-30 ${isDarkMode ? 'bg-slate-900 text-slate-300 hover:bg-slate-700' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'}`}
+            >
+              Prev
+            </button>
+            <button 
+              disabled={currentIdx === activeSubQuestions.length - 1} 
+              onClick={() => setCurrentIdx(prev => prev + 1)} 
+              className={`py-3 rounded-xl font-black uppercase text-[10px] transition-all disabled:opacity-30 ${isDarkMode ? 'bg-slate-900 text-slate-300 hover:bg-slate-700' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'}`}
+            >
+              Next
+            </button>
+          </div>
+
           <button onClick={() => { if(window.confirm("Submit final neural transmission?")) handleSubmit(false); }} className="w-full mt-auto bg-red-600 text-white py-4 rounded-2xl font-black uppercase text-xs shadow-xl active:scale-95 transition-all hover:bg-red-700">Submit Full Test</button>
         </div>
       </div>

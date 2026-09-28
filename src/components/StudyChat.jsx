@@ -16,9 +16,7 @@ export default function StudyChat({ user, isDarkMode }) {
   const [file, setFile] = useState(null);
   const [uploading, setUploading] = useState(false);
   const [activeReactionId, setActiveReactionId] = useState(null);
-  
-  // 🔥 NEW: State for Reaction Details Modal
-  const [viewingReaction, setViewingReaction] = useState(null); // { emoji: '❤️', details: [...] }
+  const [viewingReaction, setViewingReaction] = useState(null); 
 
   const scrollRef = useRef();
   const fileInputRef = useRef();
@@ -29,7 +27,8 @@ export default function StudyChat({ user, isDarkMode }) {
   useEffect(() => {
     fetchMessages();
 
-    const channel = supabase
+    // 🔴 CHANNEL 1: Chat Messages & Typing (Local to this component)
+    const chatChannel = supabase
       .channel('public:study_chat')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'study_chat' }, 
         (payload) => {
@@ -48,16 +47,28 @@ export default function StudyChat({ user, isDarkMode }) {
           });
         }, 3000);
       })
-      .on('presence', { event: 'sync' }, () => {
-        setOnlineCount(Object.keys(channel.presenceState()).length);
-      })
-      .subscribe(async (status) => {
-        if (status === 'SUBSCRIBED') {
-          await channel.track({ user: user.username, online_at: new Date().toISOString() });
-        }
-      });
+      .subscribe();
 
-    return () => supabase.removeChannel(channel);
+    // 🟢 CHANNEL 2: Global Presence (Listens for users anywhere in the app)
+    const presenceChannel = supabase
+      .channel('global_presence')
+      .on('presence', { event: 'sync' }, () => {
+        const state = presenceChannel.presenceState();
+        const uniqueUsers = new Set();
+        
+        // Ensure multiple tabs from the same user don't inflate the online count
+        Object.values(state).flat().forEach(presence => {
+          if (presence.user) uniqueUsers.add(presence.user);
+        });
+        
+        setOnlineCount(Math.max(1, uniqueUsers.size)); 
+      })
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(chatChannel);
+      supabase.removeChannel(presenceChannel);
+    };
   }, [user.username]);
 
   useEffect(() => {
@@ -114,15 +125,11 @@ export default function StudyChat({ user, isDarkMode }) {
     await supabase.from('study_chat').update({ is_pinned: !msg.is_pinned }).eq('id', msg.id);
   };
 
-  // 🔥 UPDATED REACTION LOGIC (Stores Timestamp)
   const addReaction = async (msg, emoji) => {
     const currentReactions = msg.reactions || {};
     const myReaction = currentReactions[user.username];
-
-    // Check if user already reacted (handle both old string format and new object format)
     const currentEmoji = typeof myReaction === 'string' ? myReaction : myReaction?.emoji;
 
-    // Toggle: If clicking same emoji -> Delete. If different -> Update.
     if (currentEmoji === emoji) {
       delete currentReactions[user.username];
     } else {
@@ -136,13 +143,11 @@ export default function StudyChat({ user, isDarkMode }) {
     setActiveReactionId(null);
   };
 
-  // 🔥 HELPER: Process reactions for display
   const getReactionGroups = (reactions) => {
     if (!reactions) return [];
     
     const groups = {};
     Object.entries(reactions).forEach(([username, data]) => {
-      // Handle legacy string data vs new object data
       const emoji = typeof data === 'string' ? data : data.emoji;
       const time = typeof data === 'string' ? null : data.timestamp;
       
@@ -150,7 +155,7 @@ export default function StudyChat({ user, isDarkMode }) {
       groups[emoji].push({ username, time });
     });
 
-    return Object.entries(groups); // [['❤️', [{user, time}, ...]], ...]
+    return Object.entries(groups); 
   };
 
   // --- STYLES ---
@@ -236,7 +241,7 @@ export default function StudyChat({ user, isDarkMode }) {
                     {reactionGroups.map(([emoji, details]) => (
                       <button 
                         key={emoji} 
-                        onClick={() => setViewingReaction({ emoji, details })} // Open Details Modal
+                        onClick={() => setViewingReaction({ emoji, details })} 
                         className="bg-white dark:bg-slate-800 shadow-md border border-gray-200 dark:border-slate-700 px-1.5 rounded-full text-[9px] flex items-center gap-0.5 hover:scale-110 transition-transform"
                       >
                         <span>{emoji}</span>

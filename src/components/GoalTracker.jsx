@@ -10,53 +10,72 @@ const AUDIO_RESET = new Audio('/sounds/reset%20sound.mp3');
 const MAX_SCALE_SECONDS = 24 * 3600; 
 
 // ============================================================================
-// 🌍 GLOBAL BACKGROUND ENGINE (Runs independent of component lifecycle)
+// 🌍 GLOBAL BACKGROUND ENGINE (User-Isolated)
 // ============================================================================
 let bgInterval = null;
+let currentUserId = null; // Dynamically set when component mounts
 const subscribers = new Set();
 
-// 1. Catch up missed time (in case the browser was completely closed)
+const defaultState = {
+  timeLeft: 0,
+  isActive: false,
+  mode: 'FOCUS',
+  breaks: [],
+  activeBreak: null,
+  breakTimeLeft: 0,
+  soundEnabled: true
+};
+
+// 1. Catch up missed time for the specific user
 const catchUpTime = () => {
+  if (!currentUserId) return;
+  const prefix = `gt_${currentUserId}_`;
   const now = Date.now();
-  const lastTick = parseInt(localStorage.getItem('gt_lastTick') || now.toString());
-  const wasActive = localStorage.getItem('gt_isActive') === 'true';
-  const mode = localStorage.getItem('gt_mode') || 'FOCUS';
+  const lastTick = parseInt(localStorage.getItem(prefix + 'lastTick') || now.toString());
+  const wasActive = localStorage.getItem(prefix + 'isActive') === 'true';
+  const mode = localStorage.getItem(prefix + 'mode') || 'FOCUS';
   
   if (wasActive && mode === 'FOCUS') {
-    const savedTime = parseInt(localStorage.getItem('gt_timeLeft') || '0');
+    const savedTime = parseInt(localStorage.getItem(prefix + 'timeLeft') || '0');
     const passed = Math.floor((now - lastTick) / 1000);
-    localStorage.setItem('gt_timeLeft', Math.max(0, savedTime - passed).toString());
+    localStorage.setItem(prefix + 'timeLeft', Math.max(0, savedTime - passed).toString());
   } else if (mode === 'BREAK') {
-    const savedBreakTime = parseInt(localStorage.getItem('gt_breakTimeLeft') || '0');
+    const savedBreakTime = parseInt(localStorage.getItem(prefix + 'breakTimeLeft') || '0');
     const passed = Math.floor((now - lastTick) / 1000);
-    localStorage.setItem('gt_breakTimeLeft', Math.max(0, savedBreakTime - passed).toString());
+    localStorage.setItem(prefix + 'breakTimeLeft', Math.max(0, savedBreakTime - passed).toString());
   }
-  localStorage.setItem('gt_lastTick', now.toString());
+  localStorage.setItem(prefix + 'lastTick', now.toString());
 };
-catchUpTime();
 
-// 2. State Management Helpers
-const getGlobalState = () => ({
-  timeLeft: parseInt(localStorage.getItem('gt_timeLeft') || '0'),
-  isActive: localStorage.getItem('gt_isActive') === 'true',
-  mode: localStorage.getItem('gt_mode') || 'FOCUS',
-  breaks: JSON.parse(localStorage.getItem('gt_breaks') || '[]'),
-  activeBreak: JSON.parse(localStorage.getItem('gt_activeBreak') || 'null'),
-  breakTimeLeft: parseInt(localStorage.getItem('gt_breakTimeLeft') || '0'),
-  soundEnabled: localStorage.getItem('gt_soundEnabled') !== 'false'
-});
+// 2. State Management Helpers (User-Isolated)
+const getGlobalState = () => {
+  if (!currentUserId) return defaultState;
+  const prefix = `gt_${currentUserId}_`;
+  
+  return {
+    timeLeft: parseInt(localStorage.getItem(prefix + 'timeLeft') || '0'),
+    isActive: localStorage.getItem(prefix + 'isActive') === 'true',
+    mode: localStorage.getItem(prefix + 'mode') || 'FOCUS',
+    breaks: JSON.parse(localStorage.getItem(prefix + 'breaks') || '[]'),
+    activeBreak: JSON.parse(localStorage.getItem(prefix + 'activeBreak') || 'null'),
+    breakTimeLeft: parseInt(localStorage.getItem(prefix + 'breakTimeLeft') || '0'),
+    soundEnabled: localStorage.getItem(prefix + 'soundEnabled') !== 'false'
+  };
+};
 
 const setGlobalState = (updates) => {
+  if (!currentUserId) return;
+  const prefix = `gt_${currentUserId}_`;
   const next = { ...getGlobalState(), ...updates };
   
-  localStorage.setItem('gt_timeLeft', next.timeLeft.toString());
-  localStorage.setItem('gt_isActive', next.isActive.toString());
-  localStorage.setItem('gt_mode', next.mode);
-  localStorage.setItem('gt_breaks', JSON.stringify(next.breaks));
-  localStorage.setItem('gt_activeBreak', JSON.stringify(next.activeBreak));
-  localStorage.setItem('gt_breakTimeLeft', next.breakTimeLeft.toString());
-  localStorage.setItem('gt_soundEnabled', next.soundEnabled.toString());
-  localStorage.setItem('gt_lastTick', Date.now().toString());
+  localStorage.setItem(prefix + 'timeLeft', next.timeLeft.toString());
+  localStorage.setItem(prefix + 'isActive', next.isActive.toString());
+  localStorage.setItem(prefix + 'mode', next.mode);
+  localStorage.setItem(prefix + 'breaks', JSON.stringify(next.breaks));
+  localStorage.setItem(prefix + 'activeBreak', JSON.stringify(next.activeBreak));
+  localStorage.setItem(prefix + 'breakTimeLeft', next.breakTimeLeft.toString());
+  localStorage.setItem(prefix + 'soundEnabled', next.soundEnabled.toString());
+  localStorage.setItem(prefix + 'lastTick', Date.now().toString());
 
   subscribers.forEach(cb => cb(next));
 };
@@ -65,29 +84,28 @@ const setGlobalState = (updates) => {
 const startBackgroundEngine = () => {
   if (bgInterval) return;
   
-  // Request Native Notifications for when you are on other tabs
   if ("Notification" in window && Notification.permission === "default") {
     Notification.requestPermission();
   }
 
   bgInterval = setInterval(() => {
+    if (!currentUserId) return; // Do nothing if no user is set
+    
     const state = getGlobalState();
     const isMockActive = localStorage.getItem('isMockActive') === 'true'; 
+    const prefix = `gt_${currentUserId}_`;
     
-    // Always update last tick
-    localStorage.setItem('gt_lastTick', Date.now().toString());
+    localStorage.setItem(prefix + 'lastTick', Date.now().toString());
 
     if (state.isActive && state.mode === 'FOCUS' && state.timeLeft > 0) {
       const nextTime = state.timeLeft - 1;
       const hitBreak = state.breaks.find(b => Math.abs(b.triggerAt - nextTime) < 1 && !b.completed);
 
       if (hitBreak) {
-        // 🔥 BREAK INTERCEPTION
         if (state.soundEnabled) {
           AUDIO_BELL.currentTime = 0; AUDIO_BELL.play().catch(()=>{});
         }
         
-        // Notification Logic
         if (Notification.permission === 'granted') {
            if (isMockActive) {
              new Notification("Background Break Started", { body: "Your scheduled break hit, but you're in a Mock. Keep pushing!", icon: '/favicon.ico' });
@@ -104,7 +122,6 @@ const startBackgroundEngine = () => {
           timeLeft: nextTime
         });
       } else {
-        // Normal Tick
         if (state.soundEnabled && nextTime <= 60 && nextTime > 0) {
           AUDIO_TICK.currentTime = 0; AUDIO_TICK.play().catch(()=>{});
         }
@@ -112,7 +129,6 @@ const startBackgroundEngine = () => {
       }
 
     } else if (state.timeLeft <= 0 && state.isActive && state.mode === 'FOCUS') {
-      // Timer finished
       setGlobalState({ isActive: false, timeLeft: 0 });
       if (state.soundEnabled) AUDIO_ALARM.play().catch(()=>{});
       if (Notification.permission === 'granted') {
@@ -129,7 +145,6 @@ const startBackgroundEngine = () => {
     } 
     
     else if (state.mode === 'BREAK' && state.breakTimeLeft <= 0) {
-      // Break over
       let updatedBreaks = state.breaks;
       if (state.activeBreak) {
         updatedBreaks = state.breaks.map(b => b.id === state.activeBreak.id ? { ...b, completed: true } : b);
@@ -148,13 +163,19 @@ const startBackgroundEngine = () => {
   }, 1000);
 };
 
-startBackgroundEngine();
-
 // ============================================================================
 // 🎨 REACT VIEW COMPONENT
 // ============================================================================
-export default function GoalTracker({ isDarkMode }) {
-  const [state, setState] = useState(getGlobalState());
+export default function GoalTracker({ user, isDarkMode }) {
+  
+  // 🔥 Bind the background engine to the current user instantly on render
+  if (user && user.id && user.id !== currentUserId) {
+    currentUserId = user.id;
+    catchUpTime();
+    startBackgroundEngine();
+  }
+
+  const [state, setState] = useState(() => getGlobalState());
   const [showBreakForm, setShowBreakForm] = useState(false);
   const [breakConfig, setBreakConfig] = useState({ afterMins: 30, durationMins: 5 });
   const [showCelebration, setShowCelebration] = useState(false);
@@ -162,22 +183,24 @@ export default function GoalTracker({ isDarkMode }) {
   const prevTimeRef = useRef(state.timeLeft);
   const lastSoundTime = useRef(0); 
 
-  // Sync component with global background engine
   useEffect(() => {
+    // Sync UI with global engine
     const handleUpdate = (newState) => {
       setState(newState);
-      // Trigger visual celebration if timer just hit zero while focused
       if (prevTimeRef.current > 0 && newState.timeLeft === 0 && newState.mode === 'FOCUS') {
         setShowCelebration(true);
         setTimeout(() => setShowCelebration(false), 5000);
       }
       prevTimeRef.current = newState.timeLeft;
     };
+    
+    // Initial sync in case engine ticked before mount finished
+    setState(getGlobalState());
+    
     subscribers.add(handleUpdate);
     return () => subscribers.delete(handleUpdate);
-  }, []);
+  }, [user?.id]); // Re-sync if user changes
 
-  // Check if we are currently in a Mock test
   const isMockActive = localStorage.getItem('isMockActive') === 'true';
 
   // --- ACTIONS ---
