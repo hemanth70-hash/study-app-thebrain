@@ -1,6 +1,5 @@
 import React, { useState, useEffect } from 'react';
 import { supabase } from '../supabaseClient';
-
 import {
   Calendar as CalendarIcon,
   ChevronLeft,
@@ -18,59 +17,33 @@ export default function CalendarWidget({ isDarkMode, user }) {
   // =========================================================
   // STATE
   // =========================================================
-
   const [currentDate, setCurrentDate] = useState(new Date());
   const [activeView, setActiveView] = useState('calendar');
-
   const [events, setEvents] = useState([]);
-  const [userId, setUserId] = useState(user?.id || null);
-
+  const [userId, setUserId] = useState(null);
   const [selectedDate, setSelectedDate] = useState(null);
   const [isEditing, setIsEditing] = useState(false);
-
   const [notification, setNotification] = useState(null);
-
   const [editorLabel, setEditorLabel] = useState('');
   const [editorType, setEditorType] = useState('target');
-
   const [isSaving, setIsSaving] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
 
   // =========================================================
-  // BULLETPROOF USER ID RESOLVER
+  // FETCH USER + EVENTS (Proper Auth Implementation)
   // =========================================================
-  const resolveUserId = async () => {
-    if (user?.id) return user.id;
-    if (userId) return userId;
-    
-    // Check session cache
-    const { data } = await supabase.auth.getSession();
-    if (data?.session?.user?.id) return data.session.user.id;
-    
-    // Brute-force local storage for the Supabase auth token
-    try {
-      for (let i = 0; i < localStorage.length; i++) {
-        const key = localStorage.key(i);
-        if (key && key.includes('auth-token')) {
-          const val = JSON.parse(localStorage.getItem(key));
-          if (val?.user?.id) return val.user.id;
-        }
-      }
-    } catch (e) {
-      console.warn("Storage parse error bypassed.");
-    }
-    return null;
-  };
-
-  // =========================================================
-  // FETCH USER + EVENTS
-  // =========================================================
-
   useEffect(() => {
     const initSession = async () => {
       try {
-        const activeId = await resolveUserId();
-        if (!activeId) return;
+        // 1. Trust the passed prop first, fallback to native session
+        let activeId = user?.id;
+        
+        if (!activeId) {
+          const { data } = await supabase.auth.getSession();
+          activeId = data?.session?.user?.id;
+        }
+
+        if (!activeId) return; // Exit if no authenticated user
 
         setUserId(activeId);
 
@@ -82,21 +55,24 @@ export default function CalendarWidget({ isDarkMode, user }) {
           .order('month', { ascending: true })
           .order('day', { ascending: true });
 
-        if (!error && data) {
-          setEvents(data);
+        if (error) {
+          console.error("Error fetching events:", error.message);
+          return;
         }
+
+        if (data) setEvents(data);
+        
       } catch (error) {
-        console.error('Initialization error bypassed.');
+        console.error('Session initialization failed:', error);
       }
     };
 
     initSession();
-  }, [user]);
+  }, [user]); // Re-run whenever the user prop changes
 
   // =========================================================
   // TODAY NOTIFICATION
   // =========================================================
-
   useEffect(() => {
     if (!events.length) {
       setNotification(null);
@@ -130,7 +106,6 @@ export default function CalendarWidget({ isDarkMode, user }) {
   // =========================================================
   // CALENDAR HELPERS
   // =========================================================
-
   const year = currentDate.getFullYear();
   const month = currentDate.getMonth();
   const daysInMonth = new Date(year, month + 1, 0).getDate();
@@ -168,21 +143,23 @@ export default function CalendarWidget({ isDarkMode, user }) {
   };
 
   // =========================================================
-  // SAVE EVENT
+  // SAVE EVENT (With Explicit Error Handling)
   // =========================================================
-
   const saveEvent = async () => {
     if (isSaving || !selectedDate) return;
     const cleanLabel = editorLabel.trim();
     if (!cleanLabel) return;
+    
+    if (!userId) {
+      alert("Auth Error: No valid user session found.");
+      return;
+    }
 
     try {
       setIsSaving(true);
-      const activeId = await resolveUserId();
-      if (!activeId) return; // Fail silently without alert if somehow missing
 
       const payload = {
-        user_id: activeId,
+        user_id: userId,
         day: Number(selectedDate.day),
         month: Number(selectedDate.month),
         year: Number(selectedDate.year),
@@ -195,11 +172,13 @@ export default function CalendarWidget({ isDarkMode, user }) {
           .from('user_events')
           .update(payload)
           .eq('id', selectedDate.db_id)
-          .eq('user_id', activeId)
+          .eq('user_id', userId)
           .select()
           .single();
 
-        if (!error && data) {
+        if (error) throw error;
+        
+        if (data) {
           setEvents(prev => prev.map(event => event.id === selectedDate.db_id ? data : event));
         }
       } else {
@@ -209,7 +188,9 @@ export default function CalendarWidget({ isDarkMode, user }) {
           .select()
           .single();
 
-        if (!error && data) {
+        if (error) throw error;
+
+        if (data) {
           setEvents(prev => [...prev, data]);
         }
       }
@@ -217,38 +198,38 @@ export default function CalendarWidget({ isDarkMode, user }) {
       setIsEditing(false);
       setSelectedDate(null);
     } catch (error) {
-      console.error('Save error bypassed.');
+      console.error(error);
+      alert(`Failed to save: ${error.message}`);
     } finally {
       setIsSaving(false);
     }
   };
 
   // =========================================================
-  // DELETE EVENT
+  // DELETE EVENT (With Explicit Error Handling)
   // =========================================================
-
   const deleteEvent = async () => {
     if (isDeleting || !selectedDate?.db_id) return;
+    if (!userId) return;
 
     try {
       setIsDeleting(true);
-      const activeId = await resolveUserId();
-      if (!activeId) return;
 
       const { error } = await supabase
         .from('user_events')
         .delete()
         .eq('id', selectedDate.db_id)
-        .eq('user_id', activeId);
+        .eq('user_id', userId);
 
-      if (!error) {
-        setEvents(prev => prev.filter(event => event.id !== selectedDate.db_id));
-      }
+      if (error) throw error;
 
+      setEvents(prev => prev.filter(event => event.id !== selectedDate.db_id));
       setIsEditing(false);
       setSelectedDate(null);
+      
     } catch (error) {
-      console.error('Delete error bypassed.');
+      console.error(error);
+      alert(`Failed to delete: ${error.message}`);
     } finally {
       setIsDeleting(false);
     }
@@ -257,7 +238,6 @@ export default function CalendarWidget({ isDarkMode, user }) {
   // =========================================================
   // CHANGE MONTH & THEME
   // =========================================================
-
   const changeMonth = direction => {
     setCurrentDate(new Date(currentDate.getFullYear(), currentDate.getMonth() + direction, 1));
     setSelectedDate(null);
@@ -291,7 +271,6 @@ export default function CalendarWidget({ isDarkMode, user }) {
   // =========================================================
   // RENDER
   // =========================================================
-
   return (
     <div className={`w-full max-w-[300px] h-[380px] p-4 rounded-3xl shadow-xl border-b-4 border-indigo-600 flex flex-col relative overflow-hidden transition-colors duration-500 ${theme.bg} ${theme.text}`}>
 
