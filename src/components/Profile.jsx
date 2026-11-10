@@ -1,6 +1,6 @@
-import React, { useEffect, useState, useCallback } from 'react';
+import React, { useEffect, useState, useCallback, useMemo } from 'react';
 import { supabase } from '../supabaseClient';
-import jsPDF from 'jspdf';
+import { jsPDF } from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import { 
   Award, BookOpen, Clock, Zap, Trash2, ShieldAlert, 
@@ -8,7 +8,6 @@ import {
   ChevronDown, ChevronUp, GraduationCap, Target, Edit3, Activity, ShieldCheck, FileText, Download, Megaphone, ArrowRight, FileDown, Lock, Mail
 } from 'lucide-react';
 
-// 🔥 ADDED updateUser prop to sync with parent state
 export default function Profile({ user, isDarkMode, updateUser }) {
   // --- CORE STATES ---
   const [stats, setStats] = useState({ history: [] });
@@ -28,10 +27,34 @@ export default function Profile({ user, isDarkMode, updateUser }) {
   const [newEmail, setNewEmail] = useState('');
   const [securityMsg, setSecurityMsg] = useState({ type: '', text: '' });
 
-  // --- 1. NEURAL GPA & RANK LOGIC ---
+  // --- 1. UNIFIED MOCK HISTORY MERGE ---
   const lifetimeGPA = user.total_exams_completed > 0 
     ? (user.total_percentage_points / user.total_exams_completed).toFixed(1) 
     : 0;
+
+  // Unifies database scores and local profile regular results into one bulletproof list
+  const combinedHistory = useMemo(() => {
+    const items = [...stats.history];
+    
+    if (user.last_regular_result) {
+      const regTime = new Date(user.last_regular_result.created_at || user.last_regular_result.timestamp || Date.now()).getTime();
+      const exists = items.some(item => Math.abs(new Date(item.created_at || item.timestamp).getTime() - regTime) < 5000);
+      
+      if (!exists) {
+        items.push({
+          ...user.last_regular_result,
+          mock_title: user.last_regular_result.mock_title || user.last_regular_result.title || "Regular Mock",
+          created_at: user.last_regular_result.created_at || user.last_regular_result.timestamp || new Date().toISOString(),
+          is_daily: false,
+          id: 'reg-' + regTime
+        });
+      }
+    }
+    
+    return items.sort((a, b) => new Date(b.created_at || b.timestamp).getTime() - new Date(a.created_at || a.timestamp).getTime());
+  }, [stats.history, user.last_regular_result]);
+
+  const latestResult = combinedHistory.length > 0 ? combinedHistory[0] : null;
 
   const getNeuralRank = (gpa) => {
     if (gpa >= 95) return { label: 'Architect', color: isDarkMode ? 'text-purple-400 bg-purple-900/30 border-purple-800' : 'text-purple-500 bg-purple-50 border-purple-200' };
@@ -86,27 +109,39 @@ export default function Profile({ user, isDarkMode, updateUser }) {
 
   // --- 4. PDF GENERATION LOGIC ---
   const downloadPDF = (examData) => {
-    const result = examData || user.last_regular_result;
+    const result = examData || latestResult;
+    
     if (!result) {
       alert("No detailed report data available for this exam.");
       return;
     }
+
     const doc = new jsPDF();
     doc.setFontSize(18);
     doc.setTextColor(41, 128, 185);
-    doc.text(` PORTAL REPORT: ${user.username.toUpperCase()}`, 14, 20);
+    doc.text(`PORTAL REPORT: ${user.username.toUpperCase()}`, 14, 20);
+    
     doc.setFontSize(10);
     doc.setTextColor(100);
-    doc.text(`Exam Title: ${result.title || result.mock_title || 'Unknown Mock'}`, 14, 28);
+    doc.text(`Exam Title: ${result.mock_title || result.title || 'Unknown Mock'}`, 14, 28);
     doc.text(`Score: ${result.score}/${result.total || '?'}  |  Accuracy: ${result.percentage}%`, 14, 34);
-    doc.text(`Date: ${new Date(result.timestamp || result.created_at || Date.now()).toLocaleString()}`, 14, 40);
+    doc.text(`Date: ${new Date(result.created_at || result.timestamp || Date.now()).toLocaleString()}`, 14, 40);
 
-    if (result.breakdown && Array.isArray(result.breakdown)) {
-        const tableData = result.breakdown.map((item, index) => {
-            const questionText = item.question ? (item.question.substring(0, 50) + "...") : "Question Data Missing";
-            const userAns = item.selected_option || item.selected || item.selectedAnswer || "Not Attempted";
-            const correctAns = item.correct_answer || item.actual || item.correctAnswer || "N/A";
-            const status = item.status || "UNKNOWN";
+    let breakdownArray = result.breakdown;
+    if (typeof breakdownArray === 'string') {
+      try { breakdownArray = JSON.parse(breakdownArray); } 
+      catch (e) { breakdownArray = []; }
+    }
+
+    if (breakdownArray && Array.isArray(breakdownArray) && breakdownArray.length > 0) {
+        const tableData = breakdownArray.map((item, index) => {
+            const rawQuestion = String(item.question || "Question Data Missing");
+            const questionText = rawQuestion.length > 50 ? rawQuestion.substring(0, 50) + "..." : rawQuestion;
+            
+            const userAns = String(item.selected_option || item.selected || item.selectedAnswer || "Not Attempted");
+            const correctAns = String(item.correct_answer || item.actual || item.correctAnswer || "N/A");
+            const status = String(item.status || "UNKNOWN");
+            
             return [index + 1, questionText, userAns, correctAns, status];
         });
 
@@ -119,12 +154,13 @@ export default function Profile({ user, isDarkMode, updateUser }) {
             styles: { fontSize: 8 },
         });
     } else {
-        doc.text("Detailed question breakdown is not available for this legacy record.", 14, 50);
+        doc.text("Detailed question breakdown is not available for this record.", 14, 50);
     }
+    
     doc.save(`Test_Report_${user.username}_${Date.now()}.pdf`);
   };
 
-  // --- 5. DATA SYNC ---
+  // --- 5. DATA SYNC & REALTIME ---
   const fetchUserStats = useCallback(async () => {
     if (!user?.id) return;
     setLoading(true);
@@ -146,7 +182,22 @@ export default function Profile({ user, isDarkMode, updateUser }) {
 
   useEffect(() => {
     fetchUserStats();
-  }, [fetchUserStats]);
+
+    const scoreSub = supabase
+      .channel('realtime-scores')
+      .on(
+        'postgres_changes',
+        { event: 'INSERT', schema: 'public', table: 'scores', filter: `user_id=eq.${user?.id}` },
+        () => {
+          fetchUserStats(); 
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(scoreSub);
+    };
+  }, [user?.id, fetchUserStats]);
 
   const handleUpdate = async () => {
     setIsSaving(true);
@@ -163,7 +214,6 @@ export default function Profile({ user, isDarkMode, updateUser }) {
 
       if (error) throw error;
       
-      // 🔥 NEW: Push the updated data back to App.jsx so the Sidebar updates instantly
       if (updateUser) {
         updateUser({
           ...user,
@@ -174,7 +224,7 @@ export default function Profile({ user, isDarkMode, updateUser }) {
         });
       }
 
-      alert(" Identity Refined. Data synchronized.");
+      alert("Identity Refined. Data synchronized.");
       setShowTools(false);
     } catch (err) {
       alert(`Sync Error: ${err.message}`);
@@ -308,7 +358,7 @@ export default function Profile({ user, isDarkMode, updateUser }) {
       </div>
 
       {/* --- LATEST MOCK ANALYSIS --- */}
-      {(user.last_regular_result || stats.history.length > 0) && (
+      {latestResult && (
         <div className="bg-gradient-to-br from-indigo-900 to-blue-900 p-8 rounded-[32px] shadow-2xl text-white relative overflow-hidden animate-in slide-in-from-bottom-8">
           <div className="absolute top-0 right-0 p-32 bg-blue-500/20 rounded-full blur-3xl -translate-y-10 translate-x-10"></div>
           <div className="flex justify-between items-start mb-8 relative z-10">
@@ -317,9 +367,9 @@ export default function Profile({ user, isDarkMode, updateUser }) {
                 <FileText size={32} className="text-blue-300" />
               </div>
               <div>
-                <p className="text-[10px] font-black uppercase text-blue-300 tracking-widest">Latest Regular Mock</p>
-                <h3 className="text-2xl font-black uppercase tracking-tight">{user.last_regular_result?.title || stats.history[0]?.mock_title || "No Recent Mock"}</h3>
-                <p className="text-[10px] font-bold opacity-60">{new Date(user.last_regular_result?.timestamp || stats.history[0]?.created_at).toLocaleString()}</p>
+                <p className="text-[10px] font-black uppercase text-blue-300 tracking-widest">Latest Exam Result</p>
+                <h3 className="text-2xl font-black uppercase tracking-tight">{latestResult.mock_title || latestResult.title || "No Recent Mock"}</h3>
+                <p className="text-[10px] font-bold opacity-60">{new Date(latestResult.created_at || latestResult.timestamp).toLocaleString()}</p>
               </div>
             </div>
             <button onClick={() => downloadPDF(null)} className="flex items-center gap-2 bg-white text-blue-900 px-6 py-3 rounded-2xl font-black uppercase text-xs hover:scale-105 transition-all shadow-xl">
@@ -329,11 +379,11 @@ export default function Profile({ user, isDarkMode, updateUser }) {
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4 relative z-10">
             <div className="p-6 bg-black/20 rounded-3xl border border-white/5 backdrop-blur-sm">
               <p className="text-[10px] font-black uppercase text-blue-300 mb-2">Final Score</p>
-              <p className="text-4xl font-black">{user.last_regular_result?.score ?? stats.history[0]?.score} <span className="text-lg opacity-50">/ {user.last_regular_result?.total || '?'}</span></p>
+              <p className="text-4xl font-black">{latestResult.score} <span className="text-lg opacity-50">/ {latestResult.total || '?'}</span></p>
             </div>
             <div className="p-6 bg-black/20 rounded-3xl border border-white/5 backdrop-blur-sm">
               <p className="text-[10px] font-black uppercase text-green-300 mb-2">Accuracy Rate</p>
-              <p className="text-4xl font-black text-green-400">{user.last_regular_result?.percentage ?? stats.history[0]?.percentage}%</p>
+              <p className="text-4xl font-black text-green-400">{latestResult.percentage}%</p>
             </div>
             <div className="p-6 bg-black/20 rounded-3xl border border-white/5 backdrop-blur-sm">
               <p className="text-[10px] font-black uppercase text-orange-300 mb-2">Status</p>
@@ -351,7 +401,7 @@ export default function Profile({ user, isDarkMode, updateUser }) {
           </div>
           <div>
             <p className="text-[10px] font-black uppercase text-gray-400 tracking-widest">Lifetime Exams</p>
-            <h4 className="text-3xl font-black tracking-tighter">{user.total_exams_completed || 0}</h4>
+            <h4 className="text-3xl font-black tracking-tighter">{user.total_exams_completed || combinedHistory.length || 0}</h4>
           </div>
         </div>
         <div className="bg-gradient-to-br from-green-500 to-emerald-600 p-8 rounded-[2.5rem] shadow-xl text-white border-b-8 border-green-700 flex items-center gap-6 transition-all hover:scale-105">
@@ -361,18 +411,22 @@ export default function Profile({ user, isDarkMode, updateUser }) {
             <h4 className="text-3xl font-black tracking-tighter">{lifetimeGPA}%</h4>
           </div>
         </div>
+        
+        {/* --- DYNAMIC SPARKLINE CHART (LAST 15 EXAMS) --- */}
         <div className={`p-8 rounded-[2.5rem] shadow-xl border-b-8 border-purple-500 transition-all hover:scale-105 ${isDarkMode ? 'bg-gray-800 text-white' : 'bg-white text-gray-900'}`}>
-          <div className="flex items-center gap-3 mb-4">
+          <div className="flex items-center gap-3 mb-2">
              <Activity size={24} className="text-purple-500" />
-             <p className="text-[10px] font-black uppercase text-gray-400 tracking-widest">Trend</p>
+             <p className="text-[10px] font-black uppercase text-gray-400 tracking-widest">Trend (Last 15)</p>
           </div>
-          <div className="flex items-end gap-1.5 h-12">
-             {stats.history.slice(0, 7).reverse().map((s, i) => (
-               <div key={i} className="bg-purple-500/40 hover:bg-purple-600 w-full rounded-t-md transition-all duration-500 group relative cursor-help" style={{ height: `${s.percentage}%` }}>
-                  <div className="absolute -top-8 left-1/2 -translate-x-1/2 bg-black text-[8px] text-white px-1.5 py-1 rounded opacity-0 group-hover:opacity-100 transition-opacity z-20">{s.percentage}%</div>
+          <div className="flex items-end gap-1 h-14 w-full mt-2">
+             {combinedHistory.slice(0, 15).reverse().map((s, i) => (
+               <div key={i} className="bg-purple-500/40 hover:bg-purple-600 flex-1 rounded-t-sm transition-all duration-500 group relative cursor-crosshair" style={{ height: `${Math.max(s.percentage, 5)}%` }}>
+                  <div className="absolute -top-8 left-1/2 -translate-x-1/2 bg-black text-[8px] text-white px-2 py-1 rounded opacity-0 group-hover:opacity-100 transition-opacity z-20 whitespace-nowrap pointer-events-none">
+                    {s.percentage}% | {new Date(s.created_at || s.timestamp).toLocaleDateString('en-US', {month: 'short', day: 'numeric'})}
+                  </div>
                </div>
              ))}
-             {stats.history.length === 0 && <p className="text-[8px] text-gray-400 italic">No data yet</p>}
+             {combinedHistory.length === 0 && <p className="text-[8px] text-gray-400 italic">No data yet</p>}
           </div>
         </div>
       </div>
@@ -393,7 +447,7 @@ export default function Profile({ user, isDarkMode, updateUser }) {
                 <Loader2 className="animate-spin mb-4" size={48} />
                 <p className="font-black uppercase tracking-widest text-[10px]">Accessing History...</p>
               </div>
-          ) : stats.history.length > 0 ? (
+          ) : combinedHistory.length > 0 ? (
             <table className="w-full text-left">
               <thead>
                 <tr className="text-gray-400 text-[10px] font-black uppercase tracking-widest border-b">
@@ -405,15 +459,15 @@ export default function Profile({ user, isDarkMode, updateUser }) {
                 </tr>
               </thead>
               <tbody className={`divide-y ${isDarkMode ? 'divide-gray-700' : 'divide-gray-50'}`}>
-                {stats.history.map((item, i) => (
+                {combinedHistory.map((item, i) => (
                   <tr key={item.id || i} className={`transition-all group ${isDarkMode ? 'hover:bg-gray-900/50' : 'hover:bg-blue-50/30'}`}>
                     <td className="py-6 px-4">
                       <div className="flex flex-col text-left">
-                        <span className="text-lg font-bold tracking-tight">{item.mock_title}</span>
+                        <span className="text-lg font-bold tracking-tight">{item.mock_title || item.title}</span>
                         {item.is_daily && <span className="text-[8px] text-orange-500 font-black uppercase mt-1">Daily Sequence</span>}
                       </div>
                     </td>
-                    <td className="py-6 px-4 text-xs text-gray-500 font-bold uppercase">{new Date(item.created_at).toLocaleDateString()}</td>
+                    <td className="py-6 px-4 text-xs text-gray-500 font-bold uppercase">{new Date(item.created_at || item.timestamp).toLocaleDateString()}</td>
                     <td className="py-6 px-4">
                       <div className="flex items-center gap-2">
                         <span className="font-black text-2xl text-blue-600">{item.percentage}%</span>

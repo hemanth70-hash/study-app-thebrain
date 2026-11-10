@@ -26,7 +26,7 @@ export default function StudyHub({ user, isDarkMode }) {
   const [isFullscreen, setIsFullscreen] = useState(false);
   const workspaceRef = useRef(null);
 
-  // --- SEARCH STATES ---
+  // --- SEARCH & FILTER STATES ---
   const [showFilters, setShowFilters] = useState(false);
   const [filters, setFilters] = useState({ language: '', duration: 'any' });
   const [searchResults, setSearchResults] = useState([]);
@@ -55,7 +55,6 @@ export default function StudyHub({ user, isDarkMode }) {
     fetchChatHistory();
 
     const initializeProfileAndPresence = async () => {
-      // 1. Fetch exact username from the database
       let resolvedUsername = user.user_metadata?.username || user.email?.split('@')[0] || "Student";
       
       try {
@@ -74,7 +73,6 @@ export default function StudyHub({ user, isDarkMode }) {
 
       if (isMounted) setMyUsername(resolvedUsername);
 
-      // 2. Setup Presence with the confirmed username
       const presenceChannel = supabase.channel('study_hub_presence');
       
       presenceChannel
@@ -82,7 +80,6 @@ export default function StudyHub({ user, isDarkMode }) {
           const state = presenceChannel.presenceState();
           const users = Object.values(state).flat();
           
-          // Remove duplicates and FILTER OUT 'admin'
           const uniqueUsers = Array.from(new Map(users.map(u => [u.user_id, u])).values())
             .filter(u => u.username && u.username.toLowerCase() !== 'admin');
             
@@ -101,7 +98,6 @@ export default function StudyHub({ user, isDarkMode }) {
 
     initializeProfileAndPresence();
 
-    // 3. Subscribe to Global Chat
     const chatSub = supabase
       .channel('public:study_hub_chat')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'study_hub_chat' }, payload => {
@@ -124,7 +120,6 @@ export default function StudyHub({ user, isDarkMode }) {
     };
   }, [user.id]);
 
-  // Update presence whenever the video or username changes
   useEffect(() => {
     const presenceChannel = supabase.getChannels().find(c => c.topic === 'realtime:study_hub_presence');
     if (presenceChannel && myUsername) {
@@ -170,7 +165,7 @@ export default function StudyHub({ user, isDarkMode }) {
     } else {
       await supabase.from('study_hub_chat').insert([{
         user_id: user.id,
-        username: myUsername, // Uses the fetched profile username
+        username: myUsername,
         content: newMessage,
         watching_video_id: videoId,
         reply_to: replyingTo?.id || null
@@ -331,7 +326,7 @@ export default function StudyHub({ user, isDarkMode }) {
   return (
     <div className="space-y-6 pb-20 animate-in fade-in duration-700 relative">
       
-      {/* HEADER & SEARCH BAR */}
+      {/* HEADER & SEARCH BAR WITH FILTER DRAWER */}
       <div className={`p-6 rounded-[2.5rem] shadow-xl flex flex-col gap-4 border transition-colors duration-500 ${theme.bg} ${theme.border}`}>
         <div className="flex flex-wrap gap-4 items-center">
           <div className="flex-1 relative min-w-[300px]">
@@ -343,7 +338,11 @@ export default function StudyHub({ user, isDarkMode }) {
               onKeyDown={e => e.key === 'Enter' && handleSearchOrLoad()}
             />
             <Search className={`absolute left-4 top-4 ${theme.subText}`} size={20} />
-            <button onClick={() => setShowFilters(!showFilters)} className={`absolute right-4 top-4 transition-colors ${showFilters ? 'text-red-500' : theme.subText}`}>
+            <button 
+              onClick={() => setShowFilters(!showFilters)} 
+              title="Toggle Filters"
+              className={`absolute right-4 top-4 transition-colors ${showFilters ? 'text-red-500' : theme.subText}`}
+            >
               <Filter size={20} />
             </button>
           </div>
@@ -352,6 +351,46 @@ export default function StudyHub({ user, isDarkMode }) {
             {isSearching ? 'Searching...' : 'Load Lecture'}
           </button>
         </div>
+
+        {/* 🔥 NEW: Active Filter Controls Drawer */}
+        {showFilters && (
+          <div className={`p-4 rounded-2xl border flex flex-wrap gap-6 items-center animate-in slide-in-from-top-2 duration-300 ${theme.inputBg} ${theme.border}`}>
+            <div className="flex items-center gap-2">
+              <span className={`text-[10px] font-black uppercase tracking-widest ${theme.subText}`}>Language:</span>
+              <select 
+                value={filters.language} 
+                onChange={(e) => setFilters(prev => ({ ...prev, language: e.target.value }))}
+                className={`p-2 rounded-xl text-xs font-bold outline-none border ${theme.bg} ${theme.border} ${theme.text}`}
+              >
+                <option value="">Any Language</option>
+                <option value="en">English</option>
+                <option value="te">Telugu</option>
+                <option value="hi">Hindi</option>
+              </select>
+            </div>
+
+            <div className="flex items-center gap-2">
+              <span className={`text-[10px] font-black uppercase tracking-widest ${theme.subText}`}>Duration:</span>
+              <select 
+                value={filters.duration} 
+                onChange={(e) => setFilters(prev => ({ ...prev, duration: e.target.value }))}
+                className={`p-2 rounded-xl text-xs font-bold outline-none border ${theme.bg} ${theme.border} ${theme.text}`}
+              >
+                <option value="any">Any Duration</option>
+                <option value="short">Short (&lt; 4 mins)</option>
+                <option value="medium">Medium (4 - 20 mins)</option>
+                <option value="long">Long (&gt; 20 mins)</option>
+              </select>
+            </div>
+
+            <button 
+              onClick={() => setFilters({ language: '', duration: 'any' })} 
+              className="text-[10px] font-black uppercase tracking-widest text-red-500 hover:underline ml-auto"
+            >
+              Reset Filters
+            </button>
+          </div>
+        )}
       </div>
 
       {/* DYNAMIC WORKSPACE (THEATER / FULLSCREEN CONTAINER) */}
@@ -475,7 +514,6 @@ export default function StudyHub({ user, isDarkMode }) {
             className={`fixed flex flex-col z-[100] w-80 h-[500px] shadow-2xl rounded-2xl border backdrop-blur-xl overflow-hidden ${theme.chatBg}`}
             style={{ left: `${chatPos.x}px`, top: `${chatPos.y}px` }}
           >
-            {/* Chat Header (Draggable) */}
             <div 
               onMouseDown={handleDragStart} 
               className={`p-4 border-b flex justify-between items-center cursor-move ${isDarkMode ? 'border-slate-700 bg-slate-800/80' : 'border-gray-200 bg-gray-50/80'}`}
@@ -489,7 +527,6 @@ export default function StudyHub({ user, isDarkMode }) {
               </button>
             </div>
 
-            {/* Live Users Strip */}
             <div className={`p-3 border-b flex gap-3 overflow-x-auto custom-scrollbar ${isDarkMode ? 'border-slate-700 bg-slate-900' : 'border-gray-200 bg-white'}`}>
               <div className="flex items-center gap-2 shrink-0">
                 <Users size={14} className="text-emerald-500" />
@@ -509,9 +546,7 @@ export default function StudyHub({ user, isDarkMode }) {
               ))}
             </div>
 
-            {/* Chat Messages */}
             <div className="flex-1 overflow-y-auto p-4 flex flex-col gap-4 custom-scrollbar">
-              
               {messages.filter(m => m.is_pinned).map(pinned => (
                 <div key={`pinned-${pinned.id}`} className="p-3 bg-orange-500/10 border border-orange-500/20 rounded-xl mb-2 flex items-start gap-2">
                   <Pin size={12} className="text-orange-500 shrink-0 mt-1" />
@@ -524,7 +559,6 @@ export default function StudyHub({ user, isDarkMode }) {
 
               {messages.map(msg => (
                 <div key={msg.id} className="group relative flex flex-col gap-1">
-                  
                   {msg.reply_to && messages.find(m => m.id === msg.reply_to) && (
                     <div className="flex items-center gap-1 text-[10px] font-bold opacity-50 ml-2">
                       <Reply size={10} /> 
@@ -541,7 +575,6 @@ export default function StudyHub({ user, isDarkMode }) {
                     </div>
                   </div>
 
-                  {/* Hover Actions */}
                   <div className={`absolute top-4 ${msg.user_id === user.id ? 'left-0 -translate-x-full pr-2' : 'right-0 translate-x-full pl-2'} opacity-0 group-hover:opacity-100 transition-opacity flex gap-1`}>
                     <button onClick={() => setReplyingTo(msg)} className="p-1.5 bg-zinc-800 text-zinc-300 rounded hover:text-white shadow"><Reply size={12}/></button>
                     <button onClick={() => togglePin(msg)} className={`p-1.5 bg-zinc-800 rounded hover:text-white shadow ${msg.is_pinned ? 'text-orange-500' : 'text-zinc-300'}`}><Pin size={12}/></button>
@@ -557,7 +590,6 @@ export default function StudyHub({ user, isDarkMode }) {
               <div ref={chatEndRef} />
             </div>
 
-            {/* Chat Input */}
             <div className={`p-3 border-t ${isDarkMode ? 'border-slate-700 bg-slate-800/80' : 'border-gray-200 bg-gray-50/80'}`}>
               {(replyingTo || editingMsg) && (
                 <div className="flex justify-between items-center mb-2 px-2 border-l-2 border-blue-500 bg-blue-500/10 rounded-r py-1">
